@@ -1,0 +1,126 @@
+name: Auto Sort GitHub Project
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+  issues:
+    types: [opened, edited, reopened, closed]
+  project_v2_item:
+    types: [created, edited, converted]
+
+jobs:
+  sort-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reorder project items by swimlane then issue number
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          STATUS_FIELD: Status
+          SWIMLANE_FIELD: Priority
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GH_TOKEN is required (set secrets.PROJECT_AUTOMATION_TOKEN)." >&2
+            exit 1
+          fi
+
+          if [ -z "${PROJECT_OWNER:-}" ] || [ -z "${PROJECT_NUMBER:-}" ]; then
+            echo "PROJECT_OWNER and PROJECT_NUMBER are required (set repository variables)." >&2
+            exit 1
+          fi
+
+          read -r -d '' QUERY <<'GRAPHQL' || true
+          query($owner:String!, $number:Int!) {
+            user(login:$owner) {
+              projectV2(number:$number) {
+                id
+                title
+                items(first:100) {
+                  nodes {
+                    id
+                    content {
+                      __typename
+                      ... on Issue { number }
+                    }
+                    fieldValues(first:50) {
+                      nodes {
+                        ... on ProjectV2ItemFieldSingleSelectValue {
+                          name
+                          field {
+                            ... on ProjectV2SingleSelectField { name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          GRAPHQL
+
+          DATA="$(gh api graphql -f query="$QUERY" -F owner="$PROJECT_OWNER" -F number="$PROJECT_NUMBER")"
+          PROJECT_ID="$(echo "$DATA" | jq -r '.data.user.projectV2.id')"
+
+          if [ "$PROJECT_ID" = "null" ] || [ -z "$PROJECT_ID" ]; then
+            echo "Could not resolve project. Check PROJECT_OWNER and PROJECT_NUMBER." >&2
+            exit 1
+          fi
+
+          ORDERED_IDS="$(
+            echo "$DATA" | jq -r \
+              --arg statusField "$STATUS_FIELD" \
+              --arg laneField "$SWIMLANE_FIELD" '
+              .data.user.projectV2.items.nodes
+              | map(select(.content.__typename == "Issue"))
+              | map({
+                  id: .id,
+                  issueNumber: .content.number,
+                  status: ([.fieldValues.nodes[]? | select(.field?.name == $statusField) | .name][0] // ""),
+                  lane: ([.fieldValues.nodes[]? | select(.field?.name == $laneField) | .name][0] // "")
+                })
+              | sort_by(.status, .lane, .issueNumber)
+              | .[].id
+            '
+          )"
+
+          if [ -z "$ORDERED_IDS" ]; then
+            echo "No issue items found to reorder."
+            exit 0
+          fi
+
+          read -r -d '' MUTATION <<'GRAPHQL' || true
+          mutation($project:ID!, $item:ID!, $after:ID) {
+            updateProjectV2ItemPosition(input:{projectId:$project, itemId:$item, afterId:$after}) {
+              clientMutationId
+            }
+          }
+          GRAPHQL
+
+          AFTER_ID=""
+          while IFS= read -r ITEM_ID; do
+            if [ -z "$ITEM_ID" ]; then
+              continue
+            fi
+
+            if [ -n "$AFTER_ID" ]; then
+              gh api graphql \
+                -f query="$MUTATION" \
+                -F project="$PROJECT_ID" \
+                -F item="$ITEM_ID" \
+                -F after="$AFTER_ID" >/dev/null
+            else
+              gh api graphql \
+                -f query="$MUTATION" \
+                -F project="$PROJECT_ID" \
+                -F item="$ITEM_ID" >/dev/null
+            fi
+
+            AFTER_ID="$ITEM_ID"
+          done <<<"$ORDERED_IDS"
+
+          echo "Project reordered by ${STATUS_FIELD} + ${SWIMLANE_FIELD} + issue number asc."
