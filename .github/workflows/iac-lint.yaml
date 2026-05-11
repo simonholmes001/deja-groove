@@ -1,0 +1,28 @@
+name: IaC Lint
+
+on:
+  push:
+    branches: [main, "feature/**", "platform/**"]
+    paths:
+      - "infrastructure/bicep/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infrastructure/bicep/**"
+
+jobs:
+  bicep-lint:
+    name: Bicep Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Lint
+        run: az bicep lint --file infrastructure/bicep/main.bicep
+
+      - name: Build (compile all modules)
+        run: az bicep build --file infrastructure/bicep/main.bicep --outfile /dev/null
