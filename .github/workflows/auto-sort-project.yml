@@ -6,9 +6,6 @@ on:
     - cron: "*/15 * * * *"
   issues:
     types: [opened, edited, reopened, closed]
-  project_v2_item:
-    types: [created, edited, converted]
-
 jobs:
   sort-project:
     runs-on: ubuntu-latest
