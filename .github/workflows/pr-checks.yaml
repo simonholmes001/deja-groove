@@ -1,0 +1,66 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  branch-name:
+    name: Branch Name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name pattern
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          PATTERN='^(feature|fix|chore|docs|refactor|test|ci)/[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)?$'
+          if echo "$BRANCH" | grep -qE "$PATTERN"; then
+            echo "✅ Branch name '$BRANCH' matches required pattern."
+          else
+            echo "❌ Branch name '$BRANCH' does not match required pattern."
+            echo ""
+            echo "Required format: <type>/<description>"
+            echo "Types: feature | fix | chore | docs | refactor | test | ci"
+            echo "Example: feature/issue-10-cicd-quality-gates"
+            exit 1
+          fi
+
+  pr-title:
+    name: PR Title (Conventional Commits)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Conventional Commits: <type>[(scope)][!]: <description>
+          PATTERN='^(feat|fix|chore|docs|refactor|test|ci|perf|build|revert)(\([a-z0-9_/-]+\))?(!)?: .{1,100}$'
+          if echo "$PR_TITLE" | grep -qE "$PATTERN"; then
+            echo "✅ PR title matches Conventional Commits format."
+          else
+            echo "❌ PR title does not match Conventional Commits format."
+            echo ""
+            echo "Required: <type>[(scope)]: <description>"
+            echo "Types: feat | fix | chore | docs | refactor | test | ci | perf | build | revert"
+            echo ""
+            echo "Examples:"
+            echo "  feat(scan): add POST /v1/scan contract validation"
+            echo "  fix(auth): resolve JWT expiry handling on token refresh"
+            echo "  chore(ci): add iOS build job to CI pipeline"
+            exit 1
+          fi
+
+  no-direct-main-push:
+    name: No Direct Main Push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm PR is not from main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" = "main" ]; then
+            echo "❌ Direct push to main is not allowed. Use a feature branch and open a PR."
+            exit 1
+          fi
+          echo "✅ PR is not from main."
