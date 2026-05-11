@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  codex-review-tests:
+    name: Codex Review Script Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Run Codex review script tests
+        run: node --test .github/scripts/*.test.mjs
+
   node-tests:
     name: Node Tests
     runs-on: ubuntu-latest
