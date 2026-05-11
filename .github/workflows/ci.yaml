@@ -2,86 +2,104 @@ name: CI
 
 on:
   push:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "fix/**", "chore/**"]
   pull_request:
     branches: [main]
 
 jobs:
-  node-tests:
-    name: Node Tests
+  backend-build-test:
+    name: Backend (.NET 8)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: [".", "cli", "frontend"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Detect Node project
-        id: detect
-        run: |
-          if [ -f "${{ matrix.dir }}/package.json" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup Node.js
-        if: steps.detect.outputs.exists == 'true'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
-
-      - name: Install dependencies
-        if: steps.detect.outputs.exists == 'true'
-        run: |
-          if [ -f "${{ matrix.dir }}/package-lock.json" ]; then
-            npm ci --workspaces=false
-          else
-            npm install
-          fi
-        working-directory: ${{ matrix.dir }}
-
-      - name: Run tests
-        if: steps.detect.outputs.exists == 'true'
-        run: |
-          if npm run | grep -q " test"; then
-            npm run test
-          else
-            echo "No test script found; skipping."
-          fi
-        working-directory: ${{ matrix.dir }}
-
-  dotnet-tests:
-    name: .NET Tests
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: ["backend", "."]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Detect .NET project
         id: detect
         run: |
-          if find "${{ matrix.dir }}" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
+          if find backend \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No .NET project found in ${{ matrix.dir }}; skipping."
+            echo "No .NET project found in backend/ — skipping."
           fi
 
-      - name: Setup .NET
+      - name: Setup .NET 8
         if: steps.detect.outputs.exists == 'true'
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 8.0.x
 
-      - name: Run tests
+      - name: Restore dependencies
         if: steps.detect.outputs.exists == 'true'
-        run: dotnet test "${{ matrix.dir }}" --verbosity normal
+        run: dotnet restore backend
+
+      - name: Build
+        if: steps.detect.outputs.exists == 'true'
+        run: dotnet build backend --no-restore --configuration Release
+
+      - name: Test
+        if: steps.detect.outputs.exists == 'true'
+        run: dotnet test backend --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: steps.detect.outputs.exists == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/**/*.trx
+          retention-days: 14
+
+  ios-build-test:
+    name: iOS (Xcode)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect Xcode project
+        id: detect
+        run: |
+          if find ios -name '*.xcodeproj' -o -name '*.xcworkspace' 2>/dev/null | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Xcode project found in ios/ — skipping."
+          fi
+
+      - name: Build and test
+        if: steps.detect.outputs.exists == 'true'
+        run: |
+          SCHEME=$(xcodebuild -list -project ios/*.xcodeproj 2>/dev/null | awk '/Schemes/{found=1; next} found && NF{print $1; exit}')
+          xcodebuild test \
+            -project ios/*.xcodeproj \
+            -scheme "$SCHEME" \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -resultBundlePath ios-test-results.xcresult \
+            | xcpretty
+
+      - name: Upload test results
+        if: steps.detect.outputs.exists == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ios-test-results.xcresult
+          retention-days: 14
+
+  ci-pass:
+    name: CI Pass
+    runs-on: ubuntu-latest
+    needs: [backend-build-test, ios-build-test]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.backend-build-test.result }}" != "success" && "${{ needs.backend-build-test.result }}" != "skipped" ]]; then
+            echo "❌ backend-build-test failed: ${{ needs.backend-build-test.result }}"
+            exit 1
+          fi
+          if [[ "${{ needs.ios-build-test.result }}" != "success" && "${{ needs.ios-build-test.result }}" != "skipped" ]]; then
+            echo "❌ ios-build-test failed: ${{ needs.ios-build-test.result }}"
+            exit 1
+          fi
+          echo "✅ All CI jobs passed or were skipped (no project detected yet)."

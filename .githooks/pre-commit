@@ -7,79 +7,49 @@ cd "$ROOT_DIR"
 STAGED_FILES="$(git diff --cached --name-only)"
 
 is_staged_in_dir() {
-  DIR="$1"
-  echo "$STAGED_FILES" | grep -E "^${DIR}/" >/dev/null 2>&1
-}
-
-is_any_staged() {
-  echo "$STAGED_FILES" | grep -q .
-}
-
-run_node_tests() {
-  DIR="$1"
-  if ! is_staged_in_dir "$DIR"; then
-    echo "⏭️  No staged changes in $DIR — skipping Node tests."
-    return 0
-  fi
-
-  if [ -f "$DIR/package.json" ]; then
-    echo ""
-    echo "🧪 Running Node tests in $DIR before commit..."
-    if [ -f "$DIR/package-lock.json" ]; then
-      npm --prefix "$DIR" ci --workspaces=false >/dev/null 2>&1 || npm --prefix "$DIR" ci --workspaces=false
-    else
-      npm --prefix "$DIR" install >/dev/null 2>&1 || npm --prefix "$DIR" install
-    fi
-
-    if npm --prefix "$DIR" run | grep -q " test"; then
-      npm --prefix "$DIR" run test
-    else
-      echo "⏭️  No test script in $DIR/package.json — skipping."
-      return 0
-    fi
-
-    echo "✅ Node tests passed in $DIR."
-  else
-    echo "⏭️  No Node project in $DIR — skipping."
-  fi
+  echo "$STAGED_FILES" | grep -E "^${1}/" >/dev/null 2>&1
 }
 
 run_dotnet_tests() {
   TARGET_DIR="$1"
-  if [ "$TARGET_DIR" != "." ] && ! is_staged_in_dir "$TARGET_DIR"; then
+  if ! is_staged_in_dir "$TARGET_DIR"; then
     echo "⏭️  No staged changes in $TARGET_DIR — skipping .NET tests."
     return 0
   fi
 
-  if [ "$TARGET_DIR" = "." ] && ! is_any_staged; then
-    echo "⏭️  No staged changes — skipping root .NET tests."
+  if ! find "$TARGET_DIR" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
+    echo "⏭️  No .NET project in $TARGET_DIR — skipping."
     return 0
   fi
 
-  if find "$TARGET_DIR" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
-    echo ""
-    echo "🧪 Running .NET tests in $TARGET_DIR before commit..."
+  echo ""
+  echo "🧪 Running .NET tests in $TARGET_DIR before commit..."
+
+  DOTNET_CMD="dotnet"
+  if [ -x "/usr/local/share/dotnet/dotnet" ]; then
     DOTNET_CMD="/usr/local/share/dotnet/dotnet"
-    if [ ! -x "$DOTNET_CMD" ]; then
-      DOTNET_CMD="dotnet"
-    fi
+  fi
 
-    if [ -f "$TARGET_DIR/Agon.sln" ]; then
-      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR/Agon.sln" --verbosity minimal
-    else
-      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR" --verbosity minimal
-    fi
+  DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR" --verbosity minimal
+  echo "✅ .NET tests passed in $TARGET_DIR."
+}
 
-    echo "✅ .NET tests passed in $TARGET_DIR."
-  else
-    echo "⏭️  No .NET project in $TARGET_DIR — skipping."
+run_yaml_lint() {
+  if ! is_staged_in_dir ".github"; then
+    return 0
+  fi
+
+  if command -v yamllint >/dev/null 2>&1; then
+    echo ""
+    echo "🔍 Linting changed YAML files in .github/..."
+    echo "$STAGED_FILES" | grep -E "^\.github/.*\.ya?ml$" | while read -r f; do
+      yamllint "$f" && echo "✅  $f"
+    done
   fi
 }
 
-# Run local commit guardrails (mirrors Agon behavior pattern)
-run_node_tests "cli"
-run_node_tests "frontend"
 run_dotnet_tests "backend"
+run_yaml_lint
 
 echo ""
 echo "✅ Pre-commit guardrails passed."
