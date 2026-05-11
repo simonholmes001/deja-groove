@@ -94,7 +94,7 @@ Extract services only when these observable signals appear:
 ### 3.2 Backend Runtime
 
 - **Azure Container Apps** (Consumption + Dedicated profile)
-- Single container running .NET 8 ASP.NET Core Web API
+- Single container running .NET 9 ASP.NET Core Web API
 - Minimum 1 replica always running (eliminates cold-start risk)
 - Modular monolith composition with explicit internal contracts
 
@@ -535,7 +535,7 @@ AI model response is validated against expected JSON schema before processing. U
 | Factor | Status | Detail |
 |---|---|---|
 | 1. Codebase | Meets | Single repo, modular boundaries, one deployable per environment |
-| 2. Dependencies | Meets | .NET 8 with explicit NuGet package lock; no implicit runtime dependencies |
+| 2. Dependencies | Meets | .NET 9 with explicit NuGet package lock; no implicit runtime dependencies |
 | 3. Config | Meets | All config via Container Apps environment variables; secrets via Key Vault secret references; zero secrets in committed files |
 | 4. Backing services | Meets | PostgreSQL, Key Vault, APIM, OpenAI treated as attached resources via config |
 | 5. Build/Release/Run | Meets | CI builds image, CD promotes immutable image tag through environments |

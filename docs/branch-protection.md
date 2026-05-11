@@ -49,7 +49,7 @@ Branch protection requires **all three** checks to pass before merge:
 ```
 .github/
   workflows/
-    ci.yaml          — Build + test (backend .NET 8, iOS Xcode detect)
+    ci.yaml          — Build + test (backend .NET 9, iOS Xcode detect)
     pr-checks.yaml   — PR hygiene (branch name, PR title format)
   CODEOWNERS         — Review routing
 scripts/
