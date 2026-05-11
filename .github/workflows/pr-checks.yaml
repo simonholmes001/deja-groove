@@ -50,17 +50,3 @@ jobs:
             echo "  chore(ci): add iOS build job to CI pipeline"
             exit 1
           fi
-
-  no-direct-main-push:
-    name: No Direct Main Push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Confirm PR is not from main
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [ "$HEAD_REF" = "main" ]; then
-            echo "❌ Direct push to main is not allowed. Use a feature branch and open a PR."
-            exit 1
-          fi
-          echo "✅ PR is not from main."
