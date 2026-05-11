@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  node-tests:
+    name: Node Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [".", "cli", "frontend"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Detect Node project
+        id: detect
+        run: |
+          if [ -f "${{ matrix.dir }}/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.exists == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+
+      - name: Install dependencies
+        if: steps.detect.outputs.exists == 'true'
+        run: |
+          if [ -f "${{ matrix.dir }}/package-lock.json" ]; then
+            npm ci --workspaces=false
+          else
+            npm install
+          fi
+        working-directory: ${{ matrix.dir }}
+
+      - name: Run tests
+        if: steps.detect.outputs.exists == 'true'
+        run: |
+          if npm run | grep -q " test"; then
+            npm run test
+          else
+            echo "No test script found; skipping."
+          fi
+        working-directory: ${{ matrix.dir }}
+
+  dotnet-tests:
+    name: .NET Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ["backend", "."]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Detect .NET project
+        id: detect
+        run: |
+          if find "${{ matrix.dir }}" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No .NET project found in ${{ matrix.dir }}; skipping."
+          fi
+
+      - name: Setup .NET
+        if: steps.detect.outputs.exists == 'true'
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Run tests
+        if: steps.detect.outputs.exists == 'true'
+        run: dotnet test "${{ matrix.dir }}" --verbosity normal
