@@ -21,6 +21,9 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
 
     private static Task WriteErrorAsync(HttpContext context, int statusCode, string code, string message, bool retryable)
     {
+        if (context.Response.HasStarted)
+            return Task.CompletedTask;
+
         var requestId = context.Items[RequestIdMiddleware.RequestIdKey] is Guid g ? g : Guid.Empty;
         var envelope = new ErrorResponse
         {

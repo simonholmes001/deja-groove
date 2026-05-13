@@ -34,13 +34,17 @@ public sealed class AlbumIdentity : IEquatable<AlbumIdentity>
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
 
-        // Mbid takes precedence
-        if (Mbid != null && other.Mbid != null)
-            return string.Equals(Mbid, other.Mbid, StringComparison.OrdinalIgnoreCase);
+        // If either side has an Mbid, require both to have a matching Mbid.
+        if (Mbid != null || other.Mbid != null)
+            return Mbid != null && other.Mbid != null
+                && string.Equals(Mbid, other.Mbid, StringComparison.OrdinalIgnoreCase);
 
-        if (DiscogsReleaseId != null && other.DiscogsReleaseId != null)
-            return string.Equals(DiscogsReleaseId, other.DiscogsReleaseId, StringComparison.OrdinalIgnoreCase);
+        // If either side has a DiscogsReleaseId, require both to have a matching one.
+        if (DiscogsReleaseId != null || other.DiscogsReleaseId != null)
+            return DiscogsReleaseId != null && other.DiscogsReleaseId != null
+                && string.Equals(DiscogsReleaseId, other.DiscogsReleaseId, StringComparison.OrdinalIgnoreCase);
 
+        // Neither side has a stable ID — compare by normalised Title + Artist.
         return string.Equals(Title?.ToUpperInvariant(), other.Title?.ToUpperInvariant(), StringComparison.Ordinal)
             && string.Equals(Artist?.ToUpperInvariant(), other.Artist?.ToUpperInvariant(), StringComparison.Ordinal);
     }

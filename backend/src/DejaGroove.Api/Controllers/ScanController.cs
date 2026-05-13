@@ -54,10 +54,12 @@ public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<Scan
         _ = Guid.TryParse(request.ClientScanId, out var clientScanId);
         _ = DateTimeOffset.TryParse(request.CapturedAt, out var capturedAt);
 
+        await using var imageStream = request.Image!.OpenReadStream();
+
         var command = new ScanCommand(
             UserId: Guid.NewGuid(), // TODO: replace with authenticated user from claims in #16
             ClientScanId: clientScanId,
-            ImageStream: request.Image!.OpenReadStream(),
+            ImageStream: imageStream,
             ContentType: request.Image.ContentType,
             CapturedAt: request.CapturedAt != null ? capturedAt : null,
             RequestId: requestId);

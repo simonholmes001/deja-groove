@@ -63,4 +63,32 @@ public class AlbumIdentityTests
         var b = AlbumIdentity.Create(mbid: "mbid-1", discogsReleaseId: null, title: "Title B", artist: "Artist B", year: null);
         Assert.Equal(a, b);
     }
+
+    [Fact]
+    public void Equality_OneHasDiscogsOtherHasOnlyTitleArtist_AreNotEqual()
+    {
+        // Regression: previously Equals() fell through to Title+Artist even when one side had DiscogsReleaseId.
+        // This violated the GetHashCode contract (equal objects must have equal hash codes).
+        var withDiscogs = AlbumIdentity.Create(mbid: null, discogsReleaseId: "12345", title: "Album", artist: "Artist", year: null);
+        var withoutDiscogs = AlbumIdentity.Create(mbid: null, discogsReleaseId: null, title: "Album", artist: "Artist", year: null);
+        Assert.NotEqual(withDiscogs, withoutDiscogs);
+    }
+
+    [Fact]
+    public void HashCode_EqualObjects_HaveSameHashCode()
+    {
+        var a = AlbumIdentity.Create(mbid: null, discogsReleaseId: null, title: "Kind of Blue", artist: "Miles Davis", year: null);
+        var b = AlbumIdentity.Create(mbid: null, discogsReleaseId: null, title: "Kind of Blue", artist: "Miles Davis", year: null);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void HashCode_ContractHolds_WorksAsHashSetKey()
+    {
+        var a = AlbumIdentity.Create(mbid: "mbid-1", discogsReleaseId: null, title: null, artist: null, year: null);
+        var b = AlbumIdentity.Create(mbid: "mbid-1", discogsReleaseId: null, title: null, artist: null, year: null);
+        var set = new HashSet<AlbumIdentity> { a };
+        Assert.Contains(b, set); // would silently fail if Equals/GetHashCode contract was broken
+    }
 }
