@@ -1,33 +1,18 @@
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources.')
 param location string
 
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
-// ---------------------------------------------------------------------------
-// Names
-// ---------------------------------------------------------------------------
-
-var logAnalyticsName = 'log-deja-${environment}'
-var appInsightsName = 'appi-deja-${environment}'
-
-// ---------------------------------------------------------------------------
-// Log Analytics Workspace
-// ---------------------------------------------------------------------------
-
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: logAnalyticsName
+  name: 'log-deja-dev'
   location: location
   tags: tags
   properties: {
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: environment == 'prod' ? 90 : 30
+    retentionInDays: 30
     features: {
       disableLocalAuth: true
       enableLogAccessUsingOnlyResourcePermissions: true
@@ -37,12 +22,8 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
   }
 }
 
-// ---------------------------------------------------------------------------
-// Application Insights (workspace-based)
-// ---------------------------------------------------------------------------
-
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: appInsightsName
+  name: 'appi-deja-dev'
   location: location
   tags: tags
   kind: 'web'
@@ -53,10 +34,6 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     IngestionMode: 'LogAnalytics'
   }
 }
-
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
 
 output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
 output logAnalyticsWorkspaceCustomerId string = logAnalyticsWorkspace.properties.customerId

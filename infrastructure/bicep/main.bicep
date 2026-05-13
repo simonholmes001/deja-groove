@@ -1,9 +1,5 @@
 targetScope = 'resourceGroup'
 
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
@@ -24,43 +20,43 @@ param postgresAdministratorLogin string
 @secure()
 param postgresAdministratorLoginPassword string
 
+@description('Docker Hub image reference for the API. Format: username/image:tag')
+param dockerImageReference string
+
 // ---------------------------------------------------------------------------
-// Tags — applied to every module; enforced by Azure Policy at subscription level
+// Tags
 // ---------------------------------------------------------------------------
 
 var tags = {
-  environment: environment
+  environment: 'dev'
   application: 'deja-groove'
   owner: ownerEmail
   'cost-centre': 'deja-groove-v1'
 }
 
 // ---------------------------------------------------------------------------
-// Modules — deployed in dependency order
+// Modules
 // ---------------------------------------------------------------------------
 
 module monitoring 'modules/monitoring/monitoring.bicep' = {
-  name: 'deja-monitoring-${environment}'
+  name: 'deja-monitoring-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
   }
 }
 
 module networking 'modules/networking/networking.bicep' = {
-  name: 'deja-networking-${environment}'
+  name: 'deja-networking-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
   }
 }
 
 module keyVault 'modules/key-vault/key-vault.bicep' = {
-  name: 'deja-key-vault-${environment}'
+  name: 'deja-key-vault-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
     privateEndpointSubnetId: networking.outputs.privateEndpointSubnetId
@@ -69,9 +65,8 @@ module keyVault 'modules/key-vault/key-vault.bicep' = {
 }
 
 module postgresql 'modules/postgresql/postgresql.bicep' = {
-  name: 'deja-postgresql-${environment}'
+  name: 'deja-postgresql-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
     postgresSubnetId: networking.outputs.postgresSubnetId
@@ -81,39 +76,38 @@ module postgresql 'modules/postgresql/postgresql.bicep' = {
   }
 }
 
-module containerApps 'modules/container-apps/container-apps.bicep' = {
-  name: 'deja-container-apps-${environment}'
+module appService 'modules/app-service/app-service.bicep' = {
+  name: 'deja-app-service-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
-    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
-    containerAppsSubnetId: networking.outputs.containerAppsSubnetId
+    appServiceSubnetId: networking.outputs.appServiceSubnetId
     keyVaultUri: keyVault.outputs.keyVaultUri
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+    dockerImageReference: dockerImageReference
   }
 }
 
 module apim 'modules/apim/apim.bicep' = {
-  name: 'deja-apim-${environment}'
+  name: 'deja-apim-dev'
   params: {
-    environment: environment
     location: location
     tags: tags
     publisherName: apimPublisherName
     publisherEmail: apimPublisherEmail
-    backendUrl: 'https://${containerApps.outputs.containerAppFqdn}'
+    backendUrl: 'https://${appService.outputs.webAppHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
   }
 }
 
 // ---------------------------------------------------------------------------
-// Outputs — surface key values for CI/CD and dependent deployments
+// Outputs
 // ---------------------------------------------------------------------------
 
 output keyVaultUri string = keyVault.outputs.keyVaultUri
-output containerAppFqdn string = containerApps.outputs.containerAppFqdn
-output containerAppPrincipalId string = containerApps.outputs.containerAppPrincipalId
+output webAppHostname string = appService.outputs.webAppHostname
+output webAppPrincipalId string = appService.outputs.webAppPrincipalId
 output apimGatewayUrl string = apim.outputs.gatewayUrl
 output logAnalyticsWorkspaceId string = monitoring.outputs.logAnalyticsWorkspaceId
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

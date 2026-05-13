@@ -1,7 +1,3 @@
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources.')
 param location string
 
@@ -9,58 +5,29 @@ param location string
 param tags object
 
 // ---------------------------------------------------------------------------
-// CIDR plan — prod uses 10.1.x.x, nonprod uses 10.2.x.x
-// Architecture §7.2: minimum /23 required for Container Apps subnet.
+// CIDR plan (dev only)
+// App Service VNet integration requires a dedicated subnet, minimum /26.
 // ---------------------------------------------------------------------------
 
-var isProd = environment == 'prod'
-var vnetAddressPrefix       = isProd ? '10.1.0.0/22' : '10.2.0.0/22'
-var containerAppsSubnetCidr = isProd ? '10.1.0.0/23' : '10.2.0.0/23'
-var privateEndpointCidr     = isProd ? '10.1.2.0/27' : '10.2.2.0/27'
-var postgresSubnetCidr      = isProd ? '10.1.2.32/27' : '10.2.2.32/27'
+var vnetAddressPrefix  = '10.1.0.0/22'
+var appServiceCidr     = '10.1.0.0/26'    // App Service outbound VNet integration
+var privateEndpointCidr = '10.1.0.64/27'  // Key Vault private endpoint
+var postgresSubnetCidr  = '10.1.0.96/27'  // PostgreSQL Flexible Server VNet integration
 
 // ---------------------------------------------------------------------------
-// Network Security Groups
+// NSGs — default-deny posture on all subnets
 // ---------------------------------------------------------------------------
 
-resource nsgContainerApps 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-aca-deja-${environment}'
+resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
+  name: 'nsg-app-deja-dev'
   location: location
   tags: tags
   properties: {
     securityRules: [
       {
-        name: 'allow-https-inbound-from-apim'
-        properties: {
-          priority: 100
-          protocol: 'Tcp'
-          access: 'Allow'
-          direction: 'Inbound'
-          sourceAddressPrefix: 'ApiManagement'
-          sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          destinationPortRange: '443'
-          description: 'APIM outbound to Container Apps. Source IP list managed by APIM IP restrictions.'
-        }
-      }
-      {
-        name: 'allow-https-outbound-to-openai'
-        properties: {
-          priority: 100
-          protocol: 'Tcp'
-          access: 'Allow'
-          direction: 'Outbound'
-          sourceAddressPrefix: '*'
-          sourcePortRange: '*'
-          destinationAddressPrefix: 'Internet'
-          destinationPortRange: '443'
-          description: 'Outbound to api.openai.com:443. Tighten to FQDN via Azure Firewall when budget allows.'
-        }
-      }
-      {
         name: 'allow-outbound-to-private-endpoints'
         properties: {
-          priority: 110
+          priority: 100
           protocol: 'Tcp'
           access: 'Allow'
           direction: 'Outbound'
@@ -68,13 +35,13 @@ resource nsgContainerApps 'Microsoft.Network/networkSecurityGroups@2023-04-01' =
           sourcePortRange: '*'
           destinationAddressPrefix: privateEndpointCidr
           destinationPortRange: '*'
-          description: 'Outbound to Key Vault private endpoint subnet.'
+          description: 'App Service to Key Vault private endpoint.'
         }
       }
       {
         name: 'allow-outbound-to-postgres'
         properties: {
-          priority: 120
+          priority: 110
           protocol: 'Tcp'
           access: 'Allow'
           direction: 'Outbound'
@@ -82,21 +49,21 @@ resource nsgContainerApps 'Microsoft.Network/networkSecurityGroups@2023-04-01' =
           sourcePortRange: '*'
           destinationAddressPrefix: postgresSubnetCidr
           destinationPortRange: '5432'
-          description: 'Outbound to PostgreSQL VNet integration subnet.'
+          description: 'App Service to PostgreSQL VNet integration subnet.'
         }
       }
       {
-        name: 'deny-all-inbound'
+        name: 'allow-outbound-https'
         properties: {
-          priority: 4096
-          protocol: '*'
-          access: 'Deny'
-          direction: 'Inbound'
+          priority: 120
+          protocol: 'Tcp'
+          access: 'Allow'
+          direction: 'Outbound'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          destinationPortRange: '*'
-          description: 'Default deny — explicit allow rules above take precedence.'
+          destinationAddressPrefix: 'Internet'
+          destinationPortRange: '443'
+          description: 'Outbound HTTPS — Docker Hub pulls, OpenAI, enrichment providers.'
         }
       }
     ]
@@ -104,23 +71,23 @@ resource nsgContainerApps 'Microsoft.Network/networkSecurityGroups@2023-04-01' =
 }
 
 resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-pe-deja-${environment}'
+  name: 'nsg-pe-deja-dev'
   location: location
   tags: tags
   properties: {
     securityRules: [
       {
-        name: 'allow-inbound-from-aca'
+        name: 'allow-inbound-from-app-service'
         properties: {
           priority: 100
           protocol: 'Tcp'
           access: 'Allow'
           direction: 'Inbound'
-          sourceAddressPrefix: containerAppsSubnetCidr
+          sourceAddressPrefix: appServiceCidr
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '*'
-          description: 'Container Apps to private endpoints (Key Vault).'
+          description: 'App Service to Key Vault private endpoint.'
         }
       }
       {
@@ -141,23 +108,23 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01
 }
 
 resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-psql-deja-${environment}'
+  name: 'nsg-psql-deja-dev'
   location: location
   tags: tags
   properties: {
     securityRules: [
       {
-        name: 'allow-postgres-from-aca'
+        name: 'allow-postgres-from-app-service'
         properties: {
           priority: 100
           protocol: 'Tcp'
           access: 'Allow'
           direction: 'Inbound'
-          sourceAddressPrefix: containerAppsSubnetCidr
+          sourceAddressPrefix: appServiceCidr
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '5432'
-          description: 'Container Apps to PostgreSQL.'
+          description: 'App Service to PostgreSQL.'
         }
       }
       {
@@ -178,11 +145,11 @@ resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Virtual Network with subnets
+// Virtual Network
 // ---------------------------------------------------------------------------
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
-  name: 'vnet-deja-${environment}'
+  name: 'vnet-deja-dev'
   location: location
   tags: tags
   properties: {
@@ -191,19 +158,18 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
     }
     subnets: [
       {
-        name: 'snet-aca'
+        name: 'snet-app'
         properties: {
-          addressPrefix: containerAppsSubnetCidr
-          networkSecurityGroup: { id: nsgContainerApps.id }
+          addressPrefix: appServiceCidr
+          networkSecurityGroup: { id: nsgAppService.id }
           delegations: [
             {
-              name: 'aca-delegation'
+              name: 'app-service-delegation'
               properties: {
-                serviceName: 'Microsoft.App/environments'
+                serviceName: 'Microsoft.Web/serverFarms'
               }
             }
           ]
-          privateEndpointNetworkPolicies: 'Disabled'
         }
       }
       {
@@ -249,13 +215,9 @@ resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' =
   tags: tags
 }
 
-// ---------------------------------------------------------------------------
-// VNet links — DNS zones must be linked to the VNet to resolve private endpoints
-// ---------------------------------------------------------------------------
-
 resource postgresVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: postgresPrivateDnsZone
-  name: 'link-psql-${environment}'
+  name: 'link-psql-dev'
   location: 'global'
   properties: {
     virtualNetwork: { id: vnet.id }
@@ -265,7 +227,7 @@ resource postgresVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
 
 resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: keyVaultPrivateDnsZone
-  name: 'link-kv-${environment}'
+  name: 'link-kv-dev'
   location: 'global'
   properties: {
     virtualNetwork: { id: vnet.id }
@@ -278,7 +240,7 @@ resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
 // ---------------------------------------------------------------------------
 
 output vnetId string = vnet.id
-output containerAppsSubnetId string = vnet.properties.subnets[0].id
+output appServiceSubnetId string = vnet.properties.subnets[0].id
 output privateEndpointSubnetId string = vnet.properties.subnets[1].id
 output postgresSubnetId string = vnet.properties.subnets[2].id
 output postgresPrivateDnsZoneId string = postgresPrivateDnsZone.id

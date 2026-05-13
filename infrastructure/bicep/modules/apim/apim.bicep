@@ -1,7 +1,3 @@
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources.')
 param location string
 
@@ -29,7 +25,7 @@ param appInsightsInstrumentationKey string
 // ---------------------------------------------------------------------------
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var apimName = 'apim-deja-${environment}-${suffix}'
+var apimName = 'apim-deja-dev-${suffix}'
 
 // ---------------------------------------------------------------------------
 // API Management — Consumption tier.

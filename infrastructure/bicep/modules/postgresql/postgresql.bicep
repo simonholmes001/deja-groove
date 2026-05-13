@@ -1,7 +1,3 @@
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources.')
 param location string
 
@@ -22,24 +18,15 @@ param administratorLogin string
 @secure()
 param administratorLoginPassword string
 
-// ---------------------------------------------------------------------------
-// Names — PostgreSQL server name is globally unique.
-// ---------------------------------------------------------------------------
-
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var serverName = 'psql-deja-${environment}-${suffix}'
-
-// ---------------------------------------------------------------------------
-// PostgreSQL Flexible Server — Private Access (VNet integration).
-// Burstable B1ms for v1 as per ADR-003. Single Server retired March 2025.
-// ---------------------------------------------------------------------------
+var serverName = 'psql-deja-dev-${suffix}'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
   name: serverName
   location: location
   tags: tags
   sku: {
-    name: environment == 'prod' ? 'Standard_B2s' : 'Standard_B1ms'
+    name: 'Standard_B1ms'
     tier: 'Burstable'
   }
   properties: {
@@ -50,7 +37,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-pr
       storageSizeGB: 32
     }
     backup: {
-      backupRetentionDays: environment == 'prod' ? 7 : 3
+      backupRetentionDays: 3
       geoRedundantBackup: 'Disabled'
     }
     highAvailability: {
@@ -66,10 +53,6 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-pr
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
 
 output postgresqlFqdn string = postgresServer.properties.fullyQualifiedDomainName
 output postgresqlServerId string = postgresServer.id

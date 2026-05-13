@@ -1,7 +1,3 @@
-@description('Deployment environment.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string
-
 @description('Azure region for all resources.')
 param location string
 
@@ -14,17 +10,8 @@ param privateEndpointSubnetId string
 @description('Resource ID of the Key Vault private DNS zone.')
 param privateDnsZoneId string
 
-// ---------------------------------------------------------------------------
-// Names — Key Vault name is globally unique; max 24 characters.
-// ---------------------------------------------------------------------------
-
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var keyVaultName = 'kv-deja-${environment}-${suffix}'
-
-// ---------------------------------------------------------------------------
-// Key Vault — RBAC authorisation model; no legacy access policies.
-// Secrets accessed via Managed Identity only (issue #9 wires permissions).
-// ---------------------------------------------------------------------------
+var keyVaultName = 'kv-deja-dev-${suffix}'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
   name: keyVaultName
@@ -38,8 +25,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
     tenantId: subscription().tenantId
     enableRbacAuthorization: true
     enableSoftDelete: true
-    softDeleteRetentionInDays: environment == 'prod' ? 90 : 7
-    enablePurgeProtection: environment == 'prod' ? true : null
+    softDeleteRetentionInDays: 7
     publicNetworkAccess: 'Disabled'
     networkAcls: {
       bypass: 'AzureServices'
@@ -50,12 +36,8 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Private Endpoint
-// ---------------------------------------------------------------------------
-
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: 'pe-kv-deja-${environment}'
+  name: 'pe-kv-deja-dev'
   location: location
   tags: tags
   properties: {
@@ -84,10 +66,6 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
     ]
   }
 }
-
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
 
 output keyVaultId string = keyVault.id
 output keyVaultUri string = keyVault.properties.vaultUri
