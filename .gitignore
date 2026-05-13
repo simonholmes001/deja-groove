@@ -6,3 +6,4 @@ backend/**/*.user
 backend/**/TestResults/
 backend/**/.vs/
 backend/**/*.suo
+backend/coverage-results/
