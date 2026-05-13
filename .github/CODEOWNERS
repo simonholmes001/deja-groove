@@ -1,0 +1,23 @@
+# CODEOWNERS — Déjà Groove
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# All paths require review from the project owner.
+# Add team members here as the project grows.
+
+# Default owner for everything
+*                               @simonholmes001
+
+# Platform and CI/CD
+.github/                        @simonholmes001
+scripts/                        @simonholmes001
+infra/                          @simonholmes001
+
+# Backend
+backend/                        @simonholmes001
+
+# iOS
+ios/                            @simonholmes001
+
+# Architecture and product docs
+*.md                            @simonholmes001
+docs/                           @simonholmes001

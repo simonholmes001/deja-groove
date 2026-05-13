@@ -64,8 +64,9 @@ run_dotnet_tests() {
       DOTNET_CMD="dotnet"
     fi
 
-    if [ -f "$TARGET_DIR/Agon.sln" ]; then
-      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR/Agon.sln" --verbosity minimal
+    SOLUTION_FILE="$(find "$TARGET_DIR" -maxdepth 1 -name '*.sln' | head -n 1 || true)"
+    if [ -n "$SOLUTION_FILE" ]; then
+      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$SOLUTION_FILE" --verbosity minimal
     else
       DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR" --verbosity minimal
     fi
@@ -76,7 +77,7 @@ run_dotnet_tests() {
   fi
 }
 
-# Run local commit guardrails (mirrors Agon behavior pattern)
+# Run local commit guardrails
 run_node_tests "cli"
 run_node_tests "frontend"
 run_dotnet_tests "backend"
