@@ -4,8 +4,10 @@ param location string
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
+var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
+
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: 'log-deja-dev'
+  name: 'log-deja-dev-${suffix}'
   location: location
   tags: tags
   properties: {
@@ -23,7 +25,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'appi-deja-dev'
+  name: 'appi-deja-dev-${suffix}'
   location: location
   tags: tags
   kind: 'web'

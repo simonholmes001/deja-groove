@@ -25,7 +25,7 @@ var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 // ---------------------------------------------------------------------------
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-deja-api-dev'
+  name: 'id-deja-api-dev-${suffix}'
   location: location
   tags: tags
 }

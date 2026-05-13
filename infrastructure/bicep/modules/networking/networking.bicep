@@ -34,8 +34,8 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
           destinationAddressPrefix: privateEndpointCidr
-          destinationPortRange: '*'
-          description: 'App Service to Key Vault private endpoint.'
+          destinationPortRange: '443'
+          description: 'App Service to Key Vault private endpoint (HTTPS only).'
         }
       }
       {
@@ -86,8 +86,8 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01
           sourceAddressPrefix: appServiceCidr
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
-          destinationPortRange: '*'
-          description: 'App Service to Key Vault private endpoint.'
+          destinationPortRange: '443'
+          description: 'App Service to Key Vault private endpoint (HTTPS only).'
         }
       }
       {
