@@ -35,6 +35,28 @@ if [[ ! -f "${PARAMS_FILE}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Secure parameters — must be supplied via environment variables.
+# These are intentionally excluded from .bicepparam files.
+# ---------------------------------------------------------------------------
+
+POSTGRES_ADMIN_LOGIN="${AZURE_POSTGRES_ADMIN_LOGIN:-}"
+POSTGRES_ADMIN_PASSWORD="${AZURE_POSTGRES_ADMIN_PASSWORD:-}"
+
+if [[ -z "${POSTGRES_ADMIN_LOGIN}" ]]; then
+  echo "Error: AZURE_POSTGRES_ADMIN_LOGIN environment variable is not set." >&2
+  echo "  Export it before running this script, e.g.:" >&2
+  echo "    export AZURE_POSTGRES_ADMIN_LOGIN=<login>" >&2
+  exit 1
+fi
+
+if [[ -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
+  echo "Error: AZURE_POSTGRES_ADMIN_PASSWORD environment variable is not set." >&2
+  echo "  Export it before running this script, e.g.:" >&2
+  echo "    export AZURE_POSTGRES_ADMIN_PASSWORD=<password>" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Step 1 — Bicep lint
 # ---------------------------------------------------------------------------
 
@@ -51,6 +73,8 @@ az deployment group validate \
   --resource-group "${RESOURCE_GROUP}" \
   --template-file "${BICEP_DIR}/main.bicep" \
   --parameters "${PARAMS_FILE}" \
+  --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
+  --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}" \
   --output none
 echo "    Validation passed."
 
@@ -63,7 +87,9 @@ if [[ "${WHAT_IF}" == "--what-if" ]]; then
   az deployment group what-if \
     --resource-group "${RESOURCE_GROUP}" \
     --template-file "${BICEP_DIR}/main.bicep" \
-    --parameters "${PARAMS_FILE}"
+    --parameters "${PARAMS_FILE}" \
+    --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
+    --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}"
 else
   echo "==> [3/3] Skipping what-if (pass --what-if to enable)."
 fi
