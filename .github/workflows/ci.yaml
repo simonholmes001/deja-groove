@@ -76,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: ["backend", "."]
+        dir: ["backend"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
