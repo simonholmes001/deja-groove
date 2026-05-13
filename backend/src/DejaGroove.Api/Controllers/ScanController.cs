@@ -57,7 +57,7 @@ public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<Scan
         await using var imageStream = request.Image!.OpenReadStream();
 
         var command = new ScanCommand(
-            UserId: Guid.NewGuid(), // TODO: replace with authenticated user from claims in #16
+            UserId: null, // Populated from authenticated claims in #16
             ClientScanId: clientScanId,
             ImageStream: imageStream,
             ContentType: request.Image.ContentType,

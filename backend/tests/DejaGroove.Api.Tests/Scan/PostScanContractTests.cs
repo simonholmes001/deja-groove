@@ -133,6 +133,20 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
     }
 
     [Fact]
+    public async Task JpegContentTypeMislabelledNonJpegBytes_Returns400()
+    {
+        // PNG magic bytes labelled as image/jpeg — should fail content inspection
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        var response = await _client.PostAsync("/v1/scan",
+            BuildValidRequest(imageBytes: pngBytes, contentType: "image/jpeg"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await DeserializeAsync<ErrorResponse>(response);
+        Assert.Equal("validation_error", body.Error.Code);
+    }
+
+    [Fact]
     public async Task InvalidCapturedAt_NotIso8601_Returns400()
     {
         var response = await _client.PostAsync("/v1/scan",

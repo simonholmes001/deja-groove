@@ -13,8 +13,8 @@ public sealed class ScanResponse
     [JsonPropertyName("album")]
     public AlbumDto? Album { get; init; }
 
-    [JsonPropertyName("owned_record")]
-    public OwnedRecordDto? OwnedRecord { get; init; }
+    // owned_record deferred to #12 when ScanResult.Owned is reachable
+    // and the domain carries format + date_added fields
 
     [JsonPropertyName("candidates")]
     public IReadOnlyList<CandidateDto> Candidates { get; init; } = [];
