@@ -7,6 +7,7 @@ public final class AuthSessionManager {
     private let tokenProvider: AuthTokenProvider
     private let store: SecureSessionStore
     private let dateProvider: DateProvider
+    private var currentSession: AuthSession?
 
     public init(tokenProvider: AuthTokenProvider, store: SecureSessionStore, dateProvider: DateProvider = SystemDateProvider()) {
         self.tokenProvider = tokenProvider
@@ -18,17 +19,19 @@ public final class AuthSessionManager {
         state = .authenticating
         do {
             let session = try await tokenProvider.signIn(username: username, password: password)
-            guard isValid(session) else {
+            guard isStructurallyValid(session), !isExpired(session) else {
                 state = .unauthenticated
                 return .failure(.providerConfiguration)
             }
             try store.save(session)
-            state = .authenticated(session)
+            transitionToAuthenticated(session)
             return .success(session)
         } catch let error as AuthOnboardingError {
+            handleSignInFailureCleanup()
             state = .unauthenticated
             return .failure(error)
         } catch {
+            handleSignInFailureCleanup()
             state = .unauthenticated
             return .failure(.unknown)
         }
@@ -39,41 +42,50 @@ public final class AuthSessionManager {
         do {
             loaded = try store.load()
         } catch {
-            state = .reauthenticationRequired(.missingSession)
+            state = .reauthenticationRequired(.sessionStoreFailure)
             return
         }
         guard let session = loaded else {
             state = .reauthenticationRequired(.missingSession)
             return
         }
-        state = .authenticated(session)
+        guard isStructurallyValid(session) else {
+            transitionAfterCredentialCleanup(defaultReason: .invalidStoredSession)
+            return
+        }
+        guard !isExpired(session) else {
+            currentSession = session
+            state = .reauthenticationRequired(.tokenExpired)
+            return
+        }
+        transitionToAuthenticated(session)
     }
 
     public func refreshIfNeeded() async {
-        guard case let .authenticated(session) = state else { return }
-        guard session.expiresAt <= dateProvider.now else { return }
+        guard case .authenticated = state, let session = currentSession else { return }
+        guard isExpired(session) else { return }
 
-        state = .refreshing(session)
+        state = .refreshing(AuthSessionView(expiresAt: session.expiresAt, userID: session.userID))
         do {
             let refreshed = try await tokenProvider.refresh(using: session.refreshToken)
-            guard isValid(refreshed) else {
-                try? store.clear()
-                state = .reauthenticationRequired(.refreshFailed)
+            guard isStructurallyValid(refreshed), !isExpired(refreshed) else {
+                transitionAfterCredentialCleanup(defaultReason: .refreshFailed)
                 return
             }
             try store.save(refreshed)
-            state = .authenticated(refreshed)
+            transitionToAuthenticated(refreshed)
         } catch {
-            try? store.clear()
-            state = .reauthenticationRequired(.refreshFailed)
+            transitionAfterCredentialCleanup(defaultReason: .refreshFailed)
         }
     }
 
     public func signOut() {
         do {
             try store.clear()
+            currentSession = nil
             state = .reauthenticationRequired(.signedOut)
         } catch {
+            currentSession = nil
             state = .reauthenticationRequired(.signOutFailed)
         }
     }
@@ -113,10 +125,33 @@ public final class AuthSessionManager {
         }
     }
 
-    private func isValid(_ session: AuthSession) -> Bool {
+    private func transitionToAuthenticated(_ session: AuthSession) {
+        currentSession = session
+        state = .authenticated(AuthSessionView(expiresAt: session.expiresAt, userID: session.userID))
+    }
+
+    private func transitionAfterCredentialCleanup(defaultReason: ReauthReason) {
+        currentSession = nil
+        do {
+            try store.clear()
+            state = .reauthenticationRequired(defaultReason)
+        } catch {
+            state = .reauthenticationRequired(.credentialCleanupFailed)
+        }
+    }
+
+    private func handleSignInFailureCleanup() {
+        currentSession = nil
+        try? store.clear()
+    }
+
+    private func isStructurallyValid(_ session: AuthSession) -> Bool {
         !session.accessToken.isEmpty &&
         !session.refreshToken.isEmpty &&
-        !session.userID.isEmpty &&
-        session.expiresAt > dateProvider.now
+        !session.userID.isEmpty
+    }
+
+    private func isExpired(_ session: AuthSession) -> Bool {
+        session.expiresAt <= dateProvider.now
     }
 }

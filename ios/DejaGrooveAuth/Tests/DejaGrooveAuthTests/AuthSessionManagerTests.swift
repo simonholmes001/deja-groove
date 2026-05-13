@@ -21,7 +21,7 @@ struct AuthSessionManagerTests {
         let result = await manager.signIn(username: "u", password: "p")
 
         #expect(result == .success(session))
-        #expect(manager.state == .authenticated(session))
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: session.expiresAt, userID: session.userID)))
         #expect(store.saved == session)
     }
 
@@ -98,6 +98,20 @@ struct AuthSessionManagerTests {
         #expect(manager.state == .reauthenticationRequired(.missingSession))
     }
 
+    @Test("Restore session load failure requires store failure reauth")
+    @MainActor
+    func restoreStoreFailure() {
+        let manager = AuthSessionManager(
+            tokenProvider: StubTokenProvider(signInResult: .failure(.unknown), refreshResult: .failure(.unknown)),
+            store: InMemoryStore(shouldThrowOnLoad: true),
+            dateProvider: FixedDateProvider(now: Date(timeIntervalSince1970: 1_000))
+        )
+
+        manager.restoreSession()
+
+        #expect(manager.state == .reauthenticationRequired(.sessionStoreFailure))
+    }
+
     @Test("Restore expired session requires reauth")
     @MainActor
     func restoreExpiredSession() {
@@ -117,7 +131,7 @@ struct AuthSessionManagerTests {
 
         manager.restoreSession()
 
-        #expect(manager.state == .authenticated(expired))
+        #expect(manager.state == .reauthenticationRequired(.tokenExpired))
     }
 
     @Test("Restore valid session transitions to authenticated")
@@ -139,17 +153,41 @@ struct AuthSessionManagerTests {
 
         manager.restoreSession()
 
-        #expect(manager.state == .authenticated(valid))
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: valid.expiresAt, userID: valid.userID)))
+    }
+
+    @Test("Restore invalid stored session triggers invalid stored session reauth")
+    @MainActor
+    func restoreInvalidStoredSession() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let invalid = AuthSession(
+            accessToken: "",
+            refreshToken: "refresh",
+            expiresAt: now.addingTimeInterval(120),
+            userID: "user"
+        )
+        let store = InMemoryStore(saved: invalid)
+        let manager = AuthSessionManager(
+            tokenProvider: StubTokenProvider(signInResult: .success(invalid), refreshResult: .success(invalid)),
+            store: store,
+            dateProvider: FixedDateProvider(now: now)
+        )
+
+        manager.restoreSession()
+
+        #expect(manager.state == .reauthenticationRequired(.invalidStoredSession))
+        #expect(store.saved == nil)
     }
 
     @Test("Refresh expired token updates state to authenticated")
     @MainActor
     func refreshSuccess() async {
         let now = Date(timeIntervalSince1970: 3_000)
-        let expired = AuthSession(
+        let clock = MutableDateProvider(now: now)
+        let initial = AuthSession(
             accessToken: "access-old",
             refreshToken: "refresh-old",
-            expiresAt: now.addingTimeInterval(-1),
+            expiresAt: now.addingTimeInterval(60),
             userID: "user"
         )
         let refreshed = AuthSession(
@@ -159,14 +197,15 @@ struct AuthSessionManagerTests {
             userID: "user"
         )
 
-        let provider = StubTokenProvider(signInResult: .success(expired), refreshResult: .success(refreshed))
-        let store = InMemoryStore(saved: expired)
-        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: FixedDateProvider(now: now))
-        manager.restoreSession()
+        let provider = StubTokenProvider(signInResult: .success(initial), refreshResult: .success(refreshed))
+        let store = InMemoryStore()
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: clock)
+        _ = await manager.signIn(username: "u", password: "p")
+        clock.now = now.addingTimeInterval(120)
 
         await manager.refreshIfNeeded()
 
-        #expect(manager.state == .authenticated(refreshed))
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: refreshed.expiresAt, userID: refreshed.userID)))
         #expect(store.saved == refreshed)
         #expect(provider.lastRefreshToken == "refresh-old")
         #expect(provider.refreshCallCount == 1)
@@ -176,16 +215,18 @@ struct AuthSessionManagerTests {
     @MainActor
     func refreshFailure() async {
         let now = Date(timeIntervalSince1970: 4_000)
-        let expired = AuthSession(
+        let clock = MutableDateProvider(now: now)
+        let initial = AuthSession(
             accessToken: "access-old",
             refreshToken: "refresh-old",
-            expiresAt: now.addingTimeInterval(-1),
+            expiresAt: now.addingTimeInterval(60),
             userID: "user"
         )
-        let provider = StubTokenProvider(signInResult: .success(expired), refreshResult: .failure(.networkUnavailable))
-        let store = InMemoryStore(saved: expired)
-        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: FixedDateProvider(now: now))
-        manager.restoreSession()
+        let provider = StubTokenProvider(signInResult: .success(initial), refreshResult: .failure(.networkUnavailable))
+        let store = InMemoryStore()
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: clock)
+        _ = await manager.signIn(username: "u", password: "p")
+        clock.now = now.addingTimeInterval(120)
 
         await manager.refreshIfNeeded()
 
@@ -230,17 +271,18 @@ struct AuthSessionManagerTests {
         await manager.refreshIfNeeded()
 
         #expect(provider.refreshCallCount == 0)
-        #expect(manager.state == .authenticated(valid))
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: valid.expiresAt, userID: valid.userID)))
     }
 
     @Test("Refresh failure when saving refreshed token clears state")
     @MainActor
     func refreshSaveFailure() async {
         let now = Date(timeIntervalSince1970: 4_000)
-        let expired = AuthSession(
+        let clock = MutableDateProvider(now: now)
+        let initial = AuthSession(
             accessToken: "access-old",
             refreshToken: "refresh-old",
-            expiresAt: now.addingTimeInterval(-1),
+            expiresAt: now.addingTimeInterval(60),
             userID: "user"
         )
         let refreshed = AuthSession(
@@ -249,15 +291,39 @@ struct AuthSessionManagerTests {
             expiresAt: now.addingTimeInterval(300),
             userID: "user"
         )
-        let provider = StubTokenProvider(signInResult: .success(expired), refreshResult: .success(refreshed))
-        let store = InMemoryStore(saved: expired, shouldThrowOnSave: true)
-        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: FixedDateProvider(now: now))
-        manager.restoreSession()
+        let provider = StubTokenProvider(signInResult: .success(initial), refreshResult: .success(refreshed))
+        let store = InMemoryStore()
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: clock)
+        _ = await manager.signIn(username: "u", password: "p")
+        store.shouldThrowOnSave = true
+        clock.now = now.addingTimeInterval(120)
 
         await manager.refreshIfNeeded()
 
         #expect(manager.state == .reauthenticationRequired(.refreshFailed))
         #expect(store.saved == nil)
+    }
+
+    @Test("Refresh cleanup failure surfaces explicit cleanup reason")
+    @MainActor
+    func refreshCleanupFailure() async {
+        let now = Date(timeIntervalSince1970: 4_000)
+        let providerNow = MutableDateProvider(now: now)
+        let initial = AuthSession(
+            accessToken: "access-old",
+            refreshToken: "refresh-old",
+            expiresAt: now.addingTimeInterval(120),
+            userID: "user"
+        )
+        let provider = StubTokenProvider(signInResult: .success(initial), refreshResult: .failure(.networkUnavailable))
+        let store = InMemoryStore(shouldThrowOnClear: true)
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: providerNow)
+        _ = await manager.signIn(username: "u", password: "p")
+        providerNow.now = now.addingTimeInterval(180)
+
+        await manager.refreshIfNeeded()
+
+        #expect(manager.state == .reauthenticationRequired(.credentialCleanupFailed))
     }
 
     @Test("Sign out clears secure store and sets signed-out reauth reason")
@@ -328,19 +394,32 @@ private struct FixedDateProvider: DateProvider {
     let now: Date
 }
 
+private final class MutableDateProvider: DateProvider, @unchecked Sendable {
+    var now: Date
+
+    init(now: Date) {
+        self.now = now
+    }
+}
+
 private final class InMemoryStore: SecureSessionStore, @unchecked Sendable {
     var saved: AuthSession?
-    private let shouldThrowOnSave: Bool
-    private let shouldThrowOnClear: Bool
+    var shouldThrowOnLoad: Bool
+    var shouldThrowOnSave: Bool
+    var shouldThrowOnClear: Bool
 
-    init(saved: AuthSession? = nil, shouldThrowOnSave: Bool = false, shouldThrowOnClear: Bool = false) {
+    init(saved: AuthSession? = nil, shouldThrowOnLoad: Bool = false, shouldThrowOnSave: Bool = false, shouldThrowOnClear: Bool = false) {
         self.saved = saved
+        self.shouldThrowOnLoad = shouldThrowOnLoad
         self.shouldThrowOnSave = shouldThrowOnSave
         self.shouldThrowOnClear = shouldThrowOnClear
     }
 
     func load() throws -> AuthSession? {
-        saved
+        if shouldThrowOnLoad {
+            throw TestError.intentional
+        }
+        return saved
     }
 
     func save(_ session: AuthSession) throws {

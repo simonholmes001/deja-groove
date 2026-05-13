@@ -3,9 +3,19 @@ import Foundation
 public enum AuthState: Equatable, Sendable {
     case unauthenticated
     case authenticating
-    case authenticated(AuthSession)
-    case refreshing(AuthSession)
+    case authenticated(AuthSessionView)
+    case refreshing(AuthSessionView)
     case reauthenticationRequired(ReauthReason)
+}
+
+public struct AuthSessionView: Equatable, Sendable {
+    public let expiresAt: Date
+    public let userID: String
+
+    public init(expiresAt: Date, userID: String) {
+        self.expiresAt = expiresAt
+        self.userID = userID
+    }
 }
 
 public struct AuthSession: Equatable, Sendable {
@@ -25,6 +35,9 @@ public struct AuthSession: Equatable, Sendable {
 public enum ReauthReason: String, Equatable, Sendable {
     case refreshFailed
     case missingSession
+    case invalidStoredSession
+    case sessionStoreFailure
+    case credentialCleanupFailed
     case signedOut
     case signOutFailed
     case tokenExpired
