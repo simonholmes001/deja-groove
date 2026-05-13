@@ -1,1 +1,8 @@
 .env
+# .NET build artefacts
+backend/**/bin/
+backend/**/obj/
+backend/**/*.user
+backend/**/TestResults/
+backend/**/.vs/
+backend/**/*.suo
