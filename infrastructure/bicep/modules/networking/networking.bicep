@@ -240,8 +240,8 @@ resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
 // ---------------------------------------------------------------------------
 
 output vnetId string = vnet.id
-output appServiceSubnetId string = vnet.properties.subnets[0].id
-output privateEndpointSubnetId string = vnet.properties.subnets[1].id
-output postgresSubnetId string = vnet.properties.subnets[2].id
+output appServiceSubnetId string = '${vnet.id}/subnets/snet-app'
+output privateEndpointSubnetId string = '${vnet.id}/subnets/snet-pe'
+output postgresSubnetId string = '${vnet.id}/subnets/snet-psql'
 output postgresPrivateDnsZoneId string = postgresPrivateDnsZone.id
 output keyVaultPrivateDnsZoneId string = keyVaultPrivateDnsZone.id

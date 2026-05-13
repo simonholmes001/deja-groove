@@ -21,7 +21,7 @@ param administratorLoginPassword string
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var serverName = 'psql-deja-dev-${suffix}'
 
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01' = {
   name: serverName
   location: location
   tags: tags
@@ -46,6 +46,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-pr
     network: {
       delegatedSubnetResourceId: postgresSubnetId
       privateDnsZoneArmResourceId: privateDnsZoneId
+      publicNetworkAccess: 'Disabled'
     }
     authConfig: {
       activeDirectoryAuth: 'Disabled'

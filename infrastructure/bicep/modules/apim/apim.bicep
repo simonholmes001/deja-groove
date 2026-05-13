@@ -10,7 +10,7 @@ param publisherName string
 @description('APIM publisher email address.')
 param publisherEmail string
 
-@description('Backend URL — the Container Apps ingress FQDN (https://...).')
+@description('Backend URL — the App Service default hostname (https://...).')
 param backendUrl string
 
 @description('Resource ID of the Application Insights instance for APIM logging.')
@@ -33,7 +33,7 @@ var apimName = 'apim-deja-dev-${suffix}'
 // VNet not supported on Consumption tier (ADR-002).
 // ---------------------------------------------------------------------------
 
-resource apimService 'Microsoft.ApiManagement/service@2023-03-01-preview' = {
+resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   name: apimName
   location: location
   tags: tags
@@ -51,7 +51,7 @@ resource apimService 'Microsoft.ApiManagement/service@2023-03-01-preview' = {
 // Application Insights logger
 // ---------------------------------------------------------------------------
 
-resource apimLogger 'Microsoft.ApiManagement/service/loggers@2023-03-01-preview' = {
+resource apimLogger 'Microsoft.ApiManagement/service/loggers@2022-08-01' = {
   parent: apimService
   name: 'app-insights-logger'
   properties: {
@@ -68,7 +68,7 @@ resource apimLogger 'Microsoft.ApiManagement/service/loggers@2023-03-01-preview'
 // Named value — backend URL referenced in API policies
 // ---------------------------------------------------------------------------
 
-resource backendUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2023-03-01-preview' = {
+resource backendUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2022-08-01' = {
   parent: apimService
   name: 'backend-url'
   properties: {
@@ -82,13 +82,13 @@ resource backendUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2023-
 // Backend — points to the Container Apps ingress
 // ---------------------------------------------------------------------------
 
-resource backend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
+resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
   parent: apimService
   name: 'deja-api-backend'
   properties: {
-    description: 'Déjà Groove API backend (Container Apps)'
+    description: 'Déjà Groove API backend (App Service)'
     url: backendUrl
-    protocol: 'http'
+    protocol: 'https'
     tls: {
       validateCertificateChain: true
       validateCertificateName: true

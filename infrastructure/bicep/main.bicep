@@ -110,4 +110,6 @@ output webAppHostname string = appService.outputs.webAppHostname
 output webAppPrincipalId string = appService.outputs.webAppPrincipalId
 output apimGatewayUrl string = apim.outputs.gatewayUrl
 output logAnalyticsWorkspaceId string = monitoring.outputs.logAnalyticsWorkspaceId
+@secure()
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString
+output keyVaultId string = keyVault.outputs.keyVaultId

@@ -17,6 +17,8 @@ param appInsightsConnectionString string
 @description('Docker Hub image reference. Format: username/image:tag')
 param dockerImageReference string = 'nginx:latest'
 
+var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
+
 // ---------------------------------------------------------------------------
 // User-assigned managed identity — used to access Key Vault and other private
 // Azure resources. RBAC role assignments are wired in issue #9.
@@ -33,7 +35,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 // ---------------------------------------------------------------------------
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
-  name: 'asp-deja-dev'
+  name: 'asp-deja-dev-${suffix}'
   location: location
   tags: tags
   sku: {
@@ -51,7 +53,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 // ---------------------------------------------------------------------------
 
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
-  name: 'app-deja-api-dev'
+  name: 'app-deja-api-dev-${suffix}'
   location: location
   tags: tags
   kind: 'app,linux,container'
@@ -73,7 +75,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       appSettings: [
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
-          value: 'https://index.docker.io/v1'
+          value: 'https://index.docker.io'
         }
         {
           name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE'
