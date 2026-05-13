@@ -27,12 +27,10 @@ public final class AuthSessionManager {
             transitionToAuthenticated(session)
             return .success(session)
         } catch let error as AuthOnboardingError {
-            handleSignInFailureCleanup()
-            state = .unauthenticated
+            handleSignInFailureCleanup(defaultState: .unauthenticated)
             return .failure(error)
         } catch {
-            handleSignInFailureCleanup()
-            state = .unauthenticated
+            handleSignInFailureCleanup(defaultState: .unauthenticated)
             return .failure(.unknown)
         }
     }
@@ -62,7 +60,13 @@ public final class AuthSessionManager {
     }
 
     public func refreshIfNeeded() async {
-        guard case .authenticated = state, let session = currentSession else { return }
+        switch state {
+        case .authenticated, .reauthenticationRequired(.tokenExpired):
+            break
+        default:
+            return
+        }
+        guard let session = currentSession else { return }
         guard isExpired(session) else { return }
 
         state = .refreshing(AuthSessionView(expiresAt: session.expiresAt, userID: session.userID))
@@ -140,9 +144,14 @@ public final class AuthSessionManager {
         }
     }
 
-    private func handleSignInFailureCleanup() {
+    private func handleSignInFailureCleanup(defaultState: AuthState) {
         currentSession = nil
-        try? store.clear()
+        do {
+            try store.clear()
+            state = defaultState
+        } catch {
+            state = .reauthenticationRequired(.credentialCleanupFailed)
+        }
     }
 
     private func isStructurallyValid(_ session: AuthSession) -> Bool {

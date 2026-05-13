@@ -84,6 +84,23 @@ struct AuthSessionManagerTests {
         #expect(recovery.actionLabel == "Retry Sign-In")
     }
 
+    @Test("Sign in failure with clear error surfaces cleanup failure state")
+    @MainActor
+    func signInFailureCleanupError() async {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let provider = StubTokenProvider(
+            signInResult: .failure(.networkUnavailable),
+            refreshResult: .failure(.unknown)
+        )
+        let store = InMemoryStore(shouldThrowOnClear: true)
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: FixedDateProvider(now: now))
+
+        let result = await manager.signIn(username: "u", password: "p")
+
+        #expect(result == .failure(.networkUnavailable))
+        #expect(manager.state == .reauthenticationRequired(.credentialCleanupFailed))
+    }
+
     @Test("Restore session requires reauth when missing")
     @MainActor
     func restoreMissingSession() {
@@ -209,6 +226,35 @@ struct AuthSessionManagerTests {
         #expect(store.saved == refreshed)
         #expect(provider.lastRefreshToken == "refresh-old")
         #expect(provider.refreshCallCount == 1)
+    }
+
+    @Test("Refresh from token-expired restore state can recover authenticated session")
+    @MainActor
+    func refreshFromTokenExpiredState() async {
+        let now = Date(timeIntervalSince1970: 3_000)
+        let expired = AuthSession(
+            accessToken: "access-old",
+            refreshToken: "refresh-old",
+            expiresAt: now.addingTimeInterval(-1),
+            userID: "user"
+        )
+        let refreshed = AuthSession(
+            accessToken: "access-new",
+            refreshToken: "refresh-new",
+            expiresAt: now.addingTimeInterval(3600),
+            userID: "user"
+        )
+        let provider = StubTokenProvider(signInResult: .success(expired), refreshResult: .success(refreshed))
+        let store = InMemoryStore(saved: expired)
+        let manager = AuthSessionManager(tokenProvider: provider, store: store, dateProvider: FixedDateProvider(now: now))
+
+        manager.restoreSession()
+        #expect(manager.state == .reauthenticationRequired(.tokenExpired))
+
+        await manager.refreshIfNeeded()
+
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: refreshed.expiresAt, userID: refreshed.userID)))
+        #expect(store.saved == refreshed)
     }
 
     @Test("Refresh failure transitions to reauth required")
