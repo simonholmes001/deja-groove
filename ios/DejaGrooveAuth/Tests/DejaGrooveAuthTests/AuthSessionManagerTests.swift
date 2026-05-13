@@ -419,6 +419,32 @@ struct AuthSessionManagerTests {
         #expect(manager.state == .reauthenticationRequired(.signOutFailed))
     }
 
+    @Test("Sign out failure blocks restore from persisted session")
+    @MainActor
+    func signOutFailureBlocksRestore() {
+        let now = Date(timeIntervalSince1970: 5_000)
+        let valid = AuthSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresAt: now.addingTimeInterval(100),
+            userID: "user"
+        )
+        let store = InMemoryStore(saved: valid, shouldThrowOnClear: true)
+        let manager = AuthSessionManager(
+            tokenProvider: StubTokenProvider(signInResult: .success(valid), refreshResult: .success(valid)),
+            store: store,
+            dateProvider: FixedDateProvider(now: now)
+        )
+        manager.restoreSession()
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: valid.expiresAt, userID: valid.userID)))
+
+        manager.signOut()
+        #expect(manager.state == .reauthenticationRequired(.signOutFailed))
+
+        manager.restoreSession()
+        #expect(manager.state == .reauthenticationRequired(.signOutFailed))
+    }
+
     @Test("Recovery mappings cover all onboarding errors")
     @MainActor
     func recoveryMappings() {

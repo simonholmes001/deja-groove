@@ -8,6 +8,7 @@ public final class AuthSessionManager {
     private let store: SecureSessionStore
     private let dateProvider: DateProvider
     private var currentSession: AuthSession?
+    private var restoreBlockedBySignOutFailure = false
 
     public init(tokenProvider: AuthTokenProvider, store: SecureSessionStore, dateProvider: DateProvider = SystemDateProvider()) {
         self.tokenProvider = tokenProvider
@@ -36,6 +37,12 @@ public final class AuthSessionManager {
     }
 
     public func restoreSession() {
+        if restoreBlockedBySignOutFailure {
+            currentSession = nil
+            state = .reauthenticationRequired(.signOutFailed)
+            return
+        }
+
         let loaded: AuthSession?
         do {
             loaded = try store.load()
@@ -86,9 +93,11 @@ public final class AuthSessionManager {
     public func signOut() {
         do {
             try store.clear()
+            restoreBlockedBySignOutFailure = false
             currentSession = nil
             state = .reauthenticationRequired(.signedOut)
         } catch {
+            restoreBlockedBySignOutFailure = true
             currentSession = nil
             state = .reauthenticationRequired(.signOutFailed)
         }
@@ -130,6 +139,7 @@ public final class AuthSessionManager {
     }
 
     private func transitionToAuthenticated(_ session: AuthSession) {
+        restoreBlockedBySignOutFailure = false
         currentSession = session
         state = .authenticated(AuthSessionView(expiresAt: session.expiresAt, userID: session.userID))
     }
