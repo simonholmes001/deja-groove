@@ -12,6 +12,9 @@ param apimPublisherName string = 'Deja Groove'
 @description('Publisher email for the APIM instance.')
 param apimPublisherEmail string
 
+@description('APIM rollout suffix to force replacement when SKU/network mode changes are not updatable in-place.')
+param apimInstanceSuffix string = 'v2'
+
 @description('PostgreSQL administrator login name.')
 @secure()
 param postgresAdministratorLogin string = ''
@@ -149,6 +152,7 @@ module apim 'modules/apim/apim.bicep' = {
     apimSubnetId: networking.outputs.apimSubnetId
     publisherName: apimPublisherName
     publisherEmail: apimPublisherEmail
+    instanceSuffix: apimInstanceSuffix
     backendUrl: 'https://${appService.outputs.webAppPrivateHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey

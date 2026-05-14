@@ -29,8 +29,11 @@ param appInsightsId string
 @secure()
 param appInsightsInstrumentationKey string
 
+@description('APIM instance rollout suffix to support non-breaking replacement across SKU changes.')
+param instanceSuffix string = 'v2'
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var apimName = 'apim-deja-${environment}-${suffix}'
+var apimName = 'apim-deja-${environment}-${instanceSuffix}-${suffix}'
 
 resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   name: apimName
