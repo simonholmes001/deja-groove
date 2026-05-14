@@ -79,7 +79,12 @@ Repository: `simonholmes001/deja-groove`
 - Controls:
   - CIDR validation
   - narrow-prefix requirement (`/24` to `/32`)
-  - optional TTL-based auto-remove
+  - expiry metadata applied to rules
+
+### `App Service Break-Glass Cleanup (Dev)`
+- File: `.github/workflows/appservice-breakglass-cleanup.yaml`
+- Purpose: remove expired break-glass rules for main and SCM endpoints.
+- Triggers: schedule (every 15 minutes) and manual dispatch.
 
 ## Local Hook
 

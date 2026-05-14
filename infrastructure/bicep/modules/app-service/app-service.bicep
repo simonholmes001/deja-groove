@@ -66,7 +66,16 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       healthCheckPath: '/health'
       vnetRouteAllEnabled: true
       ipSecurityRestrictionsDefaultAction: 'Deny'
-      ipSecurityRestrictions: []
+      ipSecurityRestrictions: [
+        {
+          name: 'allow-apim-service-tag'
+          action: 'Allow'
+          priority: 100
+          tag: 'ServiceTag'
+          ipAddress: 'ApiManagement'
+          description: 'Allow API Management service tag ingress.'
+        }
+      ]
       scmIpSecurityRestrictionsUseMain: false
       scmIpSecurityRestrictionsDefaultAction: 'Deny'
       scmIpSecurityRestrictions: []

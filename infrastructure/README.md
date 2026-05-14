@@ -22,7 +22,7 @@ The subscription-scope template creates and manages these RGs:
 
 - APIM is the intended public ingress tier.
 - App Service uses inbound access restrictions with default deny.
-- Deploy workflow enforces App Service allow rules to APIM instance egress IPs for this environment.
+- App Service allows `ApiManagement` service-tag ingress and denies all other direct internet ingress.
 - SCM/Kudu restrictions are managed separately and default to deny.
 - PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
 
@@ -31,7 +31,8 @@ The subscription-scope template creates and manages these RGs:
 - Manual workflow: `.github/workflows/appservice-breakglass-access.yaml`
 - Purpose: temporary allow/remove emergency CIDR access to App Service main and SCM endpoints.
 - CIDR guardrails are enforced (`/24` to `/32`, `0.0.0.0/0` forbidden).
-- Optional auto-remove is supported with `ttl_minutes` (1-120).
+- Break-glass rules are stamped with expiry metadata.
+- Scheduled cleanup workflow removes expired rules: `.github/workflows/appservice-breakglass-cleanup.yaml`.
 
 ## Directory
 
@@ -71,6 +72,7 @@ For GitHub OIDC login:
 - `infrastructure-validate.yaml`: PR-time Bicep build + `az deployment sub validate` + `what-if`
 - `infrastructure-deploy-dev.yaml`: push-to-main deploy for dev using `az deployment sub create`
 - `appservice-breakglass-access.yaml`: manual emergency access control for App Service
+- `appservice-breakglass-cleanup.yaml`: scheduled cleanup of expired break-glass rules
 
 ## Local Usage
 

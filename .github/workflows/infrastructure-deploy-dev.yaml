@@ -8,6 +8,7 @@ on:
       - ".github/workflows/infrastructure-deploy-dev.yaml"
       - ".github/workflows/infrastructure-validate.yaml"
       - ".github/workflows/appservice-breakglass-access.yaml"
+      - ".github/workflows/appservice-breakglass-cleanup.yaml"
   workflow_dispatch:
 
 permissions:
@@ -77,49 +78,6 @@ jobs:
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
               --output table
 
-      - name: Restrict App Service ingress to this APIM instance
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            set -euo pipefail
-            deployment_name="deja-dev-deploy-${{ github.run_id }}"
-            app_host="$(az deployment sub show --name "$deployment_name" --query "properties.outputs.webAppHostname.value" -o tsv)"
-            apim_name="$(az deployment sub show --name "$deployment_name" --query "properties.outputs.apimName.value" -o tsv)"
-            rg="rg-deja-dev-app"
-            app_name="${app_host%%.*}"
-
-            if [ -z "$apim_name" ] || [ -z "$app_name" ]; then
-              echo "::error::Unable to resolve app/APIM names from deployment outputs."
-              exit 1
-            fi
-
-            ip_list="$(az apim show -g "$rg" -n "$apim_name" --query "publicIPAddresses" -o tsv)"
-            if [ -z "$ip_list" ]; then
-              echo "::error::No APIM outbound public IPs found; cannot enforce instance-specific ingress."
-              exit 1
-            fi
-
-            existing_rules="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "ipSecurityRestrictions[?starts_with(name, 'allow-apim-egress-')].name" -o tsv || true)"
-            for rule in $existing_rules; do
-              az webapp config access-restriction remove -g "$rg" -n "$app_name" --rule-name "$rule" || true
-            done
-
-            priority=100
-            index=1
-            for ip in $ip_list; do
-              az webapp config access-restriction add \
-                --resource-group "$rg" \
-                --name "$app_name" \
-                --rule-name "allow-apim-egress-${index}" \
-                --action Allow \
-                --priority "$priority" \
-                --ip-address "${ip}/32"
-              priority=$((priority + 1))
-              index=$((index + 1))
-            done
-
-            az webapp config access-restriction show -g "$rg" -n "$app_name" --query "ipSecurityRestrictions[].{name:name,action:action,priority:priority,ip:ipAddress}" -o table
-
       - name: Verify App Service direct ingress is blocked
         uses: azure/cli@v2
         with:
@@ -136,12 +94,22 @@ jobs:
               echo "::error::Unable to resolve apimGatewayUrl output from deployment."
               exit 1
             fi
+            rg="rg-deja-dev-app"
+            app_name="${app_host%%.*}"
+
+            main_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "ipSecurityRestrictionsDefaultAction" -o tsv)"
+            scm_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "scmIpSecurityRestrictionsDefaultAction" -o tsv)"
+            apim_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?name=='allow-apim-service-tag' && action=='Allow'])" -o tsv)"
+            if [ "$main_default_action" != "Deny" ] || [ "$scm_default_action" != "Deny" ] || [ "$apim_allow_count" -lt 1 ]; then
+              echo "::error::Access restriction policy assertion failed (main/scm default deny and APIM allow rule required)."
+              exit 1
+            fi
 
             status_code="$(curl -s -o /dev/null -w '%{http_code}' "https://${app_host}/health" || true)"
             echo "Direct app health HTTP status: ${status_code}"
 
-            if [ "$status_code" != "403" ] && [ "$status_code" != "401" ]; then
-              echo "::error::Direct App Service ingress check failed. Expected 401/403 but got ${status_code}."
+            if [ "$status_code" != "403" ]; then
+              echo "::error::Direct App Service ingress check failed. Expected 403 but got ${status_code}."
               exit 1
             fi
 
@@ -150,8 +118,8 @@ jobs:
             apim_status="$(curl -s -o /dev/null -w '%{http_code}' "${apim_gateway}/api/health" || true)"
             echo "APIM health route HTTP status: ${apim_status}"
 
-            if [ "$apim_status" = "000" ] || [ "$apim_status" -ge 500 ]; then
-              echo "::error::APIM health route failed (status ${apim_status})."
+            if [ "$apim_status" != "200" ]; then
+              echo "::error::APIM health route failed. Expected 200 but got ${apim_status}."
               exit 1
             fi
 
