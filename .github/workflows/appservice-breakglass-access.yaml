@@ -1,0 +1,85 @@
+name: App Service Break-Glass Access (Dev)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "allow or remove break-glass rule"
+        required: true
+        type: choice
+        options:
+          - allow
+          - remove
+      cidr:
+        description: "CIDR to allow/remove (example: 203.0.113.10/32)"
+        required: true
+        type: string
+      priority:
+        description: "Rule priority for allow action"
+        required: false
+        default: "110"
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  breakglass:
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    steps:
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply break-glass change
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            rg="rg-deja-dev-app"
+            app_name="$(az webapp list -g "$rg" --query "[?starts_with(name, 'app-deja-api-dev-')].name | [0]" -o tsv)"
+            if [ -z "$app_name" ]; then
+              echo "::error::Unable to locate dev app service in $rg."
+              exit 1
+            fi
+
+            if [ "${{ github.event.inputs.action }}" = "allow" ]; then
+              az webapp config access-restriction add \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --rule-name "breakglass-main" \
+                --action Allow \
+                --priority "${{ github.event.inputs.priority }}" \
+                --ip-address "${{ github.event.inputs.cidr }}"
+
+              az webapp config access-restriction add \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --scm-site true \
+                --rule-name "breakglass-scm" \
+                --action Allow \
+                --priority "${{ github.event.inputs.priority }}" \
+                --ip-address "${{ github.event.inputs.cidr }}"
+            else
+              az webapp config access-restriction remove \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --rule-name "breakglass-main" || true
+
+              az webapp config access-restriction remove \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --scm-site true \
+                --rule-name "breakglass-scm" || true
+            fi
+
+            az webapp config access-restriction show \
+              --resource-group "$rg" \
+              --name "$app_name" \
+              --output table

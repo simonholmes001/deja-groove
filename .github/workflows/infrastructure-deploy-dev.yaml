@@ -75,3 +75,25 @@ jobs:
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
               --output table
+
+      - name: Verify App Service direct ingress is blocked
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            deployment_name="deja-dev-deploy-${{ github.run_id }}"
+            app_host="$(az deployment sub show --name "$deployment_name" --query "properties.outputs.webAppHostname.value" -o tsv)"
+            if [ -z "$app_host" ]; then
+              echo "::error::Unable to resolve webAppHostname output from deployment."
+              exit 1
+            fi
+
+            status_code="$(curl -s -o /dev/null -w '%{http_code}' "https://${app_host}/health" || true)"
+            echo "Direct app health HTTP status: ${status_code}"
+
+            if [ "$status_code" = "200" ]; then
+              echo "::error::Direct App Service ingress is still reachable (HTTP 200)."
+              exit 1
+            fi
+
+            echo "Direct App Service ingress is not publicly reachable (expected)."

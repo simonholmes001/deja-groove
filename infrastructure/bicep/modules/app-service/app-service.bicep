@@ -76,7 +76,9 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           description: 'Allow only API Management service traffic to reach the app.'
         }
       ]
-      scmIpSecurityRestrictionsUseMain: true
+      scmIpSecurityRestrictionsUseMain: false
+      scmIpSecurityRestrictionsDefaultAction: 'Deny'
+      scmIpSecurityRestrictions: []
       appSettings: [
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
