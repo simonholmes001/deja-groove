@@ -54,10 +54,6 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
       delegatedSubnetResourceId: postgresSubnetId
       privateDnsZoneArmResourceId: privateDnsZoneId
     }
-    authConfig: {
-      activeDirectoryAuth: 'Disabled'
-      passwordAuth: 'Enabled'
-    }
   }
 }
 
