@@ -22,11 +22,11 @@ param apimPublisherEmail string
 
 @description('PostgreSQL administrator login name.')
 @secure()
-param postgresAdministratorLogin string
+param postgresAdministratorLogin string = ''
 
 @description('PostgreSQL administrator login password.')
 @secure()
-param postgresAdministratorLoginPassword string
+param postgresAdministratorLoginPassword string = ''
 
 @description('Docker Hub image reference for the API. Format: username/image:tag')
 param dockerImageReference string
