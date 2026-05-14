@@ -71,7 +71,7 @@ jobs:
               --name "deja-dev-deploy-${{ github.run_id }}" \
               --resource-group "rg-deja-dev" \
               --template-file infrastructure/bicep/main.bicep \
-              --parameters @infrastructure/bicep/parameters/dev.bicepparam \
+              --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
               --mode Incremental \
