@@ -1,15 +1,7 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
-@description('Deployment environment.')
-@allowed([
-  'dev'
-  'staging'
-  'prod'
-])
-param environment string
-
-@description('Azure region for all resources. Defaults to the resource group location.')
-param location string = resourceGroup().location
+@description('Azure region for all resources in dev.')
+param location string = 'swedencentral'
 
 @description('Owner email address used for the mandatory owner tag.')
 param ownerEmail string
@@ -31,9 +23,22 @@ param postgresAdministratorLoginPassword string = ''
 @description('Docker Hub image reference for the API. Format: username/image:tag')
 param dockerImageReference string
 
-// ---------------------------------------------------------------------------
-// Tags
-// ---------------------------------------------------------------------------
+@description('Dev network resource group name.')
+param rgNetworkName string = 'rg-deja-dev-network'
+
+@description('Dev data resource group name.')
+param rgDataName string = 'rg-deja-dev-data'
+
+@description('Dev security resource group name.')
+param rgSecurityName string = 'rg-deja-dev-security'
+
+@description('Dev app runtime resource group name.')
+param rgAppName string = 'rg-deja-dev-app'
+
+@description('Dev observability resource group name.')
+param rgObservabilityName string = 'rg-deja-dev-observability'
+
+var environment = 'dev'
 
 var tags = {
   environment: environment
@@ -42,12 +47,39 @@ var tags = {
   'cost-centre': 'deja-groove-v1'
 }
 
-// ---------------------------------------------------------------------------
-// Modules
-// ---------------------------------------------------------------------------
+resource rgNetwork 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgNetworkName
+  location: location
+  tags: tags
+}
+
+resource rgData 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgDataName
+  location: location
+  tags: tags
+}
+
+resource rgSecurity 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgSecurityName
+  location: location
+  tags: tags
+}
+
+resource rgApp 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgAppName
+  location: location
+  tags: tags
+}
+
+resource rgObservability 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgObservabilityName
+  location: location
+  tags: tags
+}
 
 module monitoring 'modules/monitoring/monitoring.bicep' = {
   name: 'deja-monitoring-${environment}'
+  scope: rgObservability
   params: {
     environment: environment
     location: location
@@ -57,6 +89,7 @@ module monitoring 'modules/monitoring/monitoring.bicep' = {
 
 module networking 'modules/networking/networking.bicep' = {
   name: 'deja-networking-${environment}'
+  scope: rgNetwork
   params: {
     environment: environment
     location: location
@@ -66,6 +99,7 @@ module networking 'modules/networking/networking.bicep' = {
 
 module keyVault 'modules/key-vault/key-vault.bicep' = {
   name: 'deja-key-vault-${environment}'
+  scope: rgSecurity
   params: {
     environment: environment
     location: location
@@ -77,6 +111,7 @@ module keyVault 'modules/key-vault/key-vault.bicep' = {
 
 module postgresql 'modules/postgresql/postgresql.bicep' = {
   name: 'deja-postgresql-${environment}'
+  scope: rgData
   params: {
     environment: environment
     location: location
@@ -90,6 +125,7 @@ module postgresql 'modules/postgresql/postgresql.bicep' = {
 
 module appService 'modules/app-service/app-service.bicep' = {
   name: 'deja-app-service-${environment}'
+  scope: rgApp
   params: {
     environment: environment
     location: location
@@ -103,6 +139,7 @@ module appService 'modules/app-service/app-service.bicep' = {
 
 module apim 'modules/apim/apim.bicep' = {
   name: 'deja-apim-${environment}'
+  scope: rgApp
   params: {
     environment: environment
     location: location
@@ -115,9 +152,13 @@ module apim 'modules/apim/apim.bicep' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
+output resourceGroups object = {
+  network: rgNetwork.name
+  data: rgData.name
+  security: rgSecurity.name
+  app: rgApp.name
+  observability: rgObservability.name
+}
 
 output keyVaultUri string = keyVault.outputs.keyVaultUri
 output webAppHostname string = appService.outputs.webAppHostname

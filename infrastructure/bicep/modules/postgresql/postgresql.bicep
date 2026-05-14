@@ -4,8 +4,6 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
-  'staging'
-  'prod'
 ])
 param environment string
 
@@ -29,7 +27,7 @@ param administratorLoginPassword string
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var serverName = 'psql-deja-${environment}-${suffix}'
 
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
   name: serverName
   location: location
   tags: tags

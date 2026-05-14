@@ -1,91 +1,50 @@
 #!/usr/bin/env bash
-# Lint, validate, and optionally what-if the Bicep deployment for a given environment.
-# Usage:
-#   ./infrastructure/scripts/validate.sh <env>              # lint + validate
-#   ./infrastructure/scripts/validate.sh <env> --what-if    # lint + validate + what-if
-#
-# Prerequisites: az CLI 2.50+, az bicep installed, az login completed.
-
 set -euo pipefail
 
 ENVIRONMENT="${1:-}"
 WHAT_IF="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BICEP_DIR="${SCRIPT_DIR}/../bicep"
-PARAMS_FILE="${BICEP_DIR}/parameters/${ENVIRONMENT}.bicepparam"
-RESOURCE_GROUP="rg-deja-${ENVIRONMENT}"
-
-# ---------------------------------------------------------------------------
-# Guards
-# ---------------------------------------------------------------------------
+PARAMS_FILE="${BICEP_DIR}/parameters/dev.bicepparam"
+DEPLOY_LOCATION="swedencentral"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
-  echo "Usage: $0 <dev|staging|prod> [--what-if]" >&2
+  echo "Usage: $0 <dev> [--what-if]" >&2
   exit 1
 fi
-
-if [[ ! "${ENVIRONMENT}" =~ ^(dev|staging|prod)$ ]]; then
-  echo "Error: environment must be dev, staging, or prod." >&2
+if [[ "${ENVIRONMENT}" != "dev" ]]; then
+  echo "Error: only dev is supported in this bootstrap stage." >&2
   exit 1
 fi
-
 if [[ ! -f "${PARAMS_FILE}" ]]; then
   echo "Error: parameter file not found: ${PARAMS_FILE}" >&2
   exit 1
 fi
 
-# ---------------------------------------------------------------------------
-# Secure parameters — must be supplied via environment variables.
-# These are intentionally excluded from .bicepparam files.
-# ---------------------------------------------------------------------------
-
 POSTGRES_ADMIN_LOGIN="${AZURE_POSTGRES_ADMIN_LOGIN:-}"
 POSTGRES_ADMIN_PASSWORD="${AZURE_POSTGRES_ADMIN_PASSWORD:-}"
-
-if [[ -z "${POSTGRES_ADMIN_LOGIN}" ]]; then
-  echo "Error: AZURE_POSTGRES_ADMIN_LOGIN environment variable is not set." >&2
-  echo "  Export it before running this script, e.g.:" >&2
-  echo "    export AZURE_POSTGRES_ADMIN_LOGIN=<login>" >&2
+if [[ -z "${POSTGRES_ADMIN_LOGIN}" || -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
+  echo "Error: AZURE_POSTGRES_ADMIN_LOGIN and AZURE_POSTGRES_ADMIN_PASSWORD must be set." >&2
   exit 1
 fi
-
-if [[ -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
-  echo "Error: AZURE_POSTGRES_ADMIN_PASSWORD environment variable is not set." >&2
-  echo "  Export it before running this script, e.g.:" >&2
-  echo "    export AZURE_POSTGRES_ADMIN_PASSWORD=<password>" >&2
-  exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# Step 1 — Bicep lint
-# ---------------------------------------------------------------------------
 
 echo "==> [1/3] Linting Bicep files..."
 az bicep lint --file "${BICEP_DIR}/main.bicep"
-echo "    Lint passed."
 
-# ---------------------------------------------------------------------------
-# Step 2 — ARM template validation
-# ---------------------------------------------------------------------------
-
-echo "==> [2/3] Validating deployment against resource group '${RESOURCE_GROUP}'..."
-az deployment group validate \
-  --resource-group "${RESOURCE_GROUP}" \
+echo "==> [2/3] Subscription-scope validate..."
+az deployment sub validate \
+  --location "${DEPLOY_LOCATION}" \
   --template-file "${BICEP_DIR}/main.bicep" \
   --parameters "${PARAMS_FILE}" \
   --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
   --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}" \
   --output none
-echo "    Validation passed."
-
-# ---------------------------------------------------------------------------
-# Step 3 — What-if (optional)
-# ---------------------------------------------------------------------------
 
 if [[ "${WHAT_IF}" == "--what-if" ]]; then
-  echo "==> [3/3] Running what-if for '${ENVIRONMENT}'..."
-  az deployment group what-if \
-    --resource-group "${RESOURCE_GROUP}" \
+  echo "==> [3/3] Subscription-scope what-if..."
+  az deployment sub what-if \
+    --name "deja-dev-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
+    --location "${DEPLOY_LOCATION}" \
     --template-file "${BICEP_DIR}/main.bicep" \
     --parameters "${PARAMS_FILE}" \
     --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
@@ -94,5 +53,4 @@ else
   echo "==> [3/3] Skipping what-if (pass --what-if to enable)."
 fi
 
-echo ""
 echo "Validation complete for environment: ${ENVIRONMENT}"

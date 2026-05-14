@@ -58,7 +58,7 @@ jobs:
             az bicep install
             az bicep build --file infrastructure/bicep/main.bicep
 
-      - name: Deploy dev infrastructure
+      - name: Deploy dev infrastructure (subscription scope)
         uses: azure/cli@v2
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
@@ -67,12 +67,11 @@ jobs:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
-            az deployment group create \
+            az deployment sub create \
               --name "deja-dev-deploy-${{ github.run_id }}" \
-              --resource-group "rg-deja-dev" \
+              --location "swedencentral" \
               --template-file infrastructure/bicep/main.bicep \
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
-              --mode Incremental \
               --output table

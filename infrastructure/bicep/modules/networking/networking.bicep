@@ -4,23 +4,16 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
-  'staging'
-  'prod'
 ])
 param environment string
 
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
-// CIDR plan by environment. App Service VNet integration requires a dedicated subnet.
-var vnetAddressPrefix = environment == 'prod' ? '10.1.0.0/22' : (environment == 'staging' ? '10.2.0.0/22' : '10.3.0.0/22')
-var appServiceCidr = environment == 'prod' ? '10.1.0.0/26' : (environment == 'staging' ? '10.2.0.0/26' : '10.3.0.0/26')
-var privateEndpointCidr = environment == 'prod' ? '10.1.0.64/27' : (environment == 'staging' ? '10.2.0.64/27' : '10.3.0.64/27')
-var postgresSubnetCidr = environment == 'prod' ? '10.1.0.96/27' : (environment == 'staging' ? '10.2.0.96/27' : '10.3.0.96/27')
-
-// ---------------------------------------------------------------------------
-// NSGs — default-deny posture on all subnets
-// ---------------------------------------------------------------------------
+var vnetAddressPrefix  = '10.3.0.0/22'
+var appServiceCidr     = '10.3.0.0/26'
+var privateEndpointCidr = '10.3.0.64/27'
+var postgresSubnetCidr  = '10.3.0.96/27'
 
 resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
   name: 'nsg-app-deja-${environment}'
@@ -39,7 +32,6 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
           sourcePortRange: '*'
           destinationAddressPrefix: privateEndpointCidr
           destinationPortRange: '443'
-          description: 'App Service to Key Vault private endpoint (HTTPS only).'
         }
       }
       {
@@ -53,7 +45,6 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
           sourcePortRange: '*'
           destinationAddressPrefix: postgresSubnetCidr
           destinationPortRange: '5432'
-          description: 'App Service to PostgreSQL VNet integration subnet.'
         }
       }
       {
@@ -67,7 +58,6 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
           sourcePortRange: '*'
           destinationAddressPrefix: 'Internet'
           destinationPortRange: '443'
-          description: 'Outbound HTTPS — Docker Hub pulls, OpenAI, enrichment providers.'
         }
       }
     ]
@@ -91,7 +81,6 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '443'
-          description: 'App Service to Key Vault private endpoint (HTTPS only).'
         }
       }
       {
@@ -128,7 +117,6 @@ resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '5432'
-          description: 'App Service to PostgreSQL.'
         }
       }
       {
@@ -147,10 +135,6 @@ resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
     ]
   }
 }
-
-// ---------------------------------------------------------------------------
-// Virtual Network
-// ---------------------------------------------------------------------------
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: 'vnet-deja-${environment}'
@@ -203,10 +187,6 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Private DNS Zones
-// ---------------------------------------------------------------------------
-
 resource postgresPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
   name: 'privatelink.postgres.database.azure.com'
   location: 'global'
@@ -239,13 +219,9 @@ resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
   }
 }
 
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
-
-output vnetId string = vnet.id
 output appServiceSubnetId string = '${vnet.id}/subnets/snet-app'
 output privateEndpointSubnetId string = '${vnet.id}/subnets/snet-pe'
 output postgresSubnetId string = '${vnet.id}/subnets/snet-psql'
 output postgresPrivateDnsZoneId string = postgresPrivateDnsZone.id
 output keyVaultPrivateDnsZoneId string = keyVaultPrivateDnsZone.id
+output vnetId string = vnet.id

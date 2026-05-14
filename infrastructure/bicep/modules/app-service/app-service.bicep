@@ -4,8 +4,6 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
-  'staging'
-  'prod'
 ])
 param environment string
 
@@ -26,22 +24,12 @@ param appInsightsConnectionString string
 param dockerImageReference string = 'nginx:latest'
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var aspNetCoreEnvironment = environment == 'prod' ? 'Production' : 'Development'
-
-// ---------------------------------------------------------------------------
-// User-assigned managed identity — used to access Key Vault and other private
-// Azure resources. RBAC role assignments are wired in issue #9.
-// ---------------------------------------------------------------------------
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-deja-api-${environment}-${suffix}'
   location: location
   tags: tags
 }
-
-// ---------------------------------------------------------------------------
-// App Service Plan — B1 Linux (minimum tier for VNet integration + always-on)
-// ---------------------------------------------------------------------------
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: 'asp-deja-${environment}-${suffix}'
@@ -56,10 +44,6 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
     reserved: true
   }
 }
-
-// ---------------------------------------------------------------------------
-// Web App — runs the Docker Hub container image
-// ---------------------------------------------------------------------------
 
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: 'app-deja-api-${environment}-${suffix}'
@@ -104,16 +88,12 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'ASPNETCORE_ENVIRONMENT'
-          value: aspNetCoreEnvironment
+          value: 'Development'
         }
       ]
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
 
 output webAppHostname string = webApp.properties.defaultHostName
 output webAppId string = webApp.id

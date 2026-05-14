@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build main Bicep template
         uses: azure/cli@v2
@@ -35,7 +35,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v3
@@ -60,7 +60,7 @@ jobs:
             exit 1
           fi
 
-      - name: ARM validate dev deployment
+      - name: ARM validate dev deployment (subscription scope)
         uses: azure/cli@v2
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
@@ -69,8 +69,8 @@ jobs:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
-            az deployment group validate \
-              --resource-group "rg-deja-dev" \
+            az deployment sub validate \
+              --location "swedencentral" \
               --template-file infrastructure/bicep/main.bicep \
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
@@ -84,7 +84,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v3
@@ -93,23 +93,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Validate required deployment secrets
-        shell: bash
-        env:
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_LOGIN secret."
-            exit 1
-          fi
-          if [ -z "${AZURE_POSTGRES_ADMIN_PASSWORD:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
-            exit 1
-          fi
-
-      - name: Run what-if for dev deployment
+      - name: Run what-if for dev deployment (subscription scope)
         uses: azure/cli@v2
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
@@ -118,9 +102,9 @@ jobs:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
-            az deployment group what-if \
+            az deployment sub what-if \
               --name "deja-dev-whatif-${{ github.run_id }}" \
-              --resource-group "rg-deja-dev" \
+              --location "swedencentral" \
               --template-file infrastructure/bicep/main.bicep \
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \

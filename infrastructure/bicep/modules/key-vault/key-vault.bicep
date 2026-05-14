@@ -4,8 +4,6 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
-  'staging'
-  'prod'
 ])
 param environment string
 

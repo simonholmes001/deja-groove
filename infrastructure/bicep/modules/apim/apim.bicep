@@ -4,8 +4,6 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
-  'staging'
-  'prod'
 ])
 param environment string
 
@@ -28,18 +26,8 @@ param appInsightsId string
 @secure()
 param appInsightsInstrumentationKey string
 
-// ---------------------------------------------------------------------------
-// Names — APIM service name is globally unique.
-// ---------------------------------------------------------------------------
-
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var apimName = 'apim-deja-${environment}-${suffix}'
-
-// ---------------------------------------------------------------------------
-// API Management — Consumption tier.
-// No base fee; JWT validation and rate limiting retain gateway pattern.
-// VNet not supported on Consumption tier (ADR-002).
-// ---------------------------------------------------------------------------
 
 resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   name: apimName
@@ -55,10 +43,6 @@ resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Application Insights logger
-// ---------------------------------------------------------------------------
-
 resource apimLogger 'Microsoft.ApiManagement/service/loggers@2022-08-01' = {
   parent: apimService
   name: 'app-insights-logger'
@@ -72,10 +56,6 @@ resource apimLogger 'Microsoft.ApiManagement/service/loggers@2022-08-01' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Named value — backend URL referenced in API policies
-// ---------------------------------------------------------------------------
-
 resource backendUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2022-08-01' = {
   parent: apimService
   name: 'backend-url'
@@ -86,15 +66,11 @@ resource backendUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2022-
   }
 }
 
-// ---------------------------------------------------------------------------
-// Backend — points to the Container Apps ingress
-// ---------------------------------------------------------------------------
-
 resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
   parent: apimService
   name: 'deja-api-backend'
   properties: {
-    description: 'Déjà Groove API backend (App Service)'
+    description: 'Deja Groove API backend (App Service)'
     url: backendUrl
     protocol: 'https'
     tls: {
@@ -103,10 +79,6 @@ resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
 
 output apimServiceId string = apimService.id
 output gatewayUrl string = apimService.properties.gatewayUrl
