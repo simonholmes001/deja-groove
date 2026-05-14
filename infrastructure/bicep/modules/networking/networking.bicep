@@ -137,6 +137,55 @@ resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
   }
 }
 
+resource nsgApim 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
+  name: 'nsg-apim-deja-${environment}'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'allow-inbound-https-from-internet'
+        properties: {
+          priority: 100
+          protocol: 'Tcp'
+          access: 'Allow'
+          direction: 'Inbound'
+          sourceAddressPrefix: 'Internet'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '443'
+        }
+      }
+      {
+        name: 'allow-inbound-management-3443'
+        properties: {
+          priority: 110
+          protocol: 'Tcp'
+          access: 'Allow'
+          direction: 'Inbound'
+          sourceAddressPrefix: 'ApiManagement'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '3443'
+        }
+      }
+      {
+        name: 'allow-outbound-https'
+        properties: {
+          priority: 100
+          protocol: 'Tcp'
+          access: 'Allow'
+          direction: 'Outbound'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'Internet'
+          destinationPortRange: '443'
+        }
+      }
+    ]
+  }
+}
+
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: 'vnet-deja-${environment}'
   location: location
@@ -188,6 +237,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
         name: 'snet-apim'
         properties: {
           addressPrefix: apimSubnetCidr
+          networkSecurityGroup: { id: nsgApim.id }
         }
       }
     ]
