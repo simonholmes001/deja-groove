@@ -51,8 +51,10 @@ jobs:
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
             exit 1
           fi
-          echo "DEBUG POSTGRES LOGIN VALUE: ${AZURE_POSTGRES_ADMIN_LOGIN}"
-          echo "DEBUG POSTGRES PASSWORD VALUE: ${AZURE_POSTGRES_ADMIN_PASSWORD}"
+          echo "LOGIN_LEN=${#AZURE_POSTGRES_ADMIN_LOGIN}"
+          echo -n "$AZURE_POSTGRES_ADMIN_LOGIN" | sha256sum
+          echo "PASS_LEN=${#AZURE_POSTGRES_ADMIN_PASSWORD}"
+          echo -n "$AZURE_POSTGRES_ADMIN_PASSWORD" | sha256sum
 
       - name: Build Bicep template
         uses: azure/cli@v2
