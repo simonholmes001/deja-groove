@@ -21,7 +21,8 @@ The subscription-scope template creates and manages these RGs:
 ## Ingress Posture
 
 - APIM is the intended public ingress tier.
-- App Service uses inbound access restrictions with default deny and only allows the `ApiManagement` service tag.
+- App Service uses inbound access restrictions with default deny.
+- Deploy workflow enforces App Service allow rules to APIM instance egress IPs for this environment.
 - SCM/Kudu restrictions are managed separately and default to deny.
 - PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
 
@@ -29,7 +30,8 @@ The subscription-scope template creates and manages these RGs:
 
 - Manual workflow: `.github/workflows/appservice-breakglass-access.yaml`
 - Purpose: temporary allow/remove emergency CIDR access to App Service main and SCM endpoints.
-- Use only for incident recovery and remove rule immediately after use.
+- CIDR guardrails are enforced (`/24` to `/32`, `0.0.0.0/0` forbidden).
+- Optional auto-remove is supported with `ttl_minutes` (1-120).
 
 ## Directory
 

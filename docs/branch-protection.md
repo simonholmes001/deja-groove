@@ -31,6 +31,9 @@ After CI has run at least once, select these checks:
 
 - `Node Tests (., cli, frontend)` or the matrix-generated equivalents under `Node Tests`
 - `.NET Tests (backend, .)` or the matrix-generated equivalents under `.NET Tests`
+- `Infrastructure Validate (PR) / Bicep Build Validation`
+- `Infrastructure Validate (PR) / Dev ARM Validate`
+- `Infrastructure Validate (PR) / Dev What-If`
 
 Note: GitHub may display matrix checks as separate entries. Mark all visible entries from both jobs as required.
 
@@ -48,4 +51,3 @@ Recommended additional controls:
 1. Create a test PR with a failing test and confirm merge is blocked.
 2. Fix tests and confirm merge is unblocked only after checks pass.
 3. Confirm direct push to `main` is blocked for non-admin users (or all users if strict mode).
-

@@ -12,12 +12,22 @@ on:
           - remove
       cidr:
         description: "CIDR to allow/remove (example: 203.0.113.10/32)"
-        required: true
+        required: false
         type: string
       priority:
         description: "Rule priority for allow action"
         required: false
         default: "110"
+        type: string
+      auto_remove:
+        description: "Automatically remove the break-glass rule after ttl_minutes"
+        required: false
+        default: true
+        type: boolean
+      ttl_minutes:
+        description: "Auto-remove delay in minutes when auto_remove=true"
+        required: false
+        default: "30"
         type: string
 
 permissions:
@@ -43,20 +53,44 @@ jobs:
           inlineScript: |
             set -euo pipefail
             rg="rg-deja-dev-app"
-            app_name="$(az webapp list -g "$rg" --query "[?starts_with(name, 'app-deja-api-dev-')].name | [0]" -o tsv)"
-            if [ -z "$app_name" ]; then
-              echo "::error::Unable to locate dev app service in $rg."
+            readarray -t apps < <(az webapp list -g "$rg" --query "[?starts_with(name, 'app-deja-api-dev-')].name" -o tsv)
+            if [ "${#apps[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one dev app service in $rg, found ${#apps[@]}."
               exit 1
             fi
+            app_name="${apps[0]}"
 
             if [ "${{ github.event.inputs.action }}" = "allow" ]; then
+              cidr="${{ github.event.inputs.cidr }}"
+              if [ -z "$cidr" ]; then
+                echo "::error::CIDR is required when action=allow."
+                exit 1
+              fi
+              if [[ ! "$cidr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[1-2][0-9]|3[0-2])$ ]]; then
+                echo "::error::CIDR must be IPv4 CIDR format."
+                exit 1
+              fi
+              prefix="${cidr##*/}"
+              if [ "$prefix" -lt 24 ]; then
+                echo "::error::CIDR prefix must be /24 or narrower (for example /24-/32)."
+                exit 1
+              fi
+              if [ "$cidr" = "0.0.0.0/0" ]; then
+                echo "::error::0.0.0.0/0 is forbidden."
+                exit 1
+              fi
+              ttl="${{ github.event.inputs.ttl_minutes }}"
+              if [[ ! "$ttl" =~ ^[0-9]+$ ]] || [ "$ttl" -lt 1 ] || [ "$ttl" -gt 120 ]; then
+                echo "::error::ttl_minutes must be an integer between 1 and 120."
+                exit 1
+              fi
               az webapp config access-restriction add \
                 --resource-group "$rg" \
                 --name "$app_name" \
                 --rule-name "breakglass-main" \
                 --action Allow \
                 --priority "${{ github.event.inputs.priority }}" \
-                --ip-address "${{ github.event.inputs.cidr }}"
+                --ip-address "$cidr"
 
               az webapp config access-restriction add \
                 --resource-group "$rg" \
@@ -65,7 +99,22 @@ jobs:
                 --rule-name "breakglass-scm" \
                 --action Allow \
                 --priority "${{ github.event.inputs.priority }}" \
-                --ip-address "${{ github.event.inputs.cidr }}"
+                --ip-address "$cidr"
+
+              if [ "${{ github.event.inputs.auto_remove }}" = "true" ]; then
+                echo "Sleeping ${ttl} minutes before auto-removal."
+                sleep "$((ttl * 60))"
+                az webapp config access-restriction remove \
+                  --resource-group "$rg" \
+                  --name "$app_name" \
+                  --rule-name "breakglass-main" || true
+
+                az webapp config access-restriction remove \
+                  --resource-group "$rg" \
+                  --name "$app_name" \
+                  --scm-site true \
+                  --rule-name "breakglass-scm" || true
+              fi
             else
               az webapp config access-restriction remove \
                 --resource-group "$rg" \
