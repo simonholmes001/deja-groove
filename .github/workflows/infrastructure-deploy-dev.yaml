@@ -51,6 +51,8 @@ jobs:
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
             exit 1
           fi
+          echo "DEBUG POSTGRES LOGIN VALUE: ${AZURE_POSTGRES_ADMIN_LOGIN}"
+          echo "DEBUG POSTGRES PASSWORD VALUE: ${AZURE_POSTGRES_ADMIN_PASSWORD}"
 
       - name: Build Bicep template
         uses: azure/cli@v2
@@ -69,6 +71,7 @@ jobs:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
+            set +e
             az deployment sub create \
               --name "deja-dev-deploy-${{ github.run_id }}" \
               --location "swedencentral" \
@@ -77,6 +80,22 @@ jobs:
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
               --output table
+            deploy_rc=$?
+            set -e
+            if [ "$deploy_rc" -ne 0 ]; then
+              echo "----- SUB DEPLOYMENT FAILED OPERATIONS -----"
+              az deployment operation sub list \
+                --name "deja-dev-deploy-${{ github.run_id }}" \
+                --query "[?properties.provisioningState=='Failed'].properties.statusMessage" \
+                -o jsonc || true
+              echo "----- DATA RG NESTED DEPLOYMENT FAILED OPERATIONS -----"
+              az deployment operation group list \
+                --resource-group "rg-deja-dev-data" \
+                --name "deja-postgresql-dev" \
+                --query "[?properties.provisioningState=='Failed'].properties.statusMessage" \
+                -o jsonc || true
+              exit "$deploy_rc"
+            fi
 
       - name: Verify App Service direct ingress is blocked
         uses: azure/cli@v2
