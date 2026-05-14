@@ -1,25 +1,29 @@
 @description('Azure region for all resources.')
 param location string
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
-// ---------------------------------------------------------------------------
-// CIDR plan (dev only)
-// App Service VNet integration requires a dedicated subnet, minimum /26.
-// ---------------------------------------------------------------------------
-
-var vnetAddressPrefix  = '10.1.0.0/22'
-var appServiceCidr     = '10.1.0.0/26'    // App Service outbound VNet integration
-var privateEndpointCidr = '10.1.0.64/27'  // Key Vault private endpoint
-var postgresSubnetCidr  = '10.1.0.96/27'  // PostgreSQL Flexible Server VNet integration
+// CIDR plan by environment. App Service VNet integration requires a dedicated subnet.
+var vnetAddressPrefix = environment == 'prod' ? '10.1.0.0/22' : (environment == 'staging' ? '10.2.0.0/22' : '10.3.0.0/22')
+var appServiceCidr = environment == 'prod' ? '10.1.0.0/26' : (environment == 'staging' ? '10.2.0.0/26' : '10.3.0.0/26')
+var privateEndpointCidr = environment == 'prod' ? '10.1.0.64/27' : (environment == 'staging' ? '10.2.0.64/27' : '10.3.0.64/27')
+var postgresSubnetCidr = environment == 'prod' ? '10.1.0.96/27' : (environment == 'staging' ? '10.2.0.96/27' : '10.3.0.96/27')
 
 // ---------------------------------------------------------------------------
 // NSGs — default-deny posture on all subnets
 // ---------------------------------------------------------------------------
 
 resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-app-deja-dev'
+  name: 'nsg-app-deja-${environment}'
   location: location
   tags: tags
   properties: {
@@ -71,7 +75,7 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
 }
 
 resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-pe-deja-dev'
+  name: 'nsg-pe-deja-${environment}'
   location: location
   tags: tags
   properties: {
@@ -108,7 +112,7 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2023-04-01
 }
 
 resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
-  name: 'nsg-psql-deja-dev'
+  name: 'nsg-psql-deja-${environment}'
   location: location
   tags: tags
   properties: {
@@ -149,7 +153,7 @@ resource nsgPostgres 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
 // ---------------------------------------------------------------------------
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
-  name: 'vnet-deja-dev'
+  name: 'vnet-deja-${environment}'
   location: location
   tags: tags
   properties: {
@@ -217,7 +221,7 @@ resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' =
 
 resource postgresVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: postgresPrivateDnsZone
-  name: 'link-psql-dev'
+  name: 'link-psql-${environment}'
   location: 'global'
   properties: {
     virtualNetwork: { id: vnet.id }
@@ -227,7 +231,7 @@ resource postgresVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
 
 resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: keyVaultPrivateDnsZone
-  name: 'link-kv-dev'
+  name: 'link-kv-${environment}'
   location: 'global'
   properties: {
     virtualNetwork: { id: vnet.id }

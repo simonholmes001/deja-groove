@@ -1,6 +1,14 @@
 @description('Azure region for all resources.')
 param location string
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
@@ -11,7 +19,7 @@ param privateEndpointSubnetId string
 param privateDnsZoneId string
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var keyVaultName = 'kv-deja-dev-${suffix}'
+var keyVaultName = 'kv-deja-${environment}-${suffix}'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
   name: keyVaultName
@@ -37,7 +45,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
 }
 
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: 'pe-kv-deja-dev'
+  name: 'pe-kv-deja-${environment}'
   location: location
   tags: tags
   properties: {

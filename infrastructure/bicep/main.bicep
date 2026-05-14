@@ -1,5 +1,13 @@
 targetScope = 'resourceGroup'
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Azure region for all resources. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
@@ -28,7 +36,7 @@ param dockerImageReference string
 // ---------------------------------------------------------------------------
 
 var tags = {
-  environment: 'dev'
+  environment: environment
   application: 'deja-groove'
   owner: ownerEmail
   'cost-centre': 'deja-groove-v1'
@@ -39,24 +47,27 @@ var tags = {
 // ---------------------------------------------------------------------------
 
 module monitoring 'modules/monitoring/monitoring.bicep' = {
-  name: 'deja-monitoring-dev'
+  name: 'deja-monitoring-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
   }
 }
 
 module networking 'modules/networking/networking.bicep' = {
-  name: 'deja-networking-dev'
+  name: 'deja-networking-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
   }
 }
 
 module keyVault 'modules/key-vault/key-vault.bicep' = {
-  name: 'deja-key-vault-dev'
+  name: 'deja-key-vault-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
     privateEndpointSubnetId: networking.outputs.privateEndpointSubnetId
@@ -65,8 +76,9 @@ module keyVault 'modules/key-vault/key-vault.bicep' = {
 }
 
 module postgresql 'modules/postgresql/postgresql.bicep' = {
-  name: 'deja-postgresql-dev'
+  name: 'deja-postgresql-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
     postgresSubnetId: networking.outputs.postgresSubnetId
@@ -77,8 +89,9 @@ module postgresql 'modules/postgresql/postgresql.bicep' = {
 }
 
 module appService 'modules/app-service/app-service.bicep' = {
-  name: 'deja-app-service-dev'
+  name: 'deja-app-service-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
     appServiceSubnetId: networking.outputs.appServiceSubnetId
@@ -89,8 +102,9 @@ module appService 'modules/app-service/app-service.bicep' = {
 }
 
 module apim 'modules/apim/apim.bicep' = {
-  name: 'deja-apim-dev'
+  name: 'deja-apim-${environment}'
   params: {
+    environment: environment
     location: location
     tags: tags
     publisherName: apimPublisherName

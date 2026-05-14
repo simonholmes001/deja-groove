@@ -1,6 +1,14 @@
 @description('Azure region for all resources.')
 param location string
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
@@ -19,7 +27,7 @@ param administratorLogin string
 param administratorLoginPassword string
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var serverName = 'psql-deja-dev-${suffix}'
+var serverName = 'psql-deja-${environment}-${suffix}'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01' = {
   name: serverName

@@ -1,6 +1,14 @@
 @description('Azure region for all resources.')
 param location string
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
@@ -18,6 +26,7 @@ param appInsightsConnectionString string
 param dockerImageReference string = 'nginx:latest'
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
+var aspNetCoreEnvironment = environment == 'prod' ? 'Production' : 'Development'
 
 // ---------------------------------------------------------------------------
 // User-assigned managed identity — used to access Key Vault and other private
@@ -25,7 +34,7 @@ var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 // ---------------------------------------------------------------------------
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-deja-api-dev-${suffix}'
+  name: 'id-deja-api-${environment}-${suffix}'
   location: location
   tags: tags
 }
@@ -35,7 +44,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 // ---------------------------------------------------------------------------
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
-  name: 'asp-deja-dev-${suffix}'
+  name: 'asp-deja-${environment}-${suffix}'
   location: location
   tags: tags
   sku: {
@@ -53,7 +62,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 // ---------------------------------------------------------------------------
 
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
-  name: 'app-deja-api-dev-${suffix}'
+  name: 'app-deja-api-${environment}-${suffix}'
   location: location
   tags: tags
   kind: 'app,linux,container'
@@ -95,7 +104,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Development'
+          value: aspNetCoreEnvironment
         }
       ]
     }

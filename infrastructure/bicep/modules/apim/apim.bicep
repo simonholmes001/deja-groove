@@ -1,6 +1,14 @@
 @description('Azure region for all resources.')
 param location string
 
+@description('Deployment environment.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environment string
+
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
@@ -25,7 +33,7 @@ param appInsightsInstrumentationKey string
 // ---------------------------------------------------------------------------
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var apimName = 'apim-deja-dev-${suffix}'
+var apimName = 'apim-deja-${environment}-${suffix}'
 
 // ---------------------------------------------------------------------------
 // API Management — Consumption tier.
