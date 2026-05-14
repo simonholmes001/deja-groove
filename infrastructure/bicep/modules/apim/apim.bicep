@@ -72,7 +72,7 @@ resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
   properties: {
     description: 'Deja Groove API backend (App Service)'
     url: backendUrl
-    protocol: 'https'
+    protocol: 'http'
     tls: {
       validateCertificateChain: true
       validateCertificateName: true
