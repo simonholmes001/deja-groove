@@ -44,7 +44,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
       storageSizeGB: 32
     }
     backup: {
-      backupRetentionDays: 3
+      backupRetentionDays: 7
       geoRedundantBackup: 'Disabled'
     }
     highAvailability: {
