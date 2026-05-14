@@ -41,6 +41,51 @@ Repository: `simonholmes001/deja-groove`
   - Secret: `PROJECT_AUTOMATION_TOKEN`
   - Variables: `PROJECT_OWNER`, `PROJECT_NUMBER`
 
+### `Infrastructure Validate (PR)`
+- File: `.github/workflows/infrastructure-validate.yaml`
+- Purpose: validates infra changes before merge.
+- Triggers: pull requests to `main` with changes under `infrastructure/**` or infra workflow files.
+- Jobs:
+  - `Bicep Build Validation`
+  - `Dev ARM Validate`
+  - `Dev What-If`
+- Required secrets:
+  - `AZURE_CLIENT_ID`
+  - `AZURE_TENANT_ID`
+  - `AZURE_SUBSCRIPTION_ID`
+  - `AZURE_POSTGRES_ADMIN_LOGIN`
+  - `AZURE_POSTGRES_ADMIN_PASSWORD`
+
+### `Infrastructure Deploy (Dev)`
+- File: `.github/workflows/infrastructure-deploy-dev.yaml`
+- Purpose: deploys infra changes to dev on merge to `main` and verifies ingress controls.
+- Triggers: push to `main` for infra changes and manual dispatch.
+- Key checks:
+  - Deploy subscription-scope Bicep
+  - Assert App Service access-restriction policy shape (default deny, single APIM allow rule, no extra allows)
+  - Verify direct App Service access is denied
+  - Verify APIM route reachability
+- Required secrets:
+  - `AZURE_CLIENT_ID`
+  - `AZURE_TENANT_ID`
+  - `AZURE_SUBSCRIPTION_ID`
+  - `AZURE_POSTGRES_ADMIN_LOGIN`
+  - `AZURE_POSTGRES_ADMIN_PASSWORD`
+
+### `App Service Break-Glass Access (Dev)`
+- File: `.github/workflows/appservice-breakglass-access.yaml`
+- Purpose: temporary emergency allow/remove access for App Service main and SCM endpoints.
+- Triggers: manual dispatch.
+- Controls:
+  - CIDR validation
+  - narrow-prefix requirement (`/24` to `/32`)
+  - expiry metadata applied to rules
+
+### `App Service Break-Glass Cleanup (Dev)`
+- File: `.github/workflows/appservice-breakglass-cleanup.yaml`
+- Purpose: remove expired break-glass rules for main and SCM endpoints.
+- Triggers: schedule (every 15 minutes) and manual dispatch.
+
 ## Local Hook
 
 ### `pre-commit`

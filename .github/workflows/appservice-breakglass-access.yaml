@@ -1,0 +1,124 @@
+name: App Service Break-Glass Access (Dev)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "allow or remove break-glass rule"
+        required: true
+        type: choice
+        options:
+          - allow
+          - remove
+      cidr:
+        description: "CIDR to allow/remove (example: 203.0.113.10/32)"
+        required: false
+        type: string
+      priority:
+        description: "Rule priority for allow action"
+        required: false
+        default: "110"
+        type: string
+      ttl_minutes:
+        description: "Expiry delay in minutes (cleanup workflow removes expired rules)"
+        required: false
+        default: "30"
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  breakglass:
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    steps:
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply break-glass change
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            rg="rg-deja-dev-app"
+            readarray -t apps < <(az webapp list -g "$rg" --query "[?starts_with(name, 'app-deja-api-dev-')].name" -o tsv)
+            if [ "${#apps[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one dev app service in $rg, found ${#apps[@]}."
+              exit 1
+            fi
+            app_name="${apps[0]}"
+
+            if [ "${{ github.event.inputs.action }}" = "allow" ]; then
+              cidr="${{ github.event.inputs.cidr }}"
+              if [ -z "$cidr" ]; then
+                echo "::error::CIDR is required when action=allow."
+                exit 1
+              fi
+              export CIDR="$cidr"
+              python3 - <<'PY'
+import ipaddress, os, sys
+cidr = os.environ["CIDR"]
+try:
+    ipaddress.IPv4Network(cidr, strict=False)
+except Exception:
+    print("::error::CIDR must be a valid IPv4 CIDR.")
+    sys.exit(1)
+PY
+              prefix="${cidr##*/}"
+              if [ "$prefix" -lt 24 ]; then
+                echo "::error::CIDR prefix must be /24 or narrower (for example /24-/32)."
+                exit 1
+              fi
+              if [ "$cidr" = "0.0.0.0/0" ]; then
+                echo "::error::0.0.0.0/0 is forbidden."
+                exit 1
+              fi
+              ttl="${{ github.event.inputs.ttl_minutes }}"
+              if [[ ! "$ttl" =~ ^[0-9]+$ ]] || [ "$ttl" -lt 1 ] || [ "$ttl" -gt 120 ]; then
+                echo "::error::ttl_minutes must be an integer between 1 and 120."
+                exit 1
+              fi
+              expires_at="$(date -u -d "+${ttl} minutes" +"%Y-%m-%dT%H:%M:%SZ")"
+              description="breakglass-expires=${expires_at}"
+              az webapp config access-restriction add \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --rule-name "breakglass-main" \
+                --action Allow \
+                --priority "${{ github.event.inputs.priority }}" \
+                --ip-address "$cidr" \
+                --description "$description"
+
+              az webapp config access-restriction add \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --scm-site true \
+                --rule-name "breakglass-scm" \
+                --action Allow \
+                --priority "${{ github.event.inputs.priority }}" \
+                --ip-address "$cidr" \
+                --description "$description"
+            else
+              az webapp config access-restriction remove \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --rule-name "breakglass-main" || true
+
+              az webapp config access-restriction remove \
+                --resource-group "$rg" \
+                --name "$app_name" \
+                --scm-site true \
+                --rule-name "breakglass-scm" || true
+            fi
+
+            az webapp config access-restriction show \
+              --resource-group "$rg" \
+              --name "$app_name" \
+              --output table

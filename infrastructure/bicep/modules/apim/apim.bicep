@@ -80,6 +80,37 @@ resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
   }
 }
 
+resource healthApi 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
+  parent: apimService
+  name: 'deja-health'
+  properties: {
+    displayName: 'Deja Groove Health'
+    path: 'api'
+    protocols: [
+      'https'
+    ]
+    subscriptionRequired: false
+    serviceUrl: backendUrl
+  }
+}
+
+resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: healthApi
+  name: 'health-get'
+  properties: {
+    displayName: 'Health'
+    method: 'GET'
+    urlTemplate: '/health'
+    templateParameters: []
+    responses: [
+      {
+        statusCode: 200
+        description: 'OK'
+      }
+    ]
+  }
+}
+
 output apimServiceId string = apimService.id
 output gatewayUrl string = apimService.properties.gatewayUrl
 output apimName string = apimService.name
