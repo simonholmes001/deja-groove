@@ -19,13 +19,8 @@ on:
         required: false
         default: "110"
         type: string
-      auto_remove:
-        description: "Mark rule for automatic cleanup by scheduled workflow"
-        required: false
-        default: true
-        type: boolean
       ttl_minutes:
-        description: "Auto-remove delay in minutes when auto_remove=true"
+        description: "Expiry delay in minutes (cleanup workflow removes expired rules)"
         required: false
         default: "30"
         type: string

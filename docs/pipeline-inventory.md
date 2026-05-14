@@ -62,7 +62,7 @@ Repository: `simonholmes001/deja-groove`
 - Triggers: push to `main` for infra changes and manual dispatch.
 - Key checks:
   - Deploy subscription-scope Bicep
-  - Enforce App Service ingress to APIM instance egress IPs
+  - Assert App Service access-restriction policy shape (default deny, single APIM allow rule, no extra allows)
   - Verify direct App Service access is denied
   - Verify APIM route reachability
 - Required secrets:

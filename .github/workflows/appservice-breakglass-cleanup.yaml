@@ -41,12 +41,14 @@ jobs:
               local rule_name="$2"
               local show_args=("-g" "$rg" "-n" "$app_name")
               local rm_args=("-g" "$rg" "-n" "$app_name" "--rule-name" "$rule_name")
+              local query="ipSecurityRestrictions[?name=='${rule_name}'].description | [0]"
               if [ "$scm_flag" = "true" ]; then
                 show_args+=("--scm-site" "true")
                 rm_args+=("--scm-site" "true")
+                query="scmIpSecurityRestrictions[?name=='${rule_name}'].description | [0]"
               fi
 
-              description="$(az webapp config access-restriction show "${show_args[@]}" --query "ipSecurityRestrictions[?name=='${rule_name}'].description | [0]" -o tsv)"
+              description="$(az webapp config access-restriction show "${show_args[@]}" --query "$query" -o tsv)"
               if [ -z "$description" ]; then
                 return 0
               fi

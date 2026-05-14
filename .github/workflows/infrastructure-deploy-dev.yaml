@@ -99,9 +99,12 @@ jobs:
 
             main_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "ipSecurityRestrictionsDefaultAction" -o tsv)"
             scm_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "scmIpSecurityRestrictionsDefaultAction" -o tsv)"
-            apim_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?name=='allow-apim-service-tag' && action=='Allow'])" -o tsv)"
-            if [ "$main_default_action" != "Deny" ] || [ "$scm_default_action" != "Deny" ] || [ "$apim_allow_count" -lt 1 ]; then
+            total_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?action=='Allow'])" -o tsv)"
+            apim_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?name=='allow-apim-service-tag' && action=='Allow' && tag=='ServiceTag' && ipAddress=='ApiManagement'])" -o tsv)"
+            scm_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(scmIpSecurityRestrictions[?action=='Allow'])" -o tsv)"
+            if [ "$main_default_action" != "Deny" ] || [ "$scm_default_action" != "Deny" ] || [ "$apim_allow_count" != "1" ] || [ "$total_allow_count" != "1" ] || [ "$scm_allow_count" != "0" ]; then
               echo "::error::Access restriction policy assertion failed (main/scm default deny and APIM allow rule required)."
+              az webapp config access-restriction show -g "$rg" -n "$app_name" --output jsonc
               exit 1
             fi
 
