@@ -14,6 +14,7 @@ var vnetAddressPrefix  = '10.3.0.0/22'
 var appServiceCidr     = '10.3.0.0/26'
 var privateEndpointCidr = '10.3.0.64/27'
 var postgresSubnetCidr  = '10.3.0.96/27'
+var apimSubnetCidr      = '10.3.0.128/27'
 
 resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
   name: 'nsg-app-deja-${environment}'
@@ -183,6 +184,12 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
           ]
         }
       }
+      {
+        name: 'snet-apim'
+        properties: {
+          addressPrefix: apimSubnetCidr
+        }
+      }
     ]
   }
 }
@@ -195,6 +202,12 @@ resource postgresPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' =
 
 resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
   name: 'privatelink.vaultcore.azure.net'
+  location: 'global'
+  tags: tags
+}
+
+resource appServicePrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: 'privatelink.azurewebsites.net'
   location: 'global'
   tags: tags
 }
@@ -219,9 +232,21 @@ resource keyVaultVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks
   }
 }
 
+resource appServiceVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: appServicePrivateDnsZone
+  name: 'link-appsvc-${environment}'
+  location: 'global'
+  properties: {
+    virtualNetwork: { id: vnet.id }
+    registrationEnabled: false
+  }
+}
+
 output appServiceSubnetId string = '${vnet.id}/subnets/snet-app'
 output privateEndpointSubnetId string = '${vnet.id}/subnets/snet-pe'
 output postgresSubnetId string = '${vnet.id}/subnets/snet-psql'
+output apimSubnetId string = '${vnet.id}/subnets/snet-apim'
 output postgresPrivateDnsZoneId string = postgresPrivateDnsZone.id
 output keyVaultPrivateDnsZoneId string = keyVaultPrivateDnsZone.id
+output appServicePrivateDnsZoneId string = appServicePrivateDnsZone.id
 output vnetId string = vnet.id

@@ -13,6 +13,12 @@ param tags object
 @description('Resource ID of the subnet delegated to Microsoft.Web/serverFarms for VNet integration.')
 param appServiceSubnetId string
 
+@description('Resource ID of the private endpoint subnet.')
+param privateEndpointSubnetId string
+
+@description('Resource ID of the App Service private DNS zone.')
+param privateDnsZoneId string
+
 @description('Key Vault URI — injected as an app setting so the runtime can resolve secrets via managed identity.')
 param keyVaultUri string
 
@@ -59,6 +65,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    publicNetworkAccess: 'Disabled'
     virtualNetworkSubnetId: appServiceSubnetId
     siteConfig: {
       linuxFxVersion: 'DOCKER|${dockerImageReference}'
@@ -109,7 +116,43 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   }
 }
 
+resource appPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
+  name: 'pe-app-deja-api-${environment}-${suffix}'
+  location: location
+  tags: tags
+  properties: {
+    subnet: { id: privateEndpointSubnetId }
+    privateLinkServiceConnections: [
+      {
+        name: 'app-service-connection'
+        properties: {
+          privateLinkServiceId: webApp.id
+          groupIds: [
+            'sites'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+resource appPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-04-01' = {
+  parent: appPrivateEndpoint
+  name: 'appsvc-dns-zone-group'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'privatelink-azurewebsites'
+        properties: {
+          privateDnsZoneId: privateDnsZoneId
+        }
+      }
+    ]
+  }
+}
+
 output webAppHostname string = webApp.properties.defaultHostName
+output webAppPrivateHostname string = '${webApp.name}.privatelink.azurewebsites.net'
 output webAppId string = webApp.id
 output webAppPrincipalId string = managedIdentity.properties.principalId
 output managedIdentityId string = managedIdentity.id

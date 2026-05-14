@@ -131,6 +131,8 @@ module appService 'modules/app-service/app-service.bicep' = {
     location: location
     tags: tags
     appServiceSubnetId: networking.outputs.appServiceSubnetId
+    privateEndpointSubnetId: networking.outputs.privateEndpointSubnetId
+    privateDnsZoneId: networking.outputs.appServicePrivateDnsZoneId
     keyVaultUri: keyVault.outputs.keyVaultUri
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     dockerImageReference: dockerImageReference
@@ -144,9 +146,10 @@ module apim 'modules/apim/apim.bicep' = {
     environment: environment
     location: location
     tags: tags
+    apimSubnetId: networking.outputs.apimSubnetId
     publisherName: apimPublisherName
     publisherEmail: apimPublisherEmail
-    backendUrl: 'https://${appService.outputs.webAppHostname}'
+    backendUrl: 'https://${appService.outputs.webAppPrivateHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
   }

@@ -10,6 +10,9 @@ param environment string
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
+@description('Resource ID of the APIM subnet.')
+param apimSubnetId string
+
 @description('APIM publisher display name.')
 param publisherName string
 
@@ -34,12 +37,16 @@ resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Consumption'
-    capacity: 0
+    name: 'Developer'
+    capacity: 1
   }
   properties: {
     publisherName: publisherName
     publisherEmail: publisherEmail
+    virtualNetworkType: 'External'
+    virtualNetworkConfiguration: {
+      subnetResourceId: apimSubnetId
+    }
   }
 }
 
