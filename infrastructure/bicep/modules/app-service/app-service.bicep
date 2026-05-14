@@ -65,6 +65,18 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       alwaysOn: true
       healthCheckPath: '/health'
       vnetRouteAllEnabled: true
+      ipSecurityRestrictionsDefaultAction: 'Deny'
+      ipSecurityRestrictions: [
+        {
+          name: 'allow-apim-service-tag'
+          action: 'Allow'
+          priority: 100
+          tag: 'ServiceTag'
+          ipAddress: 'ApiManagement'
+          description: 'Allow only API Management service traffic to reach the app.'
+        }
+      ]
+      scmIpSecurityRestrictionsUseMain: true
       appSettings: [
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'

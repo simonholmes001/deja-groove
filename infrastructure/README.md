@@ -18,6 +18,12 @@ The subscription-scope template creates and manages these RGs:
 - `rg-deja-dev-app` (App Service + APIM)
 - `rg-deja-dev-observability` (Log Analytics + Application Insights)
 
+## Ingress Posture
+
+- APIM is the intended public ingress tier.
+- App Service uses inbound access restrictions with default deny and only allows the `ApiManagement` service tag.
+- PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
+
 ## Directory
 
 ```
