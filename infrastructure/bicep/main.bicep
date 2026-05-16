@@ -154,7 +154,7 @@ module apim 'modules/apim/apim.bicep' = {
     publisherName: apimPublisherName
     publisherEmail: apimPublisherEmail
     instanceSuffix: apimInstanceSuffix
-    backendUrl: 'https://${appService.outputs.webAppPrivateHostname}'
+    backendUrl: 'https://${appService.outputs.webAppHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
   }
