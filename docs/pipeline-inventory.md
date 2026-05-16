@@ -72,20 +72,6 @@ Repository: `simonholmes001/deja-groove`
   - `AZURE_POSTGRES_ADMIN_LOGIN`
   - `AZURE_POSTGRES_ADMIN_PASSWORD`
 
-### `App Service Break-Glass Access (Dev)`
-- File: `.github/workflows/appservice-breakglass-access.yaml`
-- Purpose: temporary emergency allow/remove access for App Service main and SCM endpoints.
-- Triggers: manual dispatch.
-- Controls:
-  - CIDR validation
-  - narrow-prefix requirement (`/24` to `/32`)
-  - expiry metadata applied to rules
-
-### `App Service Break-Glass Cleanup (Dev)`
-- File: `.github/workflows/appservice-breakglass-cleanup.yaml`
-- Purpose: remove expired break-glass rules for main and SCM endpoints.
-- Triggers: schedule (every 15 minutes) and manual dispatch.
-
 ## Local Hook
 
 ### `pre-commit`
