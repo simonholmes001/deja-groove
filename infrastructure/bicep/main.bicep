@@ -42,6 +42,7 @@ param rgAppName string = 'rg-deja-dev-app'
 param rgObservabilityName string = 'rg-deja-dev-observability'
 
 var environment = 'dev'
+var runSuffix = take(uniqueString(deployment().name), 6)
 
 var tags = {
   environment: environment
@@ -81,7 +82,7 @@ resource rgObservability 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 }
 
 module monitoring 'modules/monitoring/monitoring.bicep' = {
-  name: 'deja-monitoring-${environment}'
+  name: 'deja-monitoring-${environment}-${runSuffix}'
   scope: rgObservability
   params: {
     environment: environment
@@ -91,7 +92,7 @@ module monitoring 'modules/monitoring/monitoring.bicep' = {
 }
 
 module networking 'modules/networking/networking.bicep' = {
-  name: 'deja-networking-${environment}'
+  name: 'deja-networking-${environment}-${runSuffix}'
   scope: rgNetwork
   params: {
     environment: environment
@@ -101,7 +102,7 @@ module networking 'modules/networking/networking.bicep' = {
 }
 
 module keyVault 'modules/key-vault/key-vault.bicep' = {
-  name: 'deja-key-vault-${environment}'
+  name: 'deja-key-vault-${environment}-${runSuffix}'
   scope: rgSecurity
   params: {
     environment: environment
@@ -113,7 +114,7 @@ module keyVault 'modules/key-vault/key-vault.bicep' = {
 }
 
 module postgresql 'modules/postgresql/postgresql.bicep' = {
-  name: 'deja-postgresql-${environment}'
+  name: 'deja-postgresql-${environment}-${runSuffix}'
   scope: rgData
   params: {
     environment: environment
@@ -127,7 +128,7 @@ module postgresql 'modules/postgresql/postgresql.bicep' = {
 }
 
 module appService 'modules/app-service/app-service.bicep' = {
-  name: 'deja-app-service-${environment}'
+  name: 'deja-app-service-${environment}-${runSuffix}'
   scope: rgApp
   params: {
     environment: environment
@@ -143,7 +144,7 @@ module appService 'modules/app-service/app-service.bicep' = {
 }
 
 module apim 'modules/apim/apim.bicep' = {
-  name: 'deja-apim-${environment}'
+  name: 'deja-apim-${environment}-${runSuffix}'
   scope: rgApp
   params: {
     environment: environment
