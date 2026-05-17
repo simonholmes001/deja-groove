@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DejaGroove.Application\DejaGroove.Application.csproj" />
+    <ProjectReference Include="..\DejaGroove.Infrastructure\DejaGroove.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

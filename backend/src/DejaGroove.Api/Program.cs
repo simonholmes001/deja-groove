@@ -5,6 +5,7 @@ using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
+using DejaGroove.Infrastructure.Persistence.Migrations;
 using FluentValidation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -75,6 +76,21 @@ builder.WebHost.ConfigureKestrel(k =>
 });
 
 var app = builder.Build();
+
+// Run database migrations before accepting traffic.
+// Uses ConnectionStrings:PostgresAdmin (database owner / Azure admin) so the
+// runner has DDL rights. The runtime application connection (ConnectionStrings:Postgres)
+// will be a least-privilege login granted the deja_app role by IaC provisioning.
+// An empty admin connection string skips migration — used by HTTP-only contract
+// tests that exercise the API shape without a real database.
+var adminConnectionString = app.Configuration.GetConnectionString("PostgresAdmin");
+if (!string.IsNullOrWhiteSpace(adminConnectionString))
+{
+    var migrationLogger = app.Services
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger<MigrationRunner>();
+    await new MigrationRunner(adminConnectionString, migrationLogger).ApplyAsync();
+}
 
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
