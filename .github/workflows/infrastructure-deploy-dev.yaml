@@ -27,6 +27,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: APIM policy sanity check
+        run: bash ./infrastructure/scripts/check-apim-policy.sh
+
       - name: Login to Azure (OIDC)
         uses: azure/login@v3
         with:

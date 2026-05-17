@@ -18,6 +18,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: APIM policy sanity check
+        run: bash ./infrastructure/scripts/check-apim-policy.sh
+
       - name: Install Bicep CLI
         run: az bicep install
 
