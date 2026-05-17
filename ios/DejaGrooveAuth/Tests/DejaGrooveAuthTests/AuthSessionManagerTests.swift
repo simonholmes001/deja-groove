@@ -445,6 +445,36 @@ struct AuthSessionManagerTests {
         #expect(manager.state == .reauthenticationRequired(.signOutFailed))
     }
 
+    @Test("Successful sign-in after sign-out failure clears restore block")
+    @MainActor
+    func successfulSignInClearsSignOutFailureBlock() async {
+        let now = Date(timeIntervalSince1970: 6_000)
+        let valid = AuthSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresAt: now.addingTimeInterval(600),
+            userID: "user"
+        )
+        let store = InMemoryStore(saved: valid, shouldThrowOnClear: true)
+        let provider = StubTokenProvider(signInResult: .success(valid), refreshResult: .success(valid))
+        let manager = AuthSessionManager(
+            tokenProvider: provider,
+            store: store,
+            dateProvider: FixedDateProvider(now: now)
+        )
+
+        manager.restoreSession()
+        manager.signOut()
+        #expect(manager.state == .reauthenticationRequired(.signOutFailed))
+
+        store.shouldThrowOnClear = false
+        let signInResult = await manager.signIn(username: "u", password: "p")
+        #expect(signInResult == .success(valid))
+
+        manager.restoreSession()
+        #expect(manager.state == .authenticated(AuthSessionView(expiresAt: valid.expiresAt, userID: valid.userID)))
+    }
+
     @Test("Recovery mappings cover all onboarding errors")
     @MainActor
     func recoveryMappings() {
