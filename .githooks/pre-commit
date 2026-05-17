@@ -84,9 +84,13 @@ run_swift_tests() {
     return 0
   fi
 
+  # Fail closed: if ios/ files are staged but swift is not available, block
+  # the commit. This is an iOS project — Swift must be installed to commit
+  # iOS changes. Install Xcode and run ./scripts/setup-hooks.sh to proceed.
   if ! command -v swift >/dev/null 2>&1; then
-    echo "⚠️  swift not found in PATH — skipping Swift tests (install Xcode to enable)."
-    return 0
+    echo "❌  swift not found in PATH. Cannot run iOS tests for staged changes in $TARGET_DIR."
+    echo "    Install Xcode (https://developer.apple.com/xcode/) then re-run ./scripts/setup-hooks.sh"
+    return 1
   fi
 
   if [ -f "$TARGET_DIR/Package.swift" ]; then
