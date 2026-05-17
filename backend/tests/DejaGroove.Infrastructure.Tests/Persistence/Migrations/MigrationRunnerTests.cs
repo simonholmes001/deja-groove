@@ -1,10 +1,16 @@
 using Dapper;
 using DejaGroove.Infrastructure.Persistence.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace DejaGroove.Infrastructure.Tests.Persistence.Migrations;
 
+/// <summary>
+/// Verifies that MigrationRunner applies all scripts and is idempotent.
+/// Uses a single shared container to avoid Docker startup overhead per test.
+/// </summary>
+[Trait("Category", "Integration")]
 public sealed class MigrationRunnerTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
@@ -15,54 +21,49 @@ public sealed class MigrationRunnerTests : IAsyncLifetime
     public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
 
     [Fact]
-    public async Task ApplyAsync_OnFreshDatabase_CreatesCollectionRecordsTable()
+    public async Task ApplyAsync_OnFreshDatabase_CreatesAllExpectedTables()
     {
-        var runner = new MigrationRunner(_postgres.GetConnectionString());
+        var runner = new MigrationRunner(
+            _postgres.GetConnectionString(),
+            NullLogger<MigrationRunner>.Instance);
 
         await runner.ApplyAsync();
 
-        Assert.True(await TableExistsAsync("collection_records"));
-    }
+        var missing = new List<string>();
+        foreach (var table in new[] { "collection_records", "scan_events", "scan_results_cache", "collection_audit_log" })
+        {
+            if (!await TableExistsAsync(table))
+                missing.Add(table);
+        }
 
-    [Fact]
-    public async Task ApplyAsync_OnFreshDatabase_CreatesScanEventsTable()
-    {
-        var runner = new MigrationRunner(_postgres.GetConnectionString());
-
-        await runner.ApplyAsync();
-
-        Assert.True(await TableExistsAsync("scan_events"));
-    }
-
-    [Fact]
-    public async Task ApplyAsync_OnFreshDatabase_CreatesScanResultsCacheTable()
-    {
-        var runner = new MigrationRunner(_postgres.GetConnectionString());
-
-        await runner.ApplyAsync();
-
-        Assert.True(await TableExistsAsync("scan_results_cache"));
-    }
-
-    [Fact]
-    public async Task ApplyAsync_OnFreshDatabase_CreatesCollectionAuditLogTable()
-    {
-        var runner = new MigrationRunner(_postgres.GetConnectionString());
-
-        await runner.ApplyAsync();
-
-        Assert.True(await TableExistsAsync("collection_audit_log"));
+        Assert.Empty(missing);
     }
 
     [Fact]
     public async Task ApplyAsync_CalledTwice_IsIdempotent()
     {
-        var runner = new MigrationRunner(_postgres.GetConnectionString());
-        await runner.ApplyAsync();
+        var runner = new MigrationRunner(
+            _postgres.GetConnectionString(),
+            NullLogger<MigrationRunner>.Instance);
 
+        await runner.ApplyAsync();
         var ex = await Record.ExceptionAsync(() => runner.ApplyAsync());
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Constructor_NullConnectionString_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new MigrationRunner(null!, NullLogger<MigrationRunner>.Instance));
+    }
+
+    [Fact]
+    public void Constructor_WhitespaceConnectionString_Throws()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MigrationRunner("   ", NullLogger<MigrationRunner>.Instance));
     }
 
     private async Task<bool> TableExistsAsync(string tableName)

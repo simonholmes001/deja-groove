@@ -1,7 +1,7 @@
 -- Append-only audit log of every scan attempt. Mirrors the ScanEvent domain object.
 -- client_scan_id is the idempotency key the iOS client generates per capture.
 CREATE TABLE scan_events (
-    scan_event_id       UUID        NOT NULL PRIMARY KEY,
+    scan_event_id       UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id             UUID        NOT NULL,
     client_scan_id      UUID        NOT NULL,
     result_status       TEXT        NOT NULL,

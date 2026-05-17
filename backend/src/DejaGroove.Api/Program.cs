@@ -5,6 +5,7 @@ using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
+using DejaGroove.Infrastructure.Persistence.Migrations;
 using FluentValidation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -75,6 +76,20 @@ builder.WebHost.ConfigureKestrel(k =>
 });
 
 var app = builder.Build();
+
+// Run database migrations before accepting traffic.
+// MigrationRunner retries on NpgsqlException to tolerate a brief delay while
+// the Flexible Server becomes ready after a cold start or failover.
+// An empty connection string skips migration — used by HTTP-only contract
+// tests that exercise the API shape without a real database.
+var connectionString = app.Configuration.GetConnectionString("Postgres");
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    var migrationLogger = app.Services
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger<MigrationRunner>();
+    await new MigrationRunner(connectionString, migrationLogger).ApplyAsync();
+}
 
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();

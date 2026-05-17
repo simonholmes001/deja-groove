@@ -1,5 +1,6 @@
 using Dapper;
 using DejaGroove.Infrastructure.Persistence.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -7,9 +8,10 @@ namespace DejaGroove.Infrastructure.Tests.Persistence.Migrations;
 
 /// <summary>
 /// Verifies that the migrated schema enforces the domain invariants expressed
-/// in the AlbumIdentity value object and the ScanStatus/operation enumerations.
-/// These tests run against a real PostgreSQL 16 instance via Testcontainers.
+/// in AlbumIdentity, ScanStatus, and the audit operation enumeration.
+/// Runs against a real PostgreSQL 16 instance via Testcontainers.
 /// </summary>
+[Trait("Category", "Integration")]
 public sealed class SchemaVerificationTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
@@ -19,7 +21,9 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
-        await new MigrationRunner(_postgres.GetConnectionString()).ApplyAsync();
+        await new MigrationRunner(
+            _postgres.GetConnectionString(),
+            NullLogger<MigrationRunner>.Instance).ApplyAsync();
     }
 
     public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
@@ -29,9 +33,8 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task CollectionRecords_RejectsRowWithNoIdentityFields()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
-        // No mbid, no discogs_release_id, title without artist — violates CHECK
         await Assert.ThrowsAsync<PostgresException>(() =>
             conn.ExecuteAsync(
                 "INSERT INTO collection_records (user_id, title) VALUES (gen_random_uuid(), 'Orphan Album')"));
@@ -40,7 +43,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task CollectionRecords_AcceptsRowWithMbidOnly()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         var ex = await Record.ExceptionAsync(() =>
             conn.ExecuteAsync(
@@ -52,7 +55,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task CollectionRecords_AcceptsRowWithDiscogsReleaseIdOnly()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         var ex = await Record.ExceptionAsync(() =>
             conn.ExecuteAsync(
@@ -64,7 +67,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task CollectionRecords_AcceptsRowWithTitleAndArtist()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         var ex = await Record.ExceptionAsync(() =>
             conn.ExecuteAsync(
@@ -76,31 +79,65 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task CollectionRecords_EnforcesUniqueActiveMbidPerUser()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
         var userId = Guid.NewGuid();
 
         await conn.ExecuteAsync(
-            "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'dup-mbid')",
+            "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'dup-mbid-test')",
             new { u = userId });
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             conn.ExecuteAsync(
-                "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'dup-mbid')",
+                "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'dup-mbid-test')",
                 new { u = userId }));
+    }
+
+    [Fact]
+    public async Task CollectionRecords_AllowsSameMbidAfterSoftDelete()
+    {
+        // The partial unique index excludes soft-deleted rows, so re-buying a
+        // deleted record must be permitted.
+        await using var conn = CreateConnection();
+        var userId = Guid.NewGuid();
+
+        await conn.ExecuteAsync(
+            "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'soft-del-mbid')",
+            new { u = userId });
+
+        await conn.ExecuteAsync(
+            "UPDATE collection_records SET deleted_at = now() WHERE user_id = @u AND mbid = 'soft-del-mbid'",
+            new { u = userId });
+
+        var ex = await Record.ExceptionAsync(() =>
+            conn.ExecuteAsync(
+                "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'soft-del-mbid')",
+                new { u = userId }));
+
+        Assert.Null(ex);
     }
 
     [Fact]
     public async Task CollectionRecords_DefaultsVersionToOne()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         await conn.ExecuteAsync(
-            "INSERT INTO collection_records (user_id, mbid) VALUES (gen_random_uuid(), 'version-check')");
+            "INSERT INTO collection_records (user_id, mbid) VALUES (gen_random_uuid(), 'version-default-check')");
 
         var version = await conn.ExecuteScalarAsync<int>(
-            "SELECT version FROM collection_records WHERE mbid = 'version-check'");
+            "SELECT version FROM collection_records WHERE mbid = 'version-default-check'");
 
         Assert.Equal(1, version);
+    }
+
+    [Fact]
+    public async Task CollectionRecords_RejectsYearBelowPlausibleMinimum()
+    {
+        await using var conn = CreateConnection();
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync(
+                "INSERT INTO collection_records (user_id, mbid, year) VALUES (gen_random_uuid(), 'bad-year', 1700)"));
     }
 
     // ── scan_events ───────────────────────────────────────────────────────
@@ -108,12 +145,12 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task ScanEvents_RejectsUnknownResultStatus()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             conn.ExecuteAsync(
-                @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-                  VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'InvalidStatus', 0.9)"));
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+                  VALUES (gen_random_uuid(), gen_random_uuid(), 'InvalidStatus', 0.9)"));
     }
 
     [Theory]
@@ -123,12 +160,12 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [InlineData("NoMatch")]
     public async Task ScanEvents_AcceptsAllDomainResultStatuses(string status)
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         var ex = await Record.ExceptionAsync(() =>
             conn.ExecuteAsync(
-                @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-                  VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), @status, 0.8)",
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+                  VALUES (gen_random_uuid(), gen_random_uuid(), @status, 0.8)",
                 new { status }));
 
         Assert.Null(ex);
@@ -137,41 +174,52 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task ScanEvents_EnforcesUniqueClientScanIdPerUser()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
         var userId = Guid.NewGuid();
         var clientScanId = Guid.NewGuid();
 
         await conn.ExecuteAsync(
-            @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-              VALUES (gen_random_uuid(), @u, @c, 'NoMatch', 0.0)",
+            @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+              VALUES (@u, @c, 'NoMatch', 0.0)",
             new { u = userId, c = clientScanId });
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             conn.ExecuteAsync(
-                @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-                  VALUES (gen_random_uuid(), @u, @c, 'NoMatch', 0.0)",
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+                  VALUES (@u, @c, 'NoMatch', 0.0)",
                 new { u = userId, c = clientScanId }));
     }
 
     [Fact]
     public async Task ScanEvents_AllowsSameClientScanIdForDifferentUsers()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
         var sharedClientScanId = Guid.NewGuid();
 
         var ex = await Record.ExceptionAsync(async () =>
         {
             await conn.ExecuteAsync(
-                @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-                  VALUES (gen_random_uuid(), gen_random_uuid(), @c, 'NoMatch', 0.0)",
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+                  VALUES (gen_random_uuid(), @c, 'NoMatch', 0.0)",
                 new { c = sharedClientScanId });
             await conn.ExecuteAsync(
-                @"INSERT INTO scan_events (scan_event_id, user_id, client_scan_id, result_status, confidence)
-                  VALUES (gen_random_uuid(), gen_random_uuid(), @c, 'NoMatch', 0.0)",
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+                  VALUES (gen_random_uuid(), @c, 'NoMatch', 0.0)",
                 new { c = sharedClientScanId });
         });
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task ScanEvents_RejectsYearBelowPlausibleMinimum()
+    {
+        await using var conn = CreateConnection();
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync(
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence, year)
+                  VALUES (gen_random_uuid(), gen_random_uuid(), 'NoMatch', 0.0, 1200)"));
     }
 
     // ── scan_results_cache ────────────────────────────────────────────────
@@ -179,7 +227,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task ScanResultsCache_PrimaryKeyRejectsPhashDuplicate()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
         var userId = Guid.NewGuid();
         const long phash = unchecked((long)0xDEADBEEFCAFEBABEUL);
 
@@ -198,7 +246,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [Fact]
     public async Task ScanResultsCache_AllowsSamePhashForDifferentPhashVersions()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
         var userId = Guid.NewGuid();
         const long phash = unchecked((long)0xCAFEBABEDEADBEEFUL);
 
@@ -217,12 +265,26 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
         Assert.Null(ex);
     }
 
+    [Fact]
+    public async Task ScanResultsCache_ExpiresAtIndexExists()
+    {
+        await using var conn = CreateConnection();
+
+        var indexExists = await conn.ExecuteScalarAsync<bool>(
+            @"SELECT EXISTS(
+                SELECT 1 FROM pg_indexes
+                WHERE tablename = 'scan_results_cache'
+                AND indexname = 'ix_scan_results_cache_expires_at')");
+
+        Assert.True(indexExists);
+    }
+
     // ── collection_audit_log ──────────────────────────────────────────────
 
     [Fact]
     public async Task CollectionAuditLog_RejectsUnknownOperation()
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             conn.ExecuteAsync(
@@ -236,7 +298,7 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [InlineData("DELETE")]
     public async Task CollectionAuditLog_AcceptsAllValidOperations(string operation)
     {
-        await using var conn = OpenConnection();
+        await using var conn = CreateConnection();
 
         var ex = await Record.ExceptionAsync(() =>
             conn.ExecuteAsync(
@@ -247,6 +309,98 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
         Assert.Null(ex);
     }
 
-    private NpgsqlConnection OpenConnection() =>
+    // ── Row-Level Security ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("collection_records")]
+    [InlineData("scan_events")]
+    [InlineData("scan_results_cache")]
+    [InlineData("collection_audit_log")]
+    public async Task AllApplicationTables_HaveRowLevelSecurityEnabled(string tableName)
+    {
+        await using var conn = CreateConnection();
+
+        var rlsEnabled = await conn.ExecuteScalarAsync<bool>(
+            "SELECT rowsecurity FROM pg_tables WHERE tablename = @name AND schemaname = 'public'",
+            new { name = tableName });
+
+        Assert.True(rlsEnabled, $"RLS not enabled on {tableName}");
+    }
+
+    [Theory]
+    [InlineData("collection_records",   "rls_collection_records")]
+    [InlineData("scan_events",          "rls_scan_events")]
+    [InlineData("scan_results_cache",   "rls_scan_results_cache")]
+    [InlineData("collection_audit_log", "rls_collection_audit_log")]
+    public async Task AllApplicationTables_HaveRlsPolicy(string tableName, string policyName)
+    {
+        await using var conn = CreateConnection();
+
+        var policyExists = await conn.ExecuteScalarAsync<bool>(
+            @"SELECT EXISTS(
+                SELECT 1 FROM pg_policies
+                WHERE tablename = @table AND policyname = @policy AND schemaname = 'public')",
+            new { table = tableName, policy = policyName });
+
+        Assert.True(policyExists, $"RLS policy '{policyName}' not found on {tableName}");
+    }
+
+    // ── GDPR purge function ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task PurgeUserFunction_Exists()
+    {
+        await using var conn = CreateConnection();
+
+        var exists = await conn.ExecuteScalarAsync<bool>(
+            @"SELECT EXISTS(
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE p.proname = 'purge_user' AND n.nspname = 'public')");
+
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public async Task PurgeUserFunction_DeletesAllRowsForUser()
+    {
+        await using var conn = CreateConnection();
+        var userId = Guid.NewGuid();
+
+        // Seed data across all tables
+        await conn.ExecuteAsync(
+            "INSERT INTO collection_records (user_id, mbid) VALUES (@u, 'purge-test-mbid')",
+            new { u = userId });
+
+        await conn.ExecuteAsync(
+            @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence)
+              VALUES (@u, gen_random_uuid(), 'NoMatch', 0.0)",
+            new { u = userId });
+
+        await conn.ExecuteAsync(
+            @"INSERT INTO scan_results_cache (user_id, phash, result_status, confidence, expires_at)
+              VALUES (@u, 12345, 'NoMatch', 0.0, now() + interval '1 hour')",
+            new { u = userId });
+
+        await conn.ExecuteAsync(
+            "INSERT INTO collection_audit_log (collection_record_id, user_id, operation) VALUES (gen_random_uuid(), @u, 'INSERT')",
+            new { u = userId });
+
+        // Execute purge
+        await conn.ExecuteAsync("SELECT purge_user(@u)", new { u = userId });
+
+        // All rows must be gone
+        var counts = new[]
+        {
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM collection_records WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_events WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_results_cache WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM collection_audit_log WHERE user_id = @u", new { u = userId }),
+        };
+
+        Assert.All(counts, c => Assert.Equal(0, c));
+    }
+
+    private NpgsqlConnection CreateConnection() =>
         new(_postgres.GetConnectionString());
 }

@@ -1,7 +1,10 @@
 -- pHash-keyed result cache. Replaces Redis as the scan deduplication store.
--- phash is stored as BIGINT (signed) — the application layer casts ulong bits
--- to/from int64 using unchecked arithmetic; the bit pattern is preserved.
--- phash_version allows future algorithm changes without cache poisoning.
+-- phash is stored as BIGINT (signed int64). PostgreSQL has no uint64 type.
+-- The application MUST use unchecked((long)ulongValue) on write and
+-- unchecked((ulong)longValue) on read. The bit pattern is preserved; only
+-- the sign interpretation differs. Cache lookups use exact equality on the
+-- raw bits, so the convention is consistent and safe as long as both sides
+-- agree. phash_version allows future algorithm changes without cache poisoning.
 CREATE TABLE scan_results_cache (
     user_id             UUID        NOT NULL,
     phash               BIGINT      NOT NULL,
