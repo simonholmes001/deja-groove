@@ -1,3 +1,4 @@
+using DejaGroove.Api.Auth;
 using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Requests;
@@ -5,11 +6,18 @@ using DejaGroove.Api.Validation;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using FluentValidation;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
+builder.Services.AddOptions<IdentityJwtOptions>()
+    .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
+    .ValidateOnStart();
 
 // Suppress automatic 400 from DataAnnotations — FluentValidation owns all validation responses
 builder.Services.Configure<ApiBehaviorOptions>(o =>
@@ -41,6 +49,21 @@ else
 // Validation
 builder.Services.AddScoped<IValidator<ScanRequest>, ScanRequestValidator>();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer();
+builder.Services.AddSingleton<IConfigureNamedOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("IdentityContract", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context =>
+            context.User.Claims.Any(claim =>
+                (claim.Type == "sub" || claim.Type == ClaimTypes.NameIdentifier) &&
+                !string.IsNullOrWhiteSpace(claim.Value)));
+    });
+});
+
 // Allow slightly over 10 MB so the controller can return a proper 413 envelope
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
 {
@@ -55,6 +78,8 @@ var app = builder.Build();
 
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 
