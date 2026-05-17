@@ -22,4 +22,12 @@ public sealed class PerceptualHashTests
         var b = new PerceptualHash(2);
         Assert.False(a.Equals(b));
     }
+
+    [Fact]
+    public void Equals_ReturnsFalseForNullAndDifferentType()
+    {
+        var a = new PerceptualHash(42);
+        Assert.False(a.Equals((PerceptualHash?)null));
+        Assert.False(a.Equals("42"));
+    }
 }
