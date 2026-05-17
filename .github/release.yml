@@ -1,0 +1,43 @@
+# Configuration for GitHub's automatically generated release notes.
+# Docs: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+#
+# A merged PR is placed in the FIRST category whose label it matches, so
+# order is significant: highest-signal categories are listed first and the
+# final wildcard category captures anything otherwise unlabeled.
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+    authors:
+      - dependabot
+      - github-actions
+  categories:
+    - title: "🔐 Security"
+      labels:
+        - "type:security"
+    - title: "🐛 Bug Fixes"
+      labels:
+        - "bug"
+    - title: "🖥️ Backend"
+      labels:
+        - "type:backend"
+    - title: "📱 iOS / Mobile"
+      labels:
+        - "type:ios"
+    - title: "🏗️ Infrastructure"
+      labels:
+        - "type:infra"
+    - title: "🔌 API"
+      labels:
+        - "type:api"
+    - title: "✅ Quality & Testing"
+      labels:
+        - "type:qa"
+    - title: "📖 Documentation"
+      labels:
+        - "documentation"
+    - title: "🔧 Other Changes"
+      labels:
+        - "*"
