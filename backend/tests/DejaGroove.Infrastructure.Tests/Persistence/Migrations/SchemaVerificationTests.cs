@@ -140,6 +140,16 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
                 "INSERT INTO collection_records (user_id, mbid, year) VALUES (gen_random_uuid(), 'bad-year', 1700)"));
     }
 
+    [Fact]
+    public async Task CollectionRecords_RejectsYearAboveFarFutureSentinel()
+    {
+        await using var conn = CreateConnection();
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync(
+                "INSERT INTO collection_records (user_id, mbid, year) VALUES (gen_random_uuid(), 'future-year', 2101)"));
+    }
+
     // ── scan_events ───────────────────────────────────────────────────────
 
     [Fact]
@@ -220,6 +230,17 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
             conn.ExecuteAsync(
                 @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence, year)
                   VALUES (gen_random_uuid(), gen_random_uuid(), 'NoMatch', 0.0, 1200)"));
+    }
+
+    [Fact]
+    public async Task ScanEvents_RejectsYearAboveFarFutureSentinel()
+    {
+        await using var conn = CreateConnection();
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync(
+                @"INSERT INTO scan_events (user_id, client_scan_id, result_status, confidence, year)
+                  VALUES (gen_random_uuid(), gen_random_uuid(), 'NoMatch', 0.0, 2101)"));
     }
 
     // ── scan_results_cache ────────────────────────────────────────────────

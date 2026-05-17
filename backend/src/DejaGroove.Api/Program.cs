@@ -78,17 +78,18 @@ builder.WebHost.ConfigureKestrel(k =>
 var app = builder.Build();
 
 // Run database migrations before accepting traffic.
-// MigrationRunner retries on NpgsqlException to tolerate a brief delay while
-// the Flexible Server becomes ready after a cold start or failover.
-// An empty connection string skips migration — used by HTTP-only contract
+// Uses ConnectionStrings:PostgresAdmin (database owner / Azure admin) so the
+// runner has DDL rights. The runtime application connection (ConnectionStrings:Postgres)
+// will be a least-privilege login granted the deja_app role by IaC provisioning.
+// An empty admin connection string skips migration — used by HTTP-only contract
 // tests that exercise the API shape without a real database.
-var connectionString = app.Configuration.GetConnectionString("Postgres");
-if (!string.IsNullOrWhiteSpace(connectionString))
+var adminConnectionString = app.Configuration.GetConnectionString("PostgresAdmin");
+if (!string.IsNullOrWhiteSpace(adminConnectionString))
 {
     var migrationLogger = app.Services
         .GetRequiredService<ILoggerFactory>()
         .CreateLogger<MigrationRunner>();
-    await new MigrationRunner(connectionString, migrationLogger).ApplyAsync();
+    await new MigrationRunner(adminConnectionString, migrationLogger).ApplyAsync();
 }
 
 app.UseMiddleware<RequestIdMiddleware>();

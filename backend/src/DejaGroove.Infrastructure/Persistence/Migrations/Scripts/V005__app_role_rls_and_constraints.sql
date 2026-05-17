@@ -1,8 +1,13 @@
 -- Application role with least-privilege DML rights.
--- The migration runner connects as the database owner (postgres / azure admin)
--- and retains CREATE/DROP. The application connects as deja_app with DML only.
--- At deploy time, grant this role to the actual login:
---   GRANT deja_app TO <connection_user>;
+-- Migrations run as the database owner (postgres / Azure admin) using the
+-- ConnectionStrings:PostgresAdmin connection string. The deja_app role is a
+-- NOLOGIN group role; the actual login user (provisioned by IaC) must be
+-- granted membership before the application can connect:
+--   GRANT deja_app TO <iac_provisioned_login>;
+-- That grant is performed by the database provisioning step (Bicep/IaC),
+-- not by migrations, because the login name is environment-specific.
+-- The runtime application connection (ConnectionStrings:Postgres) will be
+-- wired to the least-privilege login by the repository layer.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'deja_app') THEN
@@ -49,15 +54,17 @@ CREATE POLICY rls_collection_audit_log ON collection_audit_log
     WITH CHECK (user_id = current_setting('app.current_user_id', true)::uuid);
 
 -- Year plausibility guards.
--- The earliest commercially released recordings date to approximately 1860.
--- The upper bound is a rolling 5-year buffer to accommodate pre-announced releases.
+-- Lower bound: earliest commercially released recordings (~1860).
+-- Upper bound: far-future sentinel to reject obviously invalid data (e.g. year 0,
+-- year 9999). Not a business rule — legitimate future releases are always within
+-- this range. Raise in a future migration if required.
 ALTER TABLE collection_records
     ADD CONSTRAINT collection_records_year_check
-    CHECK (year IS NULL OR year BETWEEN 1860 AND 2031);
+    CHECK (year IS NULL OR year BETWEEN 1860 AND 2100);
 
 ALTER TABLE scan_events
     ADD CONSTRAINT scan_events_year_check
-    CHECK (year IS NULL OR year BETWEEN 1860 AND 2031);
+    CHECK (year IS NULL OR year BETWEEN 1860 AND 2100);
 
 -- collection_audit_log.collection_record_id intentionally has no FK constraint.
 -- Audit logs are a denormalised, append-only record. The GDPR purge function
