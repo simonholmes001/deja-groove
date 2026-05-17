@@ -47,11 +47,10 @@ var apimName = 'apim-deja-${environment}-${instanceSuffix}-${suffix}'
 var jwtEnabled = !empty(entraOidcConfigUrl) && !empty(entraApiClientId)
 
 // Global service policy: inject X-Correlation-Id on every request at the gateway edge.
-// The header is generated if the client does not supply one, and echoed back in all responses.
-// Note: <return-response> in operation-level inbound (e.g. health mock) short-circuits the
-// pipeline before the outbound section runs, so health responses do not carry this header.
-// X-Correlation-Id is echoed in both <outbound> (success path) and <on-error> (error path,
-// e.g. 401 from JWT validation, 429 from rate limiting) so every response carries it.
+// The header is generated if the client does not supply one, and echoed back in all responses
+// via <outbound> (normal path) and <on-error> (401/429/5xx path).
+// The health operation uses <return-response> which short-circuits the global outbound section,
+// so X-Correlation-Id is set explicitly inside that operation's policy (see healthOperationPolicy).
 var globalPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
 
 // Full JWT + per-user rate-limit policy for authenticated v1 routes.
@@ -154,12 +153,14 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
 // Return a mock 200 directly from the APIM gateway so the infrastructure CI
 // health check passes regardless of which application container is running.
 // Backend-level health is an application concern verified after app deployment.
+// X-Correlation-Id is set here explicitly because <return-response> short-circuits
+// the global outbound section, so the global policy would not write the header.
 resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
   parent: healthOperation
   name: 'policy'
   properties: {
     format: 'xml'
-    value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+    value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
   }
 }
 
