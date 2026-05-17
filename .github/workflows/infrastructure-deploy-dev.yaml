@@ -67,10 +67,32 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
+          ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
+            # Build optional Entra params — omitted until Entra tenant is provisioned (issue #8).
+            # Both secrets must be set together or both must be absent.
+            # A partial configuration (only one secret set) is a misconfiguration: the gateway
+            # would silently fall back to unauthenticated IP-rate-limit mode even though the
+            # operator believes JWT was enabled. Fail fast to prevent this.
+            ENTRA_OIDC_SET=0; ENTRA_CLIENT_SET=0
+            [ -n "${ENTRA_OIDC_CONFIG_URL:-}" ]   && ENTRA_OIDC_SET=1
+            [ -n "${ENTRA_API_CLIENT_ID:-}" ]      && ENTRA_CLIENT_SET=1
+            if [ "$ENTRA_OIDC_SET" -ne "$ENTRA_CLIENT_SET" ]; then
+              echo "::error::Partial Entra configuration detected. Either set both ENTRA_OIDC_CONFIG_URL and ENTRA_API_CLIENT_ID, or neither. A partial configuration would deploy the gateway in unauthenticated passthrough mode despite operator intent."
+              exit 1
+            fi
+            EXTRA_PARAMS=()
+            if [ "$ENTRA_OIDC_SET" -eq 1 ]; then
+              EXTRA_PARAMS+=(--parameters "entraOidcConfigUrl=${ENTRA_OIDC_CONFIG_URL}")
+              EXTRA_PARAMS+=(--parameters "entraApiClientId=${ENTRA_API_CLIENT_ID}")
+              echo "Both Entra secrets supplied — JWT validation will be enabled on the gateway."
+            else
+              echo "Entra secrets not set — deploying with IP-based rate limit only (JWT inactive, issue #8)."
+            fi
             set +e
             az deployment sub create \
               --name "deja-dev-deploy-${{ github.run_id }}" \
@@ -79,6 +101,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
+              "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?
             set -e
