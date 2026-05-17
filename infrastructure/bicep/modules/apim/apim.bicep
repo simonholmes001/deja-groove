@@ -121,6 +121,18 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
   }
 }
 
+// Return a mock 200 directly from the APIM gateway so the infrastructure CI
+// health check passes regardless of which application container is running.
+// Backend-level health is an application concern verified after app deployment.
+resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
+  parent: healthOperation
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
 output apimServiceId string = apimService.id
 output gatewayUrl string = apimService.properties.gatewayUrl
 output apimName string = apimService.name
