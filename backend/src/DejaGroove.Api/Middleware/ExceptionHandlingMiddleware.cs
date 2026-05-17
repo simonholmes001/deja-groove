@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DejaGroove.Application.Exceptions;
 using DejaGroove.Api.Responses;
 
 namespace DejaGroove.Api.Middleware;
@@ -10,6 +11,34 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         try
         {
             await next(context);
+        }
+        catch (InputValidationException validationException)
+        {
+            logger.LogWarning(
+                "Input validation failed for request {RequestId}: {Code}",
+                context.Items[RequestIdMiddleware.RequestIdKey],
+                validationException.Code);
+
+            await WriteErrorAsync(
+                context,
+                400,
+                validationException.Code,
+                validationException.Message,
+                retryable: false);
+        }
+        catch (ServiceUnavailableException serviceUnavailableException)
+        {
+            logger.LogError(
+                "Service dependency unavailable for request {RequestId}: {Code}",
+                context.Items[RequestIdMiddleware.RequestIdKey],
+                serviceUnavailableException.Code);
+
+            await WriteErrorAsync(
+                context,
+                503,
+                serviceUnavailableException.Code,
+                "Scan service dependencies are not configured.",
+                retryable: true);
         }
         catch (Exception ex)
         {

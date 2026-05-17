@@ -1,6 +1,8 @@
 using DejaGroove.Api.Middleware;
+using DejaGroove.Api.Ports;
 using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
+using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
@@ -15,8 +17,26 @@ builder.Services.Configure<ApiBehaviorOptions>(o =>
     o.SuppressModelStateInvalidFilter = true;
 });
 
-// Application layer — stub replaced by real orchestration in #12
-builder.Services.AddScoped<IScanWorkflowUseCase, StubScanWorkflowUseCase>();
+// Application layer
+builder.Services.AddScoped<IScanWorkflowUseCase, ScanWorkflowUseCase>();
+if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
+    builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
+    builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
+    builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
+    builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
+    builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
+    builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
+    builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
+    builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
+    builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
+    builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+}
 
 // Validation
 builder.Services.AddScoped<IValidator<ScanRequest>, ScanRequestValidator>();
