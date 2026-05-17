@@ -32,8 +32,36 @@ param appInsightsInstrumentationKey string
 @description('APIM instance rollout suffix to support non-breaking replacement across SKU changes.')
 param instanceSuffix string = 'v2'
 
+@description('OpenID Connect configuration URL for Entra External ID JWT validation (e.g. https://login.microsoftonline.com/{tenantId}/v2.0/.well-known/openid-configuration). Leave empty until Entra tenant is provisioned — gateway falls back to IP-based rate limiting only.')
+param entraOidcConfigUrl string = ''
+
+@description('Entra External ID app registration client ID validated as the JWT audience claim. Leave empty until Entra tenant is provisioned.')
+param entraApiClientId string = ''
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var apimName = 'apim-deja-${environment}-${instanceSuffix}-${suffix}'
+
+// JWT validation is active only when both Entra params are supplied.
+// Until the Entra External ID tenant is provisioned (issue #8), the gateway
+// falls back to an IP-based rate limit so infrastructure can deploy cleanly.
+var jwtEnabled = !empty(entraOidcConfigUrl) && !empty(entraApiClientId)
+
+// Global service policy: inject X-Correlation-Id on every request at the gateway edge.
+// The header is generated if the client does not supply one, and echoed back in all responses.
+// Note: <return-response> in operation-level inbound (e.g. health mock) short-circuits the
+// pipeline before the outbound section runs, so health responses do not carry this header.
+var globalPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error /></policies>'
+
+// Full JWT + per-user rate-limit policy for authenticated v1 routes.
+// validate-jwt validates the Entra External ID Bearer token and populates context.Request.Claims.
+// rate-limit-by-key keys on the JWT sub claim so each user has an independent 30-calls/60s budget.
+// X-User-Id forwards the authenticated user identity to the backend (avoids JWT re-parsing downstream).
+// X-RateLimit-Limit is set in outbound so clients always know their quota ceiling.
+var mainApiJwtPolicyXml = '<policies><inbound><base /><validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. A valid bearer token is required."><openid-config url="${entraOidcConfigUrl}" /><required-claims><claim name="aud" match="any"><value>${entraApiClientId}</value></claim></required-claims></validate-jwt><rate-limit-by-key calls="30" renewal-period="60" counter-key="@(context.Request.Claims.GetValueOrDefault(&quot;sub&quot;, context.Connection.IpAddress))" remaining-calls-header-name="X-RateLimit-Remaining" retry-after-header-name="Retry-After" /><set-header name="X-User-Id" exists-action="override"><value>@(context.Request.Claims.GetValueOrDefault("sub", string.Empty))</value></set-header></inbound><backend><base /></backend><outbound><base /><set-header name="X-RateLimit-Limit" exists-action="override"><value>30</value></set-header></outbound><on-error><base /></on-error></policies>'
+
+// Passthrough policy used before Entra is provisioned: IP-based rate limit only.
+// Replaced automatically by mainApiJwtPolicyXml once entraOidcConfigUrl + entraApiClientId are set.
+var mainApiPassthroughPolicyXml = '<policies><inbound><base /><rate-limit-by-key calls="30" renewal-period="60" counter-key="@(context.Connection.IpAddress)" remaining-calls-header-name="X-RateLimit-Remaining" retry-after-header-name="Retry-After" /></inbound><backend><base /></backend><outbound><base /><set-header name="X-RateLimit-Limit" exists-action="override"><value>30</value></set-header></outbound><on-error><base /></on-error></policies>'
 
 resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   name: apimName
@@ -130,6 +158,71 @@ resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/
   properties: {
     format: 'xml'
     value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
+// ── Global service policy ────────────────────────────────────────────────────
+// Applies to ALL APIs (health + main). Injects X-Correlation-Id at the gateway
+// edge and echoes it back in every response.
+resource apimGlobalPolicy 'Microsoft.ApiManagement/service/policies@2022-08-01' = {
+  parent: apimService
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: globalPolicyXml
+  }
+}
+
+// ── Main (authenticated) API — /v1/* ────────────────────────────────────────
+// All client-facing v1 routes (POST /v1/scan, GET /v1/collection, etc.) are
+// exposed under this API. APIM strips the 'v1' path prefix before forwarding
+// to the App Service, so the backend handles routes at /scan, /collection, etc.
+resource mainApi 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
+  parent: apimService
+  name: 'deja-main'
+  properties: {
+    displayName: 'Deja Groove API'
+    path: 'v1'
+    protocols: [
+      'https'
+    ]
+    subscriptionRequired: false
+    serviceUrl: backendUrl
+  }
+}
+
+// Catch-all wildcard operation. Replaced by explicit per-route operations as
+// each endpoint is implemented. Using method '*' ensures every HTTP verb is
+// covered by the API-level JWT + rate-limit policy from day one.
+resource mainApiCatchAllOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard'
+  properties: {
+    displayName: 'All v1 routes'
+    method: '*'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+// API-level policy: JWT validation + per-user rate limiting + X-User-Id forwarding.
+// jwtEnabled is false until entraOidcConfigUrl and entraApiClientId are supplied
+// (i.e. until the Entra External ID tenant is provisioned in issue #8).
+resource mainApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2022-08-01' = {
+  parent: mainApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: jwtEnabled ? mainApiJwtPolicyXml : mainApiPassthroughPolicyXml
   }
 }
 

@@ -67,10 +67,24 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
+          ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
           inlineScript: |
             set -euo pipefail
             az account show --query "{name:name, subscriptionId:id}" -o table
+            # Build optional Entra params — omitted until Entra tenant is provisioned (issue #8).
+            # When both secrets are present, JWT validation is activated on the APIM gateway.
+            EXTRA_PARAMS=()
+            if [ -n "${ENTRA_OIDC_CONFIG_URL:-}" ]; then
+              EXTRA_PARAMS+=(--parameters "entraOidcConfigUrl=${ENTRA_OIDC_CONFIG_URL}")
+              echo "Entra OIDC config URL supplied — JWT validation will be enabled."
+            else
+              echo "ENTRA_OIDC_CONFIG_URL not set — deploying with IP-based rate limit only (JWT inactive)."
+            fi
+            if [ -n "${ENTRA_API_CLIENT_ID:-}" ]; then
+              EXTRA_PARAMS+=(--parameters "entraApiClientId=${ENTRA_API_CLIENT_ID}")
+            fi
             set +e
             az deployment sub create \
               --name "deja-dev-deploy-${{ github.run_id }}" \
@@ -79,6 +93,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
+              "${EXTRA_PARAMS[@]}" \
               --output table
             deploy_rc=$?
             set -e

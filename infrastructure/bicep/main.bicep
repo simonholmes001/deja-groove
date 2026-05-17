@@ -15,6 +15,12 @@ param apimPublisherEmail string
 @description('APIM rollout suffix to force replacement when SKU/network mode changes are not updatable in-place.')
 param apimInstanceSuffix string = 'v2'
 
+@description('OpenID Connect configuration URL for Entra External ID JWT validation. Passed as a CI secret once the Entra tenant is provisioned (issue #8). Leave empty to deploy without JWT enforcement.')
+param entraOidcConfigUrl string = ''
+
+@description('Entra External ID app registration client ID used as the JWT audience claim. Passed as a CI secret once the Entra tenant is provisioned (issue #8). Leave empty to deploy without JWT enforcement.')
+param entraApiClientId string = ''
+
 @description('PostgreSQL administrator login name.')
 @secure()
 param postgresAdministratorLogin string = ''
@@ -157,6 +163,8 @@ module apim 'modules/apim/apim.bicep' = {
     backendUrl: 'https://${appService.outputs.webAppHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
+    entraOidcConfigUrl: entraOidcConfigUrl
+    entraApiClientId: entraApiClientId
   }
 }
 
