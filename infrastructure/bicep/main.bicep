@@ -12,6 +12,9 @@ param apimPublisherName string = 'Deja Groove'
 @description('Publisher email for the APIM instance.')
 param apimPublisherEmail string
 
+@description('APIM rollout suffix to force replacement when SKU/network mode changes are not updatable in-place.')
+param apimInstanceSuffix string = 'v2'
+
 @description('PostgreSQL administrator login name.')
 @secure()
 param postgresAdministratorLogin string = ''
@@ -39,6 +42,7 @@ param rgAppName string = 'rg-deja-dev-app'
 param rgObservabilityName string = 'rg-deja-dev-observability'
 
 var environment = 'dev'
+var runSuffix = take(uniqueString(deployment().name), 6)
 
 var tags = {
   environment: environment
@@ -78,7 +82,7 @@ resource rgObservability 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 }
 
 module monitoring 'modules/monitoring/monitoring.bicep' = {
-  name: 'deja-monitoring-${environment}'
+  name: 'deja-monitoring-${environment}-${runSuffix}'
   scope: rgObservability
   params: {
     environment: environment
@@ -88,7 +92,7 @@ module monitoring 'modules/monitoring/monitoring.bicep' = {
 }
 
 module networking 'modules/networking/networking.bicep' = {
-  name: 'deja-networking-${environment}'
+  name: 'deja-networking-${environment}-${runSuffix}'
   scope: rgNetwork
   params: {
     environment: environment
@@ -98,7 +102,7 @@ module networking 'modules/networking/networking.bicep' = {
 }
 
 module keyVault 'modules/key-vault/key-vault.bicep' = {
-  name: 'deja-key-vault-${environment}'
+  name: 'deja-key-vault-${environment}-${runSuffix}'
   scope: rgSecurity
   params: {
     environment: environment
@@ -110,7 +114,7 @@ module keyVault 'modules/key-vault/key-vault.bicep' = {
 }
 
 module postgresql 'modules/postgresql/postgresql.bicep' = {
-  name: 'deja-postgresql-${environment}'
+  name: 'deja-postgresql-${environment}-${runSuffix}'
   scope: rgData
   params: {
     environment: environment
@@ -124,13 +128,15 @@ module postgresql 'modules/postgresql/postgresql.bicep' = {
 }
 
 module appService 'modules/app-service/app-service.bicep' = {
-  name: 'deja-app-service-${environment}'
+  name: 'deja-app-service-${environment}-${runSuffix}'
   scope: rgApp
   params: {
     environment: environment
     location: location
     tags: tags
     appServiceSubnetId: networking.outputs.appServiceSubnetId
+    privateEndpointSubnetId: networking.outputs.privateEndpointSubnetId
+    privateDnsZoneId: networking.outputs.appServicePrivateDnsZoneId
     keyVaultUri: keyVault.outputs.keyVaultUri
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     dockerImageReference: dockerImageReference
@@ -138,14 +144,16 @@ module appService 'modules/app-service/app-service.bicep' = {
 }
 
 module apim 'modules/apim/apim.bicep' = {
-  name: 'deja-apim-${environment}'
+  name: 'deja-apim-${environment}-${runSuffix}'
   scope: rgApp
   params: {
     environment: environment
     location: location
     tags: tags
+    apimSubnetId: networking.outputs.apimSubnetId
     publisherName: apimPublisherName
     publisherEmail: apimPublisherEmail
+    instanceSuffix: apimInstanceSuffix
     backendUrl: 'https://${appService.outputs.webAppHostname}'
     appInsightsId: monitoring.outputs.appInsightsId
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey

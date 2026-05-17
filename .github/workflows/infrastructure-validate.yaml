@@ -7,8 +7,6 @@ on:
       - "infrastructure/**"
       - ".github/workflows/infrastructure-validate.yaml"
       - ".github/workflows/infrastructure-deploy-dev.yaml"
-      - ".github/workflows/appservice-breakglass-access.yaml"
-      - ".github/workflows/appservice-breakglass-cleanup.yaml"
 
 permissions:
   contents: read

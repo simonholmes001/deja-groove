@@ -26,14 +26,6 @@ The subscription-scope template creates and manages these RGs:
 - SCM/Kudu restrictions are managed separately and default to deny.
 - PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
 
-## Break-Glass Access (Dev)
-
-- Manual workflow: `.github/workflows/appservice-breakglass-access.yaml`
-- Purpose: temporary allow/remove emergency CIDR access to App Service main and SCM endpoints.
-- CIDR guardrails are enforced (`/24` to `/32`, `0.0.0.0/0` forbidden).
-- Break-glass rules are stamped with expiry metadata.
-- Scheduled cleanup workflow removes expired rules: `.github/workflows/appservice-breakglass-cleanup.yaml`.
-
 ## Directory
 
 ```
@@ -71,8 +63,6 @@ For GitHub OIDC login:
 
 - `infrastructure-validate.yaml`: PR-time Bicep build + `az deployment sub validate` + `what-if`
 - `infrastructure-deploy-dev.yaml`: push-to-main deploy for dev using `az deployment sub create`
-- `appservice-breakglass-access.yaml`: manual emergency access control for App Service
-- `appservice-breakglass-cleanup.yaml`: scheduled cleanup of expired break-glass rules
 
 ## Local Usage
 

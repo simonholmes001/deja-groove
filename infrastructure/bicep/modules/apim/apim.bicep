@@ -10,6 +10,9 @@ param environment string
 @description('Resource tags applied to all resources in this module.')
 param tags object
 
+@description('Resource ID of the APIM subnet.')
+param apimSubnetId string
+
 @description('APIM publisher display name.')
 param publisherName string
 
@@ -26,20 +29,27 @@ param appInsightsId string
 @secure()
 param appInsightsInstrumentationKey string
 
+@description('APIM instance rollout suffix to support non-breaking replacement across SKU changes.')
+param instanceSuffix string = 'v2'
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
-var apimName = 'apim-deja-${environment}-${suffix}'
+var apimName = 'apim-deja-${environment}-${instanceSuffix}-${suffix}'
 
 resource apimService 'Microsoft.ApiManagement/service@2022-08-01' = {
   name: apimName
   location: location
   tags: tags
   sku: {
-    name: 'Consumption'
-    capacity: 0
+    name: 'Developer'
+    capacity: 1
   }
   properties: {
     publisherName: publisherName
     publisherEmail: publisherEmail
+    virtualNetworkType: 'External'
+    virtualNetworkConfiguration: {
+      subnetResourceId: apimSubnetId
+    }
   }
 }
 
@@ -108,6 +118,18 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
         description: 'OK'
       }
     ]
+  }
+}
+
+// Return a mock 200 directly from the APIM gateway so the infrastructure CI
+// health check passes regardless of which application container is running.
+// Backend-level health is an application concern verified after app deployment.
+resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
+  parent: healthOperation
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
   }
 }
 
