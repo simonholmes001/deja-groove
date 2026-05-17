@@ -77,10 +77,37 @@ run_dotnet_tests() {
   fi
 }
 
+run_swift_tests() {
+  TARGET_DIR="$1"
+  if ! is_staged_in_dir "$TARGET_DIR"; then
+    echo "⏭️  No staged changes in $TARGET_DIR — skipping Swift tests."
+    return 0
+  fi
+
+  # Fail closed: if ios/ files are staged but swift is not available, block
+  # the commit. This is an iOS project — Swift must be installed to commit
+  # iOS changes. Install Xcode and run ./scripts/setup-hooks.sh to proceed.
+  if ! command -v swift >/dev/null 2>&1; then
+    echo "❌  swift not found in PATH. Cannot run iOS tests for staged changes in $TARGET_DIR."
+    echo "    Install Xcode (https://developer.apple.com/xcode/) then re-run ./scripts/setup-hooks.sh"
+    return 1
+  fi
+
+  if [ -f "$TARGET_DIR/Package.swift" ]; then
+    echo ""
+    echo "🧪 Running Swift tests in $TARGET_DIR before commit..."
+    swift test --package-path "$TARGET_DIR"
+    echo "✅ Swift tests passed in $TARGET_DIR."
+  else
+    echo "⏭️  No Swift package in $TARGET_DIR — skipping."
+  fi
+}
+
 # Run local commit guardrails
 run_node_tests "cli"
 run_node_tests "frontend"
 run_dotnet_tests "backend"
+run_swift_tests "ios/DejaGrooveAuth"
 
 echo ""
 echo "✅ Pre-commit guardrails passed."
