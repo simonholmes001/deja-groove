@@ -4,6 +4,7 @@ using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
 using DejaGroove.Application.UseCases;
 using FluentValidation;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -11,10 +12,10 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
     .ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 
 // Suppress automatic 400 from DataAnnotations — FluentValidation owns all validation responses
 builder.Services.Configure<ApiBehaviorOptions>(o =>
@@ -37,8 +38,8 @@ builder.Services.AddAuthorization(options =>
     {
         policy.RequireAuthenticatedUser();
         policy.RequireAssertion(context =>
-            context.User.HasClaim(claim =>
-                claim.Type == "sub" &&
+            context.User.Claims.Any(claim =>
+                (claim.Type == "sub" || claim.Type == ClaimTypes.NameIdentifier) &&
                 !string.IsNullOrWhiteSpace(claim.Value)));
     });
 });

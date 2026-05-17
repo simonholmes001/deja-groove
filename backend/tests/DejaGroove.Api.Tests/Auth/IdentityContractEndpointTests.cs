@@ -1,10 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
-using System.Text;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 
 namespace DejaGroove.Api.Tests.Auth;
 
@@ -12,7 +16,13 @@ public sealed class IdentityContractEndpointTests
 {
     private const string Issuer = "https://deja-groove.example";
     private const string Audience = "deja-groove-api";
-    private const string SigningKey = "__SET_VIA_ENV_OR_USER_SECRETS_32_PLUS__";
+    private static readonly RsaSecurityKey SigningKey;
+
+    static IdentityContractEndpointTests()
+    {
+        var rsa = RSA.Create(2048);
+        SigningKey = new RsaSecurityKey(rsa) { KeyId = "test-kid-1" };
+    }
 
     private static HttpClient CreateClient()
     {
@@ -23,10 +33,23 @@ public sealed class IdentityContractEndpointTests
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["IdentityJwt:Issuer"] = Issuer,
+                        ["IdentityJwt:Authority"] = Issuer,
                         ["IdentityJwt:Audience"] = Audience,
-                        ["IdentityJwt:SigningKey"] = SigningKey,
+                        ["IdentityJwt:RequireHttpsMetadata"] = "false",
                         ["IdentityJwt:ClockSkewSeconds"] = "0"
+                    });
+                });
+                builder.ConfigureServices(services =>
+                {
+                    services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                    {
+                        var oidcConfig = new OpenIdConnectConfiguration { Issuer = Issuer };
+                        oidcConfig.SigningKeys.Add(SigningKey);
+                        options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(oidcConfig);
+                        options.TokenValidationParameters.ValidIssuer = Issuer;
+                        options.TokenValidationParameters.ValidAudience = Audience;
+                        options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                        options.TokenValidationParameters.IssuerSigningKey = SigningKey;
                     });
                 });
             });
@@ -55,10 +78,25 @@ public sealed class IdentityContractEndpointTests
             $"Expected 401/403 but got {(int)response.StatusCode} ({response.StatusCode}).");
     }
 
+    [Fact]
+    public async Task ContractProbe_WithValidToken_Returns200AndClaimEnvelope()
+    {
+        using var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", BuildToken(subValue: "user-123"));
+
+        var response = await client.GetAsync("/v1/identity/contract-probe");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("user-123", body);
+        Assert.Contains(Audience, body);
+        Assert.Contains(Issuer, body);
+    }
+
     private static string BuildToken(string? subValue)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SigningKey));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var creds = new SigningCredentials(SigningKey, SecurityAlgorithms.RsaSha256);
         var now = DateTime.UtcNow;
         var claims = new List<Claim>();
         if (subValue is not null)

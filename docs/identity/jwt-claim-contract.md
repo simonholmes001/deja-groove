@@ -7,22 +7,22 @@
 
 ## Contract Specification
 - Required claims:
-  - `iss` must equal configured `IdentityJwt:Issuer`.
+  - `iss` must match issuer from configured identity provider authority/metadata.
   - `aud` must equal configured `IdentityJwt:Audience`.
-  - `sub` must be present and non-empty.
+  - subject identity must be present and non-empty (`sub`, or mapped `nameidentifier`).
   - `exp` must be valid and in the future.
 - Signature:
-  - JWT signature must validate against configured `IdentityJwt:SigningKey`.
+  - JWT signature must validate using provider signing keys resolved from OIDC metadata/JWKS.
 - Clock skew:
   - Controlled by `IdentityJwt:ClockSkewSeconds`.
 
 ## Compatibility and Versioning Policy
 - Claim requirements are additive-only after launch unless a breaking-change release note is published.
-- `iss`/`aud` values are environment-specific configuration, not code constants.
+- `IdentityJwt:Authority` and `IdentityJwt:Audience` are environment-specific configuration, not code constants.
 
 ## Operational Behavior
 - Invalid token behavior: `401 Unauthorized`.
-- Auth failures are logged as warning events tagged with request path.
+- Auth failures are logged with path, exception type, and configured authority/audience context.
 - Request correlation: `X-Request-Id` response header via request middleware.
 
 ## Test Evidence
@@ -31,4 +31,4 @@
   - wrong audience rejected
   - wrong issuer rejected
   - expired token rejected
-  - missing `sub` rejected
+  - missing `sub` denied at policy/endpoint level (`backend/tests/DejaGroove.Api.Tests/Auth/IdentityContractEndpointTests.cs`)

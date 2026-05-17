@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -15,15 +14,16 @@ public sealed class ConfigureJwtBearerOptions(
             return;
 
         var jwtOptions = identityJwtOptions.Value;
+        options.Authority = jwtOptions.Authority;
+        if (!string.IsNullOrWhiteSpace(jwtOptions.MetadataAddress))
+            options.MetadataAddress = jwtOptions.MetadataAddress;
+        options.RequireHttpsMetadata = jwtOptions.RequireHttpsMetadata;
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = jwtOptions.Issuer,
             ValidateAudience = true,
             ValidAudience = jwtOptions.Audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(jwtOptions.ClockSkewSeconds),
             NameClaimType = "sub"
@@ -33,7 +33,12 @@ public sealed class ConfigureJwtBearerOptions(
             OnAuthenticationFailed = context =>
             {
                 var logger = loggerFactory.CreateLogger("IdentityJwt");
-                logger.LogWarning(context.Exception, "JWT authentication failed for {Path}", context.HttpContext.Request.Path);
+                logger.LogWarning(
+                    "JWT authentication failed. Path={Path} ExceptionType={ExceptionType} Authority={Authority} Audience={Audience}",
+                    context.HttpContext.Request.Path,
+                    context.Exception.GetType().Name,
+                    jwtOptions.Authority,
+                    jwtOptions.Audience);
                 return Task.CompletedTask;
             }
         };

@@ -1,6 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using System.Security.Claims;
-using System.Text;
 using DejaGroove.Api.Auth;
 using Microsoft.IdentityModel.Tokens;
 
@@ -10,20 +10,26 @@ public sealed class JwtClaimContractTests
 {
     private const string Issuer = "https://deja-groove.example";
     private const string Audience = "deja-groove-api";
-    private const string SigningKey = "dev-only-signing-key-change-me-32bytes-minimum";
+    private static readonly RsaSecurityKey SigningKey;
+    private static readonly TokenValidationParameters ValidationParameters;
 
-    private static readonly TokenValidationParameters ValidationParameters = new()
+    static JwtClaimContractTests()
     {
-        ValidateIssuer = true,
-        ValidIssuer = Issuer,
-        ValidateAudience = true,
-        ValidAudience = Audience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SigningKey)),
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero,
-        NameClaimType = "sub"
-    };
+        var rsa = RSA.Create(2048);
+        SigningKey = new RsaSecurityKey(rsa) { KeyId = "test-kid-1" };
+        ValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = Issuer,
+            ValidateAudience = true,
+            ValidAudience = Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = SigningKey,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
+            NameClaimType = "sub"
+        };
+    }
 
     [Fact]
     public void ValidToken_IsAccepted()
@@ -75,12 +81,11 @@ public sealed class JwtClaimContractTests
     }
 
     [Fact]
-    public void IdentityOptions_RequireIssuerAudienceAndSigningKey()
+    public void IdentityOptions_RequireAuthorityAndAudience()
     {
         var empty = new IdentityJwtOptions();
-        Assert.True(string.IsNullOrWhiteSpace(empty.Issuer));
+        Assert.True(string.IsNullOrWhiteSpace(empty.Authority));
         Assert.True(string.IsNullOrWhiteSpace(empty.Audience));
-        Assert.True(string.IsNullOrWhiteSpace(empty.SigningKey));
     }
 
     private static string BuildToken(
@@ -89,8 +94,7 @@ public sealed class JwtClaimContractTests
         DateTime? expires = null,
         bool includeSub = true)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SigningKey));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var creds = new SigningCredentials(SigningKey, SecurityAlgorithms.RsaSha256);
         var claims = new List<Claim>();
 
         if (includeSub)

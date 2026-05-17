@@ -32,9 +32,8 @@ public sealed class AuthOptionsAndPortsTests
         var sut = new ValidateIdentityJwtOptions(new StubHostEnvironment("Production"));
         var bad = new IdentityJwtOptions
         {
-            Issuer = "iss",
+            Authority = "https://issuer.example",
             Audience = "aud",
-            SigningKey = "abcdefghijklmnopqrstuvwxyz123456",
             ClockSkewSeconds = 999
         };
 
@@ -48,9 +47,9 @@ public sealed class AuthOptionsAndPortsTests
         var sut = new ValidateIdentityJwtOptions(new StubHostEnvironment("Development"));
         var opts = new IdentityJwtOptions
         {
-            Issuer = "iss",
+            Authority = "https://issuer.example",
             Audience = "aud",
-            SigningKey = "__SET_VIA_ENV_OR_USER_SECRETS_32_PLUS__",
+            RequireHttpsMetadata = false,
             ClockSkewSeconds = 60
         };
 
@@ -59,13 +58,30 @@ public sealed class AuthOptionsAndPortsTests
     }
 
     [Fact]
+    public void ValidateIdentityJwtOptions_RejectsNonHttpsMetadataOutsideDevelopment()
+    {
+        var sut = new ValidateIdentityJwtOptions(new StubHostEnvironment("Production"));
+        var opts = new IdentityJwtOptions
+        {
+            Authority = "https://issuer.example",
+            Audience = "aud",
+            RequireHttpsMetadata = false,
+            ClockSkewSeconds = 60
+        };
+
+        var result = sut.Validate(null, opts);
+        Assert.True(result.Failed);
+    }
+
+    [Fact]
     public void ConfigureJwtBearerOptions_SetsExpectedValidationParameters()
     {
         var opts = Options.Create(new IdentityJwtOptions
         {
-            Issuer = "iss",
+            Authority = "https://issuer.example",
+            MetadataAddress = "https://issuer.example/.well-known/openid-configuration",
             Audience = "aud",
-            SigningKey = "abcdefghijklmnopqrstuvwxyz123456",
+            RequireHttpsMetadata = true,
             ClockSkewSeconds = 42
         });
         var sut = new ConfigureJwtBearerOptions(opts, NullLoggerFactory.Instance);
@@ -73,8 +89,10 @@ public sealed class AuthOptionsAndPortsTests
 
         sut.Configure(JwtBearerDefaults.AuthenticationScheme, jwt);
 
+        Assert.Equal("https://issuer.example", jwt.Authority);
+        Assert.Equal("https://issuer.example/.well-known/openid-configuration", jwt.MetadataAddress);
+        Assert.True(jwt.RequireHttpsMetadata);
         Assert.False(jwt.MapInboundClaims);
-        Assert.Equal("iss", jwt.TokenValidationParameters.ValidIssuer);
         Assert.Equal("aud", jwt.TokenValidationParameters.ValidAudience);
         Assert.Equal(TimeSpan.FromSeconds(42), jwt.TokenValidationParameters.ClockSkew);
         Assert.NotNull(jwt.Events?.OnAuthenticationFailed);

@@ -1,4 +1,5 @@
 using DejaGroove.Api.Middleware;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,7 +17,7 @@ public sealed class IdentityContractController : ControllerBase
         return Ok(new
         {
             request_id = requestId,
-            subject = User.FindFirst("sub")?.Value,
+            subject = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
             audience = User.FindFirst("aud")?.Value,
             issuer = User.FindFirst("iss")?.Value
         });
