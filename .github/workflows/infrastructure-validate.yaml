@@ -20,6 +20,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: APIM policy sanity check
+        run: bash ./infrastructure/scripts/check-apim-policy.sh
+
       - name: Build main Bicep template
         uses: azure/cli@v2
         with:
@@ -36,6 +39,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: APIM policy sanity check
+        run: bash ./infrastructure/scripts/check-apim-policy.sh
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v3
@@ -85,6 +91,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: APIM policy sanity check
+        run: bash ./infrastructure/scripts/check-apim-policy.sh
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v3

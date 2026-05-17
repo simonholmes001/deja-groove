@@ -28,10 +28,13 @@ if [[ -z "${POSTGRES_ADMIN_LOGIN}" || -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
   exit 1
 fi
 
-echo "==> [1/3] Linting Bicep files..."
+echo "==> [1/4] Linting Bicep files..."
 az bicep lint --file "${BICEP_DIR}/main.bicep"
 
-echo "==> [2/3] Subscription-scope validate..."
+echo "==> [2/4] Sanity-checking APIM policies..."
+bash "${SCRIPT_DIR}/check-apim-policy.sh"
+
+echo "==> [3/4] Subscription-scope validate..."
 az deployment sub validate \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${BICEP_DIR}/main.bicep" \
@@ -41,7 +44,7 @@ az deployment sub validate \
   --output none
 
 if [[ "${WHAT_IF}" == "--what-if" ]]; then
-  echo "==> [3/3] Subscription-scope what-if..."
+  echo "==> [4/4] Subscription-scope what-if..."
   az deployment sub what-if \
     --name "deja-dev-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
     --location "${DEPLOY_LOCATION}" \
@@ -50,7 +53,7 @@ if [[ "${WHAT_IF}" == "--what-if" ]]; then
     --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
     --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}"
 else
-  echo "==> [3/3] Skipping what-if (pass --what-if to enable)."
+  echo "==> [4/4] Skipping what-if (pass --what-if to enable)."
 fi
 
 echo "Validation complete for environment: ${ENVIRONMENT}"

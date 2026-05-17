@@ -42,6 +42,7 @@ infrastructure/
 │   └── parameters/
 │       └── dev.bicepparam
 └── scripts/
+    ├── check-apim-policy.sh        # static APIM policy sanity checks
     ├── validate.sh                 # dev validate + optional what-if
     └── deploy.sh                   # dev deploy
 ```
@@ -61,8 +62,8 @@ For GitHub OIDC login:
 
 ## Pipeline Behavior
 
-- `infrastructure-validate.yaml`: PR-time Bicep build + `az deployment sub validate` + `what-if`
-- `infrastructure-deploy-dev.yaml`: push-to-main deploy for dev using `az deployment sub create`
+- `infrastructure-validate.yaml`: PR-time APIM policy sanity check + Bicep build + `az deployment sub validate` + `what-if`
+- `infrastructure-deploy-dev.yaml`: push-to-main APIM policy sanity check + deploy for dev using `az deployment sub create`
 
 ## Local Usage
 
