@@ -52,6 +52,12 @@ public sealed class ScanWorkflowUseCaseTests
         Assert.Same(cached, result);
         await matcher.DidNotReceiveWithAnyArgs().IdentifyAsync(default!, default);
         await ownership.DidNotReceiveWithAnyArgs().CheckAsync(default, default!, default);
+        await events.Received(1).AppendAsync(
+            Arg.Is<ScanEvent>(e =>
+                e.UserId == userId &&
+                e.ClientScanId == command.ClientScanId &&
+                e.ResultStatus == cached.Status),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

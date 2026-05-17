@@ -31,7 +31,10 @@ public sealed class ScanWorkflowUseCase(
         {
             var cached = await scanCache.TryGetAsync(userId, hash, ct);
             if (cached is not null)
+            {
+                await PersistEventAsync(command, userId, cached, ct);
                 return cached;
+            }
         }
 
         var matched = await IdentifyWithSingleRetryAsync(imageBytes, ct);

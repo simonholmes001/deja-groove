@@ -67,7 +67,7 @@ public sealed class ExceptionHandlingMiddlewareTests
         context.Response.Body = new MemoryStream();
         context.Items[RequestIdMiddleware.RequestIdKey] = requestId;
 
-        RequestDelegate next = _ => throw new ServiceUnavailableException("scan_dependencies_unconfigured", "not configured");
+        RequestDelegate next = _ => throw new ServiceUnavailableException("scan_dependencies_unconfigured", "matching dependency unavailable");
         var middleware = new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance);
 
         await middleware.InvokeAsync(context);
@@ -79,6 +79,7 @@ public sealed class ExceptionHandlingMiddlewareTests
         var envelope = JsonSerializer.Deserialize<ErrorResponse>(json)!;
 
         Assert.Equal("scan_dependencies_unconfigured", envelope.Error.Code);
+        Assert.Equal("matching dependency unavailable", envelope.Error.Message);
         Assert.True(envelope.Error.Retryable);
         Assert.Equal(requestId, envelope.Error.RequestId);
     }

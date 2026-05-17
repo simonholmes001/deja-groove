@@ -37,7 +37,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 context,
                 503,
                 serviceUnavailableException.Code,
-                "Scan service dependencies are not configured.",
+                serviceUnavailableException.Message,
                 retryable: true);
         }
         catch (Exception ex)
