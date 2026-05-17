@@ -93,7 +93,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
-              "${EXTRA_PARAMS[@]}" \
+              "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?
             set -e
