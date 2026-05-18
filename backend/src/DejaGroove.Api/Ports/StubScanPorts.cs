@@ -78,6 +78,52 @@ public sealed class InMemoryScanEventRepository : IScanEventRepository
     public Task AppendAsync(ScanEvent scanEvent, CancellationToken ct = default) => Task.CompletedTask;
 }
 
+public sealed class InMemoryAmbiguousScanRepository : IAmbiguousScanRepository
+{
+    private readonly ConcurrentDictionary<string, ScanStatus> _scanStatuses = new();
+    private readonly ConcurrentDictionary<string, AmbiguousScanSnapshot> _ambiguous = new();
+    private readonly ConcurrentDictionary<string, ResolvedScanSnapshot> _resolutions = new();
+
+    public Task UpsertScanStatusAsync(Guid userId, Guid requestId, ScanStatus status, CancellationToken ct = default)
+    {
+        _scanStatuses[BuildKey(userId, requestId)] = status;
+        return Task.CompletedTask;
+    }
+
+    public Task<ScanStatus?> GetScanStatusAsync(Guid userId, Guid requestId, CancellationToken ct = default)
+    {
+        var found = _scanStatuses.TryGetValue(BuildKey(userId, requestId), out var status);
+        return Task.FromResult(found ? status : (ScanStatus?)null);
+    }
+
+    public Task UpsertAmbiguousAsync(AmbiguousScanSnapshot snapshot, CancellationToken ct = default)
+    {
+        _ambiguous[BuildKey(snapshot.UserId, snapshot.RequestId)] = snapshot;
+        return Task.CompletedTask;
+    }
+
+    public Task<AmbiguousScanSnapshot?> GetAmbiguousAsync(Guid userId, Guid requestId, CancellationToken ct = default)
+    {
+        var found = _ambiguous.TryGetValue(BuildKey(userId, requestId), out var snapshot);
+        return Task.FromResult(found ? snapshot : null);
+    }
+
+    public Task<ResolvedScanSnapshot?> GetResolutionAsync(Guid userId, Guid requestId, CancellationToken ct = default)
+    {
+        var found = _resolutions.TryGetValue(BuildKey(userId, requestId), out var snapshot);
+        return Task.FromResult(found ? snapshot : null);
+    }
+
+    public Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default)
+    {
+        _scanStatuses[BuildKey(snapshot.UserId, snapshot.RequestId)] = snapshot.Result.Status;
+        _resolutions[BuildKey(snapshot.UserId, snapshot.RequestId)] = snapshot;
+        return Task.CompletedTask;
+    }
+
+    private static string BuildKey(Guid userId, Guid requestId) => $"{userId:N}:{requestId:N}";
+}
+
 public sealed class UnconfiguredImageValidationPort : IImageValidationPort
 {
     public Task<ValidationResult> ValidateAsync(Stream imageStream, string? contentType, CancellationToken ct = default) =>
@@ -114,6 +160,22 @@ public sealed class UnconfiguredCollectionOwnershipPort : ICollectionOwnershipPo
 public sealed class UnconfiguredScanEventRepository : IScanEventRepository
 {
     public Task AppendAsync(ScanEvent scanEvent, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+}
+
+public sealed class UnconfiguredAmbiguousScanRepository : IAmbiguousScanRepository
+{
+    public Task UpsertScanStatusAsync(Guid userId, Guid requestId, ScanStatus status, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+    public Task<ScanStatus?> GetScanStatusAsync(Guid userId, Guid requestId, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+    public Task UpsertAmbiguousAsync(AmbiguousScanSnapshot snapshot, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+    public Task<AmbiguousScanSnapshot?> GetAmbiguousAsync(Guid userId, Guid requestId, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+    public Task<ResolvedScanSnapshot?> GetResolutionAsync(Guid userId, Guid requestId, CancellationToken ct = default) =>
+        throw ScanPortErrors.Unconfigured();
+    public Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default) =>
         throw ScanPortErrors.Unconfigured();
 }
 

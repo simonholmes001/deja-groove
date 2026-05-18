@@ -11,7 +11,8 @@ public sealed class ScanWorkflowUseCase(
     IScanCachePort scanCache,
     IAlbumMatchingPort albumMatching,
     ICollectionOwnershipPort collectionOwnership,
-    IScanEventRepository scanEventRepository) : IScanWorkflowUseCase
+    IScanEventRepository scanEventRepository,
+    IAmbiguousScanRepository ambiguousScans) : IScanWorkflowUseCase
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
 
@@ -44,6 +45,7 @@ public sealed class ScanWorkflowUseCase(
         {
             await scanCache.StoreAsync(cacheUserId, hash, finalResult, CacheTtl, ct);
             await PersistEventAsync(command, cacheUserId, finalResult, ct);
+            await PersistAmbiguityStateBestEffortAsync(cacheUserId, command.RequestId, finalResult, ct);
         }
 
         return finalResult;
@@ -85,6 +87,27 @@ public sealed class ScanWorkflowUseCase(
             createdAt: DateTimeOffset.UtcNow);
 
         await scanEventRepository.AppendAsync(scanEvent, ct);
+    }
+
+    private async Task PersistAmbiguityStateBestEffortAsync(Guid userId, Guid requestId, ScanResult result, CancellationToken ct)
+    {
+        try
+        {
+            await ambiguousScans.UpsertScanStatusAsync(userId, requestId, result.Status, ct);
+            if (result.Status == ScanStatus.Ambiguous)
+            {
+                await ambiguousScans.UpsertAmbiguousAsync(new AmbiguousScanSnapshot(
+                    userId,
+                    requestId,
+                    result.Confidence,
+                    result.Candidates,
+                    DateTimeOffset.UtcNow), ct);
+            }
+        }
+        catch (ServiceUnavailableException)
+        {
+            // Keep scan flow available while resolve persistence is being rolled out.
+        }
     }
 
     private static async Task<byte[]> ReadImageAsync(Stream input, CancellationToken ct)

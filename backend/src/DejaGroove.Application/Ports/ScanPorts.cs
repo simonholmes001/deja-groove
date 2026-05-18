@@ -45,3 +45,27 @@ public interface IScanEventRepository
 {
     Task AppendAsync(Domain.Scanning.ScanEvent scanEvent, CancellationToken ct = default);
 }
+
+public sealed record AmbiguousScanSnapshot(
+    Guid UserId,
+    Guid RequestId,
+    float Confidence,
+    IReadOnlyList<Domain.Shared.AlbumIdentity> Candidates,
+    DateTimeOffset CreatedAt);
+
+public sealed record ResolvedScanSnapshot(
+    Guid UserId,
+    Guid RequestId,
+    Domain.Shared.AlbumIdentity SelectedIdentity,
+    ScanResult Result,
+    DateTimeOffset ResolvedAt);
+
+public interface IAmbiguousScanRepository
+{
+    Task UpsertScanStatusAsync(Guid userId, Guid requestId, ScanStatus status, CancellationToken ct = default);
+    Task<ScanStatus?> GetScanStatusAsync(Guid userId, Guid requestId, CancellationToken ct = default);
+    Task UpsertAmbiguousAsync(AmbiguousScanSnapshot snapshot, CancellationToken ct = default);
+    Task<AmbiguousScanSnapshot?> GetAmbiguousAsync(Guid userId, Guid requestId, CancellationToken ct = default);
+    Task<ResolvedScanSnapshot?> GetResolutionAsync(Guid userId, Guid requestId, CancellationToken ct = default);
+    Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default);
+}

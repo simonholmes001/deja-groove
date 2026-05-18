@@ -18,13 +18,14 @@ public sealed class ScanWorkflowUseCaseTests
         IScanCachePort cache,
         IAlbumMatchingPort matcher,
         ICollectionOwnershipPort ownership,
-        IScanEventRepository events)
+        IScanEventRepository events,
+        IAmbiguousScanRepository ambiguousScans)
     {
         imageValidation
             .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Ok());
 
-        return new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events);
+        return new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
     }
 
     [Fact]
@@ -36,6 +37,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -44,7 +46,7 @@ public sealed class ScanWorkflowUseCaseTests
         pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
         cache.TryGetAsync(userId, hash, Arg.Any<CancellationToken>()).Returns(cached);
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId);
 
         var result = await sut.ExecuteAsync(command);
@@ -69,6 +71,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var recordId = Guid.NewGuid();
@@ -79,7 +82,7 @@ public sealed class ScanWorkflowUseCaseTests
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(ScanResult.SafeToBuy(Identity, 0.91f));
         ownership.CheckAsync(userId, Identity, Arg.Any<CancellationToken>()).Returns((true, (Guid?)recordId));
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId);
 
         var result = await sut.ExecuteAsync(command);
@@ -97,6 +100,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -106,7 +110,7 @@ public sealed class ScanWorkflowUseCaseTests
         cache.TryGetAsync(userId, hash, Arg.Any<CancellationToken>()).Returns((ScanResult?)null);
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(ambiguous);
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId);
 
         var result = await sut.ExecuteAsync(command);
@@ -124,6 +128,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var hash = new PerceptualHash(42);
         var safe = ScanResult.SafeToBuy(Identity, 0.74f);
@@ -131,7 +136,7 @@ public sealed class ScanWorkflowUseCaseTests
         pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(safe);
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId: null);
 
         var result = await sut.ExecuteAsync(command);
@@ -149,6 +154,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -159,7 +165,7 @@ public sealed class ScanWorkflowUseCaseTests
             .Returns(_ => throw new TimeoutException("first attempt timed out"), _ => ScanResult.SafeToBuy(Identity, 0.93f));
         ownership.CheckAsync(userId, Identity, Arg.Any<CancellationToken>()).Returns((false, (Guid?)null));
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId);
 
         var result = await sut.ExecuteAsync(command);
@@ -177,12 +183,13 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         imageValidation
             .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Fail("invalid_image", "Image signature mismatch."));
 
-        var sut = new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
 
         var ex = await Assert.ThrowsAsync<InputValidationException>(() => sut.ExecuteAsync(BuildCommand(Guid.NewGuid())));
         Assert.Equal("invalid_image", ex.Code);
@@ -202,6 +209,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -212,7 +220,7 @@ public sealed class ScanWorkflowUseCaseTests
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(matched);
         ownership.CheckAsync(userId, Identity, Arg.Any<CancellationToken>()).Returns((false, (Guid?)null));
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
         var command = BuildCommand(userId);
 
         var result = await sut.ExecuteAsync(command);
@@ -231,6 +239,7 @@ public sealed class ScanWorkflowUseCaseTests
                 e.ResultStatus == ScanStatus.SafeToBuy &&
                 e.AlbumIdentity == Identity),
             Arg.Any<CancellationToken>());
+        await ambiguousScans.Received(1).UpsertScanStatusAsync(userId, command.RequestId, ScanStatus.SafeToBuy, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -242,6 +251,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var hash = new PerceptualHash(42);
         var safe = ScanResult.SafeToBuy(Identity, 0.74f);
@@ -249,12 +259,13 @@ public sealed class ScanWorkflowUseCaseTests
         pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(safe);
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
 
         await sut.ExecuteAsync(BuildCommand(userId: null));
 
         await cache.DidNotReceiveWithAnyArgs().StoreAsync(default, default!, default!, default, default);
         await events.DidNotReceiveWithAnyArgs().AppendAsync(default!, default);
+        await ambiguousScans.DidNotReceiveWithAnyArgs().UpsertScanStatusAsync(default, default, default, default);
     }
 
     [Fact]
@@ -266,6 +277,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -275,10 +287,38 @@ public sealed class ScanWorkflowUseCaseTests
         matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException<ScanResult>(new InvalidOperationException("fatal matcher error")));
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(BuildCommand(userId)));
         await matcher.Received(1).IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAmbiguityPersistenceUnavailable_DoesNotFailScan()
+    {
+        var imageValidation = Substitute.For<IImageValidationPort>();
+        var pHash = Substitute.For<IPerceptualHashPort>();
+        var cache = Substitute.For<IScanCachePort>();
+        var matcher = Substitute.For<IAlbumMatchingPort>();
+        var ownership = Substitute.For<ICollectionOwnershipPort>();
+        var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
+
+        var userId = Guid.NewGuid();
+        var hash = new PerceptualHash(42);
+        var matched = ScanResult.SafeToBuy(Identity, 0.82f);
+
+        pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
+        cache.TryGetAsync(userId, hash, Arg.Any<CancellationToken>()).Returns((ScanResult?)null);
+        matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(matched);
+        ownership.CheckAsync(userId, Identity, Arg.Any<CancellationToken>()).Returns((false, (Guid?)null));
+        ambiguousScans.UpsertScanStatusAsync(userId, Arg.Any<Guid>(), ScanStatus.SafeToBuy, Arg.Any<CancellationToken>())
+            .Returns(_ => throw new ServiceUnavailableException("scan_dependencies_unconfigured", "down"));
+
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
+        var result = await sut.ExecuteAsync(BuildCommand(userId));
+
+        Assert.Equal(ScanStatus.SafeToBuy, result.Status);
     }
 
     [Fact]
@@ -290,6 +330,7 @@ public sealed class ScanWorkflowUseCaseTests
         var matcher = Substitute.For<IAlbumMatchingPort>();
         var ownership = Substitute.For<ICollectionOwnershipPort>();
         var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         var userId = Guid.NewGuid();
         var hash = new PerceptualHash(42);
@@ -301,7 +342,7 @@ public sealed class ScanWorkflowUseCaseTests
                 _ => Task.FromException<ScanResult>(new TimeoutException("first timeout")),
                 _ => Task.FromException<ScanResult>(new TimeoutException("second timeout")));
 
-        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events);
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
 
         await Assert.ThrowsAsync<TimeoutException>(() => sut.ExecuteAsync(BuildCommand(userId)));
         await matcher.Received(2).IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>());

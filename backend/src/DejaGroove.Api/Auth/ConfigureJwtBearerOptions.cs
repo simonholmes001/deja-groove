@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using DejaGroove.Api.Errors;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -40,6 +42,19 @@ public sealed class ConfigureJwtBearerOptions(
                     jwtOptions.Authority,
                     jwtOptions.Audience);
                 return Task.CompletedTask;
+            },
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                await ApiErrorResponseWriter.WriteAsync(
+                    context.HttpContext,
+                    ApiErrorCatalog.FromStatusCode(StatusCodes.Status401Unauthorized));
+            },
+            OnForbidden = async context =>
+            {
+                await ApiErrorResponseWriter.WriteAsync(
+                    context.HttpContext,
+                    ApiErrorCatalog.FromStatusCode(StatusCodes.Status403Forbidden));
             }
         };
     }

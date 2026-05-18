@@ -1,8 +1,10 @@
 using DejaGroove.Api.Auth;
+using DejaGroove.Api.Features;
 using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
+using DejaGroove.Api.Health;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Api.Hosting;
@@ -14,11 +16,20 @@ using FluentValidation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using DejaGroove.Api.Errors;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddOptions<ScanFeaturesOptions>()
+    .Bind(builder.Configuration.GetSection(ScanFeaturesOptions.SectionName));
+builder.Services.PostConfigure<ScanFeaturesOptions>(o =>
+{
+    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+        o.EnableResolveEndpoint = true;
+});
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
@@ -32,6 +43,7 @@ builder.Services.Configure<ApiBehaviorOptions>(o =>
 
 // Application layer
 builder.Services.AddScoped<IScanWorkflowUseCase, ScanWorkflowUseCase>();
+builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUseCase>();
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
@@ -40,6 +52,7 @@ if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Te
     builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
 }
 else
 {
@@ -49,6 +62,7 @@ else
     builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
 }
 
 // Collection domain (issues #15, #16, #46, #79)
@@ -85,6 +99,10 @@ else
 
 // Validation
 builder.Services.AddScoped<IValidator<ScanRequest>, ScanRequestValidator>();
+builder.Services.AddSingleton<IPostgresReadinessProbe, NpgsqlPostgresReadinessProbe>();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), ["live"])
+    .AddCheck<PostgresReadinessHealthCheck>("postgres", tags: ["ready"]);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
@@ -130,9 +148,41 @@ if (!string.IsNullOrWhiteSpace(adminConnectionString))
 
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    var response = statusCodeContext.HttpContext.Response;
+    if (response.HasStarted ||
+        response.ContentLength is > 0 ||
+        !string.IsNullOrWhiteSpace(response.ContentType))
+    {
+        return;
+    }
+
+    await ApiErrorResponseWriter.WriteAsync(
+        statusCodeContext.HttpContext,
+        ApiErrorCatalog.FromStatusCode(response.StatusCode));
+});
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    AllowCachingResponses = false,
+    ResultStatusCodes =
+    {
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy] = StatusCodes.Status200OK,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+    },
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthEndpointResponseWriter.WriteAsync
+}).AllowAnonymous();
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    AllowCachingResponses = false,
+    Predicate = registration => registration.Tags.Contains("live"),
+    ResponseWriter = HealthEndpointResponseWriter.WriteAsync
+}).AllowAnonymous();
 app.MapControllers();
 
 app.Run();

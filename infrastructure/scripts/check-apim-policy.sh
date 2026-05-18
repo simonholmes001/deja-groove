@@ -25,4 +25,9 @@ if ! grep -Eq '^var mainApiJwtPolicyXml = .+GetValueOrDefault\(&quot;sub&quot;, 
   exit 1
 fi
 
+if grep -Fq 'return-response' "${APIM_BICEP_FILE}"; then
+  echo "Error: APIM health endpoint must forward to the backend; mock return-response policies are not allowed." >&2
+  exit 1
+fi
+
 echo "APIM policy sanity check passed."

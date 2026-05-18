@@ -4,6 +4,8 @@ param location string
 @description('Deployment environment.')
 @allowed([
   'dev'
+  'staging'
+  'prod'
 ])
 param environment string
 
@@ -19,7 +21,7 @@ param publisherName string
 @description('APIM publisher email address.')
 param publisherEmail string
 
-@description('Backend URL — the App Service default hostname (https://...).')
+@description('Backend URL — the App Service application URL (https://...).')
 param backendUrl string
 
 @description('Resource ID of the Application Insights instance for APIM logging.')
@@ -49,8 +51,6 @@ var jwtEnabled = !empty(entraOidcConfigUrl) && !empty(entraApiClientId)
 // Global service policy: inject X-Correlation-Id on every request at the gateway edge.
 // The header is generated if the client does not supply one, and echoed back in all responses
 // via <outbound> (normal path) and <on-error> (401/429/5xx path).
-// The health operation uses <return-response> which short-circuits the global outbound section,
-// so X-Correlation-Id is set explicitly inside that operation's policy (see healthOperationPolicy).
 var globalPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
 
 // Full JWT + per-user rate-limit policy for authenticated v1 routes.
@@ -124,7 +124,7 @@ resource healthApi 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
   name: 'deja-health'
   properties: {
     displayName: 'Deja Groove Health'
-    path: 'api'
+    path: ''
     protocols: [
       'https'
     ]
@@ -150,20 +150,6 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
   }
 }
 
-// Return a mock 200 directly from the APIM gateway so the infrastructure CI
-// health check passes regardless of which application container is running.
-// Backend-level health is an application concern verified after app deployment.
-// X-Correlation-Id is set here explicitly because <return-response> short-circuits
-// the global outbound section, so the global policy would not write the header.
-resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
-  parent: healthOperation
-  name: 'policy'
-  properties: {
-    format: 'xml'
-    value: '<policies><inbound><base /><return-response><set-status code="200" reason="OK" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header><set-body>{"status":"ok"}</set-body></return-response></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
-  }
-}
-
 // ── Global service policy ────────────────────────────────────────────────────
 // Applies to ALL APIs (health + main). Injects X-Correlation-Id at the gateway
 // edge and echoes it back in every response.
@@ -179,7 +165,7 @@ resource apimGlobalPolicy 'Microsoft.ApiManagement/service/policies@2022-08-01' 
 // ── Main (authenticated) API — /v1/* ────────────────────────────────────────
 // All client-facing v1 routes (POST /v1/scan, GET /v1/collection, etc.) are
 // exposed under this API. APIM strips the 'v1' path prefix before forwarding
-// to the App Service, so the backend handles routes at /scan, /collection, etc.
+// to the App Service backend, so the backend handles routes at /scan, /collection, etc.
 resource mainApi 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
   parent: apimService
   name: 'deja-main'
