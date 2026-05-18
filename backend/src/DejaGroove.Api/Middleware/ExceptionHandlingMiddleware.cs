@@ -26,6 +26,20 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 validationException.Message,
                 retryable: false);
         }
+        catch (IdempotencyConflictException idempotencyConflict)
+        {
+            logger.LogWarning(
+                "Idempotency conflict for request {RequestId}: {Code}",
+                context.Items[RequestIdMiddleware.RequestIdKey],
+                idempotencyConflict.Code);
+
+            await WriteErrorAsync(
+                context,
+                409,
+                idempotencyConflict.Code,
+                idempotencyConflict.Message,
+                retryable: false);
+        }
         catch (ServiceUnavailableException serviceUnavailableException)
         {
             logger.LogError(
