@@ -12,9 +12,16 @@ if [[ "${GITHUB_ACTOR:-}" == "dependabot[bot]" ]]; then
 fi
 
 BASE_REF="${GITHUB_BASE_REF:-main}"
-git fetch origin "${BASE_REF}" --depth=1
+DIFF_BASE="origin/${BASE_REF}"
+if git remote get-url origin >/dev/null 2>&1; then
+  git fetch origin "${BASE_REF}" --depth=1
+elif git show-ref --verify --quiet "refs/heads/${BASE_REF}"; then
+  DIFF_BASE="${BASE_REF}"
+else
+  DIFF_BASE="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+fi
 
-CHANGED_FILES="$(git diff --name-only "origin/${BASE_REF}"...HEAD)"
+CHANGED_FILES="$(git diff --name-only "${DIFF_BASE}"...HEAD)"
 echo "Changed files:"
 echo "${CHANGED_FILES}"
 

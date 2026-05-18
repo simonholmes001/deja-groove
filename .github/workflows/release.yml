@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -57,6 +56,6 @@ jobs:
             exit 0
           }
           gh release create "${tag}" \
-            --target main \
+            --target "${GITHUB_SHA}" \
             --title "${tag}" \
             --generate-notes

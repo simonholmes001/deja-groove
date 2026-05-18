@@ -47,7 +47,8 @@ Release notes are only as good as PR hygiene. Every PR must:
 
 1. Merge PRs with valid changeset files into `main`.
 2. GitHub Actions `Release` workflow runs automatically on push to `main`.
-3. Optionally run the `Release` workflow manually via `workflow_dispatch`.
+3. Manual dispatch is intentionally disabled to prevent duplicate releases from
+   already-processed changesets.
 
 ## Baseline release (`v0.0.0`)
 
