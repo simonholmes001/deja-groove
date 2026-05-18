@@ -1,5 +1,6 @@
 using DejaGroove.Application.Collection;
 using DejaGroove.Application.Exceptions;
+using DejaGroove.Application.Ports;
 using DejaGroove.Application.Tests.Collection;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Collection;
@@ -97,6 +98,39 @@ public sealed class AddToCollectionUseCaseTests
 
         Assert.Equal(AddToCollectionOutcome.Replayed, replay.Outcome);
         Assert.Equal(first.Record!.Id, replay.Record!.Id);
+    }
+
+    [Fact]
+    public async Task ConcurrentIdempotencyKeyRace_SameBody_ReplaysWinner()
+    {
+        // The winner committed the binding + record first; the loser's
+        // AddAsync raises ConcurrentIdempotencyKeyException. The use case must
+        // replay the winner instead of surfacing a 500.
+        var winner = CollectionRecord.Create(User, Album(), "winner", Now);
+        _repo.SeedActive(winner);
+        _repo.Idempotency[(User, "race-1")] =
+            new IdempotencyRecord("race-1", "fp", winner.Id);
+        _repo.ThrowConcurrentIdempotencyOnNextAdd = true;
+
+        var result = await _sut.ExecuteAsync(Command(key: "race-1", fingerprint: "fp"));
+
+        Assert.Equal(AddToCollectionOutcome.Replayed, result.Outcome);
+        Assert.Equal(winner.Id, result.Record!.Id);
+    }
+
+    [Fact]
+    public async Task ConcurrentIdempotencyKeyRace_DifferentBody_ThrowsConflictNot500()
+    {
+        var winner = CollectionRecord.Create(User, Album(), "winner", Now);
+        _repo.SeedActive(winner);
+        _repo.Idempotency[(User, "race-2")] =
+            new IdempotencyRecord("race-2", "fp-original", winner.Id);
+        _repo.ThrowConcurrentIdempotencyOnNextAdd = true;
+
+        var ex = await Assert.ThrowsAsync<IdempotencyConflictException>(() =>
+            _sut.ExecuteAsync(Command(key: "race-2", fingerprint: "fp-different")));
+
+        Assert.Equal("idempotency_key_reused", ex.Code);
     }
 
     [Fact]

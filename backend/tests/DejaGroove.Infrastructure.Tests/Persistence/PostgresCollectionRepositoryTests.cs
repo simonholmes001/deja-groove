@@ -63,6 +63,20 @@ public sealed class PostgresCollectionRepositoryTests(PostgresFixture fx)
     }
 
     [Fact]
+    public async Task Add_ReusedIdempotencyKey_ThrowsConcurrentIdempotencyNot500()
+    {
+        // The (user_id, idempotency_key) PK violation must be translated, not
+        // bubble as an unhandled server error.
+        var user = Guid.NewGuid();
+        await Repo().AddAsync(New(user, Mbid($"k1-{Guid.NewGuid():N}")),
+            new IdempotencyWrite("dup-key", "fp"));
+
+        await Assert.ThrowsAsync<ConcurrentIdempotencyKeyException>(() =>
+            Repo().AddAsync(New(user, Mbid($"k2-{Guid.NewGuid():N}")),
+                new IdempotencyWrite("dup-key", "fp")));
+    }
+
+    [Fact]
     public async Task FindActiveByIdentity_MatchesByMbid()
     {
         var user = Guid.NewGuid();

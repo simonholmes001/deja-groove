@@ -73,6 +73,15 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
                 throw new DuplicateCollectionRecordException(
                     $"Collection record violates {ex.ConstraintName}.");
             }
+            catch (PostgresException ex) when (ex.SqlState == "23505" &&
+                                               ex.ConstraintName == "collection_idempotency_keys_pkey")
+            {
+                // A concurrent request committed this (user, key) binding
+                // first. The use case re-reads it and replays the winner's
+                // result instead of failing the safe retry.
+                throw new ConcurrentIdempotencyKeyException(
+                    "Idempotency key was committed concurrently by another request.");
+            }
         }, ct);
 
     public Task<CollectionRecord?> FindActiveByIdentityAsync(

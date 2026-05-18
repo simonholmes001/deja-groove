@@ -13,6 +13,7 @@ internal sealed class FakeCollectionRepository : ICollectionRepository
     private readonly List<CollectionRecord> _records = [];
     public int AddCalls { get; private set; }
     public bool ThrowDuplicateOnNextAdd { get; set; }
+    public bool ThrowConcurrentIdempotencyOnNextAdd { get; set; }
 
     public Task<CollectionRecord> AddAsync(
         CollectionRecord record, IdempotencyWrite? idempotency, CancellationToken ct = default)
@@ -22,6 +23,11 @@ internal sealed class FakeCollectionRepository : ICollectionRepository
         {
             ThrowDuplicateOnNextAdd = false;
             throw new DuplicateCollectionRecordException("unique violation");
+        }
+        if (ThrowConcurrentIdempotencyOnNextAdd)
+        {
+            ThrowConcurrentIdempotencyOnNextAdd = false;
+            throw new ConcurrentIdempotencyKeyException("idempotency key raced");
         }
 
         _records.Add(record);

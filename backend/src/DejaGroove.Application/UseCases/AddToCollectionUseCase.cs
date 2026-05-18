@@ -73,6 +73,15 @@ public sealed class AddToCollectionUseCase(
                 : throw new DuplicateCollectionRecordException(
                     "Duplicate insert raced but the winning row could not be re-read.");
         }
+        catch (ConcurrentIdempotencyKeyException)
+        {
+            // A concurrent request committed the same idempotency key first.
+            // Replaying now yields the winner's record, or a 409 conflict if
+            // the bodies differ — never a 500 for a safe retry.
+            return await TryReplayAsync(command, ct)
+                ?? throw new ConcurrentIdempotencyKeyException(
+                    "Idempotency key raced but the winning binding could not be re-read.");
+        }
     }
 
     private async Task<AddToCollectionResult?> TryReplayAsync(
