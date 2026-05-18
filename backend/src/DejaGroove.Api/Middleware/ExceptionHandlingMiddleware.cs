@@ -48,6 +48,18 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 context,
                 new ApiErrorDefinition(503, serviceUnavailableException.Code, serviceUnavailableException.Message, true));
         }
+        catch (NotFoundException notFoundException)
+        {
+            await WriteErrorAsync(context, 404, notFoundException.Code, notFoundException.Message, retryable: false);
+        }
+        catch (ConflictException conflictException)
+        {
+            await WriteErrorAsync(context, 409, conflictException.Code, conflictException.Message, retryable: false);
+        }
+        catch (UnprocessableEntityException unprocessableEntityException)
+        {
+            await WriteErrorAsync(context, 422, unprocessableEntityException.Code, unprocessableEntityException.Message, retryable: false);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled exception for request {RequestId}",

@@ -2,18 +2,26 @@ using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Requests;
 using DejaGroove.Api.Errors;
 using DejaGroove.Api.Responses;
+using DejaGroove.Api.Features;
 using DejaGroove.Application.Commands;
 using DejaGroove.Application.Exceptions;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Scanning;
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using System.Security.Claims;
 
 namespace DejaGroove.Api.Controllers;
 
 [ApiController]
 [Route("v1")]
-public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<ScanRequest> validator) : ControllerBase
+public sealed class ScanController(
+    IScanWorkflowUseCase useCase,
+    IResolveAmbiguousScanUseCase resolveUseCase,
+    IValidator<ScanRequest> validator,
+    IOptions<ScanFeaturesOptions> featureOptions) : ControllerBase
 {
     private const long MaxImageBytes = 10 * 1024 * 1024;
 
@@ -42,8 +50,10 @@ public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<Scan
 
         await using var imageStream = request.Image!.OpenReadStream();
 
+        var hasUserId = TryGetUserId(out var userId);
+
         var command = new ScanCommand(
-            UserId: null, // Populated from authenticated claims in #16
+            UserId: hasUserId ? userId : null,
             ClientScanId: clientScanId,
             ImageStream: imageStream,
             ContentType: request.Image.ContentType,
@@ -53,6 +63,39 @@ public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<Scan
         var result = await useCase.ExecuteAsync(command, ct);
 
         return Ok(MapToResponse(result, requestId));
+    }
+
+    [Authorize(Policy = "IdentityContract")]
+    [HttpPost("scan/{requestId:guid}/resolve")]
+    public async Task<IActionResult> ResolveAsync([FromRoute] Guid requestId, [FromBody] ResolveScanRequest request, CancellationToken ct)
+    {
+        if (!featureOptions.Value.EnableResolveEndpoint)
+            return NotFound();
+
+        if (!TryGetUserId(out var userId))
+        {
+            var currentRequestId = HttpContext.Items[RequestIdMiddleware.RequestIdKey] is Guid g ? g : Guid.Empty;
+            return Unauthorized(new ErrorResponse
+            {
+                Error = new ErrorDetail
+                {
+                    Code = "invalid_subject_claim",
+                    Message = "Token subject must be a UUID.",
+                    Retryable = false,
+                    RequestId = currentRequestId
+                }
+            });
+        }
+
+        var command = new ResolveAmbiguousScanCommand(userId, requestId, request.SelectedMbid, request.SelectedDiscogsReleaseId);
+        var resolved = await resolveUseCase.ExecuteAsync(command, ct);
+        return Ok(MapToResponse(resolved, requestId));
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var subject = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(subject, out userId);
     }
 
     private static ScanResponse MapToResponse(ScanResult result, Guid requestId)
