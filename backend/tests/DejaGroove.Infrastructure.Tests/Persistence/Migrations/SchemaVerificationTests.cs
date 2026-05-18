@@ -337,6 +337,11 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [InlineData("scan_events")]
     [InlineData("scan_results_cache")]
     [InlineData("collection_audit_log")]
+    [InlineData("scan_request_status")]
+    [InlineData("scan_ambiguities")]
+    [InlineData("scan_ambiguity_candidates")]
+    [InlineData("scan_resolutions")]
+    [InlineData("scan_resolution_audit_log")]
     public async Task AllApplicationTables_HaveRowLevelSecurityEnabled(string tableName)
     {
         await using var conn = CreateConnection();
@@ -353,6 +358,11 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     [InlineData("scan_events",          "rls_scan_events")]
     [InlineData("scan_results_cache",   "rls_scan_results_cache")]
     [InlineData("collection_audit_log", "rls_collection_audit_log")]
+    [InlineData("scan_request_status", "rls_scan_request_status")]
+    [InlineData("scan_ambiguities", "rls_scan_ambiguities")]
+    [InlineData("scan_ambiguity_candidates", "rls_scan_ambiguity_candidates")]
+    [InlineData("scan_resolutions", "rls_scan_resolutions")]
+    [InlineData("scan_resolution_audit_log", "rls_scan_resolution_audit_log")]
     public async Task AllApplicationTables_HaveRlsPolicy(string tableName, string policyName)
     {
         await using var conn = CreateConnection();
@@ -406,6 +416,20 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
         await conn.ExecuteAsync(
             "INSERT INTO collection_audit_log (collection_record_id, user_id, operation) VALUES (gen_random_uuid(), @u, 'INSERT')",
             new { u = userId });
+        await conn.ExecuteAsync(
+            "INSERT INTO scan_request_status (user_id, request_id, result_status) VALUES (@u, gen_random_uuid(), 'Ambiguous')",
+            new { u = userId });
+        await conn.ExecuteAsync(
+            @"WITH req AS (
+                SELECT gen_random_uuid() AS request_id
+            )
+            INSERT INTO scan_ambiguities (user_id, request_id, confidence)
+            SELECT @u, request_id, 0.7 FROM req",
+            new { u = userId });
+        await conn.ExecuteAsync(
+            @"INSERT INTO scan_resolution_audit_log (user_id, request_id, selected_mbid)
+              VALUES (@u, gen_random_uuid(), 'audit-mbid')",
+            new { u = userId });
 
         // Execute purge
         await conn.ExecuteAsync("SELECT purge_user(@u)", new { u = userId });
@@ -417,6 +441,11 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
             await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_events WHERE user_id = @u", new { u = userId }),
             await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_results_cache WHERE user_id = @u", new { u = userId }),
             await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM collection_audit_log WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_request_status WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_ambiguities WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_ambiguity_candidates WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_resolutions WHERE user_id = @u", new { u = userId }),
+            await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM scan_resolution_audit_log WHERE user_id = @u", new { u = userId }),
         };
 
         Assert.All(counts, c => Assert.Equal(0, c));

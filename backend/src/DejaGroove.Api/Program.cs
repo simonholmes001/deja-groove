@@ -28,6 +28,7 @@ builder.Services.Configure<ApiBehaviorOptions>(o =>
 
 // Application layer
 builder.Services.AddScoped<IScanWorkflowUseCase, ScanWorkflowUseCase>();
+builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUseCase>();
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
@@ -36,6 +37,7 @@ if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Te
     builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
 }
 else
 {
@@ -45,6 +47,7 @@ else
     builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
 }
 
 // Validation

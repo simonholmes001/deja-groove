@@ -30,7 +30,7 @@ public sealed class MigrationRunnerTests : IAsyncLifetime
         await runner.ApplyAsync();
 
         var missing = new List<string>();
-        foreach (var table in new[] { "collection_records", "scan_events", "scan_results_cache", "collection_audit_log" })
+        foreach (var table in new[] { "collection_records", "scan_events", "scan_results_cache", "collection_audit_log", "scan_request_status", "scan_ambiguities", "scan_ambiguity_candidates", "scan_resolutions", "scan_resolution_audit_log" })
         {
             if (!await TableExistsAsync(table))
                 missing.Add(table);
