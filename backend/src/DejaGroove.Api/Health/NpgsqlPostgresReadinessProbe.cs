@@ -6,10 +6,10 @@ public sealed class NpgsqlPostgresReadinessProbe(IConfiguration configuration) :
 {
     public async Task<PostgresReadinessResult> CheckAsync(CancellationToken cancellationToken)
     {
-        var connectionString = configuration.GetConnectionString("Postgres");
+        var connectionString = ResolveConnectionString();
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            return new PostgresReadinessResult(false, "ConnectionStrings:Postgres is not configured.");
+            return new PostgresReadinessResult(false, "ConnectionStrings:Postgres or ConnectionStrings:PostgresAdmin is not configured.");
         }
 
         try
@@ -27,5 +27,13 @@ public sealed class NpgsqlPostgresReadinessProbe(IConfiguration configuration) :
         {
             return new PostgresReadinessResult(false, "PostgreSQL connection failed.");
         }
+    }
+
+    private string? ResolveConnectionString()
+    {
+        // Health should track the same database contract used by the app in this branch.
+        // Prefer runtime connection, then fall back to admin connection used by startup migrations.
+        return configuration.GetConnectionString("Postgres")
+            ?? configuration.GetConnectionString("PostgresAdmin");
     }
 }

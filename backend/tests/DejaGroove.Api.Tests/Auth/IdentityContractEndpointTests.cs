@@ -99,17 +99,20 @@ public sealed class IdentityContractEndpointTests
     }
 
     [Fact]
-    public async Task ContractProbe_WithEmptySub_IsDenied()
+    public async Task ContractProbe_WithEmptySub_ReturnsStandardized403Envelope()
     {
         using var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", BuildToken(subValue: ""));
 
         var response = await client.GetAsync("/v1/identity/contract-probe");
+        var body = JsonSerializer.Deserialize<ErrorResponse>(
+            await response.Content.ReadAsStringAsync())!;
 
-        Assert.True(
-            response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized,
-            $"Expected 401/403 but got {(int)response.StatusCode} ({response.StatusCode}).");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("forbidden", body.Error.Code);
+        Assert.False(body.Error.Retryable);
+        Assert.NotEqual(Guid.Empty, body.Error.RequestId);
     }
 
     [Fact]

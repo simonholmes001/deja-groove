@@ -50,15 +50,21 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         }
         catch (NotFoundException notFoundException)
         {
-            await WriteErrorAsync(context, 404, notFoundException.Code, notFoundException.Message, retryable: false);
+            await ApiErrorResponseWriter.WriteAsync(
+                context,
+                new ApiErrorDefinition(404, notFoundException.Code, notFoundException.Message, false));
         }
         catch (ConflictException conflictException)
         {
-            await WriteErrorAsync(context, 409, conflictException.Code, conflictException.Message, retryable: false);
+            await ApiErrorResponseWriter.WriteAsync(
+                context,
+                new ApiErrorDefinition(409, conflictException.Code, conflictException.Message, false));
         }
         catch (UnprocessableEntityException unprocessableEntityException)
         {
-            await WriteErrorAsync(context, 422, unprocessableEntityException.Code, unprocessableEntityException.Message, retryable: false);
+            await ApiErrorResponseWriter.WriteAsync(
+                context,
+                new ApiErrorDefinition(422, unprocessableEntityException.Code, unprocessableEntityException.Message, false));
         }
         catch (Exception ex)
         {
