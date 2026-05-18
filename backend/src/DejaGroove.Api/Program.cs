@@ -1,4 +1,5 @@
 using DejaGroove.Api.Auth;
+using DejaGroove.Api.Features;
 using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Requests;
@@ -15,6 +16,13 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddOptions<ScanFeaturesOptions>()
+    .Bind(builder.Configuration.GetSection(ScanFeaturesOptions.SectionName));
+builder.Services.PostConfigure<ScanFeaturesOptions>(o =>
+{
+    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+        o.EnableResolveEndpoint = true;
+});
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))

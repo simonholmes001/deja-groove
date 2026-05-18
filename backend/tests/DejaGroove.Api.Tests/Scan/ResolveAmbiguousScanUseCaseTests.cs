@@ -90,5 +90,11 @@ public sealed class ResolveAmbiguousScanUseCaseTests
         var result = await sut.ExecuteAsync(new ResolveAmbiguousScanCommand(userId, requestId, Candidate.Mbid, null));
 
         Assert.Equal(ScanStatus.SafeToBuy, result.Status);
+        await repo.Received(1).PersistResolutionAsync(
+            Arg.Is<ResolvedScanSnapshot>(s =>
+                s.UserId == userId &&
+                s.RequestId == requestId &&
+                s.Result.Status == ScanStatus.SafeToBuy),
+            Arg.Any<CancellationToken>());
     }
 }

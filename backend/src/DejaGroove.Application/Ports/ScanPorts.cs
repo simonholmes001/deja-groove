@@ -60,6 +60,5 @@ public interface IAmbiguousScanRepository
     Task UpsertAmbiguousAsync(AmbiguousScanSnapshot snapshot, CancellationToken ct = default);
     Task<AmbiguousScanSnapshot?> GetAmbiguousAsync(Guid userId, Guid requestId, CancellationToken ct = default);
     Task<ResolvedScanSnapshot?> GetResolutionAsync(Guid userId, Guid requestId, CancellationToken ct = default);
-    Task SaveResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default);
-    Task AppendResolutionAuditAsync(Guid userId, Guid requestId, Domain.Shared.AlbumIdentity selectedIdentity, CancellationToken ct = default);
+    Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default);
 }

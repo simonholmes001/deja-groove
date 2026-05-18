@@ -122,3 +122,6 @@ BEGIN
     DELETE FROM collection_records WHERE user_id = p_user_id;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION purge_user(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION purge_user(UUID) TO deja_app;

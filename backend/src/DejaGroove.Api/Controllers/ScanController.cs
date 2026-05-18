@@ -1,12 +1,14 @@
 using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Requests;
 using DejaGroove.Api.Responses;
+using DejaGroove.Api.Features;
 using DejaGroove.Application.Commands;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Scanning;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace DejaGroove.Api.Controllers;
@@ -16,7 +18,8 @@ namespace DejaGroove.Api.Controllers;
 public sealed class ScanController(
     IScanWorkflowUseCase useCase,
     IResolveAmbiguousScanUseCase resolveUseCase,
-    IValidator<ScanRequest> validator) : ControllerBase
+    IValidator<ScanRequest> validator,
+    IOptions<ScanFeaturesOptions> featureOptions) : ControllerBase
 {
     private const long MaxImageBytes = 10 * 1024 * 1024;
 
@@ -80,6 +83,9 @@ public sealed class ScanController(
     [HttpPost("scan/{requestId:guid}/resolve")]
     public async Task<IActionResult> ResolveAsync([FromRoute] Guid requestId, [FromBody] ResolveScanRequest request, CancellationToken ct)
     {
+        if (!featureOptions.Value.EnableResolveEndpoint)
+            return NotFound();
+
         if (!TryGetUserId(out var userId))
         {
             var currentRequestId = HttpContext.Items[RequestIdMiddleware.RequestIdKey] is Guid g ? g : Guid.Empty;

@@ -114,14 +114,12 @@ public sealed class InMemoryAmbiguousScanRepository : IAmbiguousScanRepository
         return Task.FromResult(found ? snapshot : null);
     }
 
-    public Task SaveResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default)
+    public Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default)
     {
+        _scanStatuses[BuildKey(snapshot.UserId, snapshot.RequestId)] = snapshot.Result.Status;
         _resolutions[BuildKey(snapshot.UserId, snapshot.RequestId)] = snapshot;
         return Task.CompletedTask;
     }
-
-    public Task AppendResolutionAuditAsync(Guid userId, Guid requestId, AlbumIdentity selectedIdentity, CancellationToken ct = default) =>
-        Task.CompletedTask;
 
     private static string BuildKey(Guid userId, Guid requestId) => $"{userId:N}:{requestId:N}";
 }
@@ -177,9 +175,7 @@ public sealed class UnconfiguredAmbiguousScanRepository : IAmbiguousScanReposito
         throw ScanPortErrors.Unconfigured();
     public Task<ResolvedScanSnapshot?> GetResolutionAsync(Guid userId, Guid requestId, CancellationToken ct = default) =>
         throw ScanPortErrors.Unconfigured();
-    public Task SaveResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default) =>
-        throw ScanPortErrors.Unconfigured();
-    public Task AppendResolutionAuditAsync(Guid userId, Guid requestId, AlbumIdentity selectedIdentity, CancellationToken ct = default) =>
+    public Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default) =>
         throw ScanPortErrors.Unconfigured();
 }
 

@@ -41,14 +41,12 @@ public sealed class ResolveAmbiguousScanUseCase(
             ? ScanResult.Owned(candidate, ownershipResult.CollectionRecordId!.Value, ambiguous.Confidence)
             : ScanResult.SafeToBuy(candidate, ambiguous.Confidence);
 
-        await ambiguousScans.SaveResolutionAsync(new ResolvedScanSnapshot(
+        await ambiguousScans.PersistResolutionAsync(new ResolvedScanSnapshot(
             command.UserId,
             command.RequestId,
             candidate,
             resolved,
             DateTimeOffset.UtcNow), ct);
-
-        await ambiguousScans.AppendResolutionAuditAsync(command.UserId, command.RequestId, candidate, ct);
 
         return resolved;
     }

@@ -393,6 +393,17 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PurgeUserFunction_GrantsExecuteToDejaApp()
+    {
+        await using var conn = CreateConnection();
+
+        var hasExecute = await conn.ExecuteScalarAsync<bool>(
+            "SELECT has_function_privilege('deja_app', 'public.purge_user(uuid)', 'EXECUTE')");
+
+        Assert.True(hasExecute);
+    }
+
+    [Fact]
     public async Task PurgeUserFunction_DeletesAllRowsForUser()
     {
         await using var conn = CreateConnection();

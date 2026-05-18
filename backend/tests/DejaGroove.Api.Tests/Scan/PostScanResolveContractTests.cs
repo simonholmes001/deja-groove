@@ -96,6 +96,20 @@ public sealed class PostScanResolveContractTests
         Assert.Equal(useCase.Calls[0], useCase.Calls[1]);
     }
 
+    [Fact]
+    public async Task Resolve_WithNonGuidSubjectClaim_Returns401()
+    {
+        var requestId = Guid.NewGuid();
+        using var client = CreateClient(new ThrowingResolveUseCase(new NotFoundException("scan_request_not_found", "missing")));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BuildToken("not-a-guid"));
+
+        var response = await client.PostAsync($"/v1/scan/{requestId}/resolve", BuildBody("mbid-1", null));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await DeserializeAsync<ErrorResponse>(response);
+        Assert.Equal("invalid_subject_claim", body.Error.Code);
+    }
+
     private static HttpClient CreateClient(IResolveAmbiguousScanUseCase resolveUseCase)
     {
         var factory = new WebApplicationFactory<Program>()
