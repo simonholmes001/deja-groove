@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
+using DejaGroove.Api.Responses;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -62,6 +64,38 @@ public sealed class IdentityContractEndpointTests
         using var client = CreateClient();
         var response = await client.GetAsync("/v1/identity/contract-probe");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ContractProbe_WithoutToken_ReturnsStandardized401Envelope()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/v1/identity/contract-probe");
+
+        var body = JsonSerializer.Deserialize<ErrorResponse>(
+            await response.Content.ReadAsStringAsync())!;
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("unauthorized", body.Error.Code);
+        Assert.False(body.Error.Retryable);
+        Assert.NotEqual(Guid.Empty, body.Error.RequestId);
+    }
+
+    [Fact]
+    public async Task UnknownRoute_ReturnsStandardized404Envelope()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/v1/does-not-exist");
+
+        var body = JsonSerializer.Deserialize<ErrorResponse>(
+            await response.Content.ReadAsStringAsync())!;
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("not_found", body.Error.Code);
+        Assert.False(body.Error.Retryable);
+        Assert.NotEqual(Guid.Empty, body.Error.RequestId);
     }
 
     [Fact]

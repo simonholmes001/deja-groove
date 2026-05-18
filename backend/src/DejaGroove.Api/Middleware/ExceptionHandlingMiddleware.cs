@@ -1,6 +1,5 @@
-using System.Text.Json;
+using DejaGroove.Api.Errors;
 using DejaGroove.Application.Exceptions;
-using DejaGroove.Api.Responses;
 
 namespace DejaGroove.Api.Middleware;
 
@@ -12,6 +11,21 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         {
             await next(context);
         }
+        catch (HttpErrorException httpErrorException)
+        {
+            logger.LogWarning(
+                "HTTP error response for request {RequestId}: {Code}",
+                context.Items[RequestIdMiddleware.RequestIdKey],
+                httpErrorException.Code);
+
+            await ApiErrorResponseWriter.WriteAsync(
+                context,
+                new ApiErrorDefinition(
+                    httpErrorException.StatusCode,
+                    httpErrorException.Code,
+                    httpErrorException.Message,
+                    httpErrorException.Retryable));
+        }
         catch (InputValidationException validationException)
         {
             logger.LogWarning(
@@ -19,12 +33,9 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 context.Items[RequestIdMiddleware.RequestIdKey],
                 validationException.Code);
 
-            await WriteErrorAsync(
+            await ApiErrorResponseWriter.WriteAsync(
                 context,
-                400,
-                validationException.Code,
-                validationException.Message,
-                retryable: false);
+                new ApiErrorDefinition(400, validationException.Code, validationException.Message, false));
         }
         catch (ServiceUnavailableException serviceUnavailableException)
         {
@@ -33,40 +44,15 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 context.Items[RequestIdMiddleware.RequestIdKey],
                 serviceUnavailableException.Code);
 
-            await WriteErrorAsync(
+            await ApiErrorResponseWriter.WriteAsync(
                 context,
-                503,
-                serviceUnavailableException.Code,
-                serviceUnavailableException.Message,
-                retryable: true);
+                new ApiErrorDefinition(503, serviceUnavailableException.Code, serviceUnavailableException.Message, true));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled exception for request {RequestId}",
                 context.Items[RequestIdMiddleware.RequestIdKey]);
-            await WriteErrorAsync(context, 500, "internal_error", "An unexpected error occurred.", retryable: true);
+            await ApiErrorResponseWriter.WriteAsync(context, ApiErrorCatalog.InternalError);
         }
-    }
-
-    private static Task WriteErrorAsync(HttpContext context, int statusCode, string code, string message, bool retryable)
-    {
-        if (context.Response.HasStarted)
-            return Task.CompletedTask;
-
-        var requestId = context.Items[RequestIdMiddleware.RequestIdKey] is Guid g ? g : Guid.Empty;
-        var envelope = new ErrorResponse
-        {
-            Error = new ErrorDetail
-            {
-                Code = code,
-                Message = message,
-                Retryable = retryable,
-                RequestId = requestId
-            }
-        };
-
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/json";
-        return context.Response.WriteAsync(JsonSerializer.Serialize(envelope));
     }
 }

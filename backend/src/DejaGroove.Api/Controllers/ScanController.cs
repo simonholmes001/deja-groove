@@ -1,7 +1,9 @@
 using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Requests;
+using DejaGroove.Api.Errors;
 using DejaGroove.Api.Responses;
 using DejaGroove.Application.Commands;
+using DejaGroove.Application.Exceptions;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Scanning;
 using FluentValidation;
@@ -24,31 +26,15 @@ public sealed class ScanController(IScanWorkflowUseCase useCase, IValidator<Scan
         // 10 MB limit check — return 413 before validation
         if (request.Image != null && request.Image.Length > MaxImageBytes)
         {
-            return StatusCode(413, new ErrorResponse
-            {
-                Error = new ErrorDetail
-                {
-                    Code = "image_too_large",
-                    Message = "Image must be ≤ 10 MB.",
-                    Retryable = false,
-                    RequestId = requestId
-                }
-            });
+            throw new HttpErrorException(413, "image_too_large", "Image must be ≤ 10 MB.", retryable: false);
         }
 
         var validation = await validator.ValidateAsync(request, ct);
         if (!validation.IsValid)
         {
-            return BadRequest(new ErrorResponse
-            {
-                Error = new ErrorDetail
-                {
-                    Code = "validation_error",
-                    Message = string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)),
-                    Retryable = false,
-                    RequestId = requestId
-                }
-            });
+            throw new InputValidationException(
+                "validation_error",
+                string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
         }
 
         _ = Guid.TryParse(request.ClientScanId, out var clientScanId);

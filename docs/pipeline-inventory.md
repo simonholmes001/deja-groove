@@ -58,13 +58,12 @@ Repository: `simonholmes001/deja-groove`
 
 ### `Infrastructure Deploy (Dev)`
 - File: `.github/workflows/infrastructure-deploy-dev.yaml`
-- Purpose: deploys infra changes to dev on merge to `main` and verifies ingress controls.
+- Purpose: deploys infra changes to dev on merge to `main` and verifies backend and gateway health routes.
 - Triggers: push to `main` for infra changes and manual dispatch.
 - Key checks:
   - Deploy subscription-scope Bicep
-  - Assert App Service access-restriction policy shape (default deny, single APIM allow rule, no extra allows)
-  - Verify direct App Service access is denied
-  - Verify APIM route reachability
+  - Verify the App Service health endpoint responds on `/health`
+  - Verify the APIM health route responds on `/health`
 - Required secrets:
   - `AZURE_CLIENT_ID`
   - `AZURE_TENANT_ID`
