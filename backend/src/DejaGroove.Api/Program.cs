@@ -11,6 +11,7 @@ using DejaGroove.Api.Hosting;
 using DejaGroove.Infrastructure.Persistence;
 using DejaGroove.Infrastructure.Persistence.Caching;
 using DejaGroove.Infrastructure.Persistence.Collection;
+using DejaGroove.Infrastructure.Persistence.Scanning;
 using DejaGroove.Infrastructure.Persistence.Migrations;
 using FluentValidation;
 using System.Security.Claims;
@@ -52,7 +53,6 @@ if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Te
     builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
-    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
 }
 else
 {
@@ -62,7 +62,6 @@ else
     builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
-    builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
 }
 
 // Collection domain (issues #15, #16, #46, #79)
@@ -79,6 +78,7 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
     builder.Services.AddScoped<ICollectionRepository, PostgresCollectionRepository>();
     builder.Services.AddScoped<IIdempotencyStore, PostgresIdempotencyStore>();
     builder.Services.AddScoped<IScanCacheInvalidationPort, PostgresScanCachePort>();
+    builder.Services.AddScoped<IAmbiguousScanRepository, PostgresAmbiguousScanRepository>();
 
     var maintenanceConnectionString = builder.Configuration.GetConnectionString("PostgresAdmin");
     if (!string.IsNullOrWhiteSpace(maintenanceConnectionString))
@@ -90,6 +90,11 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 }
 else
 {
+    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+        builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
+    else
+        builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
+
     // Development / contract-test wiring: no database required.
     builder.Services.AddSingleton<InMemoryCollectionStore>();
     builder.Services.AddScoped<ICollectionRepository, InMemoryCollectionRepository>();

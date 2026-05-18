@@ -1,0 +1,4 @@
+module DejaGrooveApp {
+    header "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveApp.build/DejaGrooveApp-Swift.h"
+    requires objc
+}

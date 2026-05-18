@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.build/master.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.build/runner.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppPackageTests.build/runner.swiftdeps"
+  }
+}

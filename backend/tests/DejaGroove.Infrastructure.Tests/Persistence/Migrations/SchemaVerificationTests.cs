@@ -404,6 +404,37 @@ public sealed class SchemaVerificationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScanResolutionPolicies_UseCurrentUserIdNullSafeExpression()
+    {
+        await using var conn = CreateConnection();
+
+        var count = await conn.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(*)
+            FROM pg_policies
+            WHERE schemaname = 'public'
+              AND tablename IN ('scan_request_status','scan_ambiguities','scan_ambiguity_candidates','scan_resolutions','scan_resolution_audit_log')
+              AND qual ILIKE '%app.current_user_id%'
+              AND qual ILIKE '%NULLIF%'
+              AND with_check ILIKE '%app.current_user_id%'
+              AND with_check ILIKE '%NULLIF%'
+            """);
+
+        Assert.Equal(5, count);
+    }
+
+    [Fact]
+    public async Task ScanResolutions_GrantsUpdateToDejaApp()
+    {
+        await using var conn = CreateConnection();
+
+        var hasUpdate = await conn.ExecuteScalarAsync<bool>(
+            "SELECT has_table_privilege('deja_app', 'public.scan_resolutions', 'UPDATE')");
+
+        Assert.True(hasUpdate);
+    }
+
+    [Fact]
     public async Task PurgeUserFunction_DeletesAllRowsForUser()
     {
         await using var conn = CreateConnection();

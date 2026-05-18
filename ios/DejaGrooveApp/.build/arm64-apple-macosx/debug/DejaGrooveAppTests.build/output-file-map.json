@@ -1,0 +1,17 @@
+{
+  "": {
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/master.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/Tests/DejaGrooveAppTests/ApiClientTests.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ApiClientTests.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ApiClientTests.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ApiClientTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ApiClientTests.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/Tests/DejaGrooveAppTests/ViewModelTests.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ViewModelTests.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ViewModelTests.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ViewModelTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAppTests.build/ViewModelTests.swiftdeps"
+  }
+}

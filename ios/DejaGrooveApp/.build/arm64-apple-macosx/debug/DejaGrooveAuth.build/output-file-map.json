@@ -1,0 +1,23 @@
+{
+  "": {
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/master.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveAuth/Sources/DejaGrooveAuth/AuthProtocols.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthProtocols.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthProtocols.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthProtocols~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthProtocols.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveAuth/Sources/DejaGrooveAuth/AuthSessionManager.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionManager.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionManager.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionManager.swiftdeps"
+  },
+  "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveAuth/Sources/DejaGrooveAuth/AuthSessionModels.swift": {
+    "dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionModels.d",
+    "object": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionModels.swift.o",
+    "swiftmodule": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionModels~partial.swiftmodule",
+    "swift-dependencies": "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveApp/.build/arm64-apple-macosx/debug/DejaGrooveAuth.build/AuthSessionModels.swiftdeps"
+  }
+}

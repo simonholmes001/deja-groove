@@ -1,0 +1,24 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "dejagrooveauth",
+          "kind" : "fileSystem",
+          "location" : "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveAuth",
+          "name" : "DejaGrooveAuth"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/simonholmes/Projects/Applications/Deja_Groove-prodlike-readiness/ios/DejaGrooveAuth"
+        },
+        "subpath" : "dejagrooveauth"
+      }
+    ]
+  },
+  "version" : 6
+}
