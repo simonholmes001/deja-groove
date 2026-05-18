@@ -24,6 +24,13 @@ public interface IScanCachePort
     Task StoreAsync(Guid userId, PerceptualHash hash, ScanResult result, TimeSpan ttl, CancellationToken ct = default);
 }
 
+/// <summary>Out-of-band maintenance for the pHash cache (issue #79):
+/// time-based eviction of expired entries.</summary>
+public interface IScanCacheMaintenance
+{
+    Task<int> PurgeExpiredAsync(CancellationToken ct = default);
+}
+
 public interface IAlbumMatchingPort
 {
     Task<ScanResult> IdentifyAsync(Stream imageStream, CancellationToken ct = default);

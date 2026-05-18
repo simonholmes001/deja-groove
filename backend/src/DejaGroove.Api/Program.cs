@@ -7,6 +7,10 @@ using DejaGroove.Api.Validation;
 using DejaGroove.Api.Health;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
+using DejaGroove.Api.Hosting;
+using DejaGroove.Infrastructure.Persistence;
+using DejaGroove.Infrastructure.Persistence.Caching;
+using DejaGroove.Infrastructure.Persistence.Collection;
 using DejaGroove.Infrastructure.Persistence.Migrations;
 using FluentValidation;
 using System.Security.Claims;
@@ -59,6 +63,38 @@ else
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
     builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
+}
+
+// Collection domain (issues #15, #16, #46, #79)
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IAddToCollectionUseCase, AddToCollectionUseCase>();
+builder.Services.AddScoped<ICollectionQueryUseCase, CollectionQueryUseCase>();
+
+var runtimeConnectionString = builder.Configuration.GetConnectionString("Postgres");
+if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
+{
+    builder.Services.AddSingleton(new PostgresConnectionFactory(runtimeConnectionString));
+    builder.Services.AddScoped<ICollectionRepository, PostgresCollectionRepository>();
+    builder.Services.AddScoped<IIdempotencyStore, PostgresIdempotencyStore>();
+    builder.Services.AddScoped<IScanCacheInvalidationPort, PostgresScanCachePort>();
+
+    var maintenanceConnectionString = builder.Configuration.GetConnectionString("PostgresAdmin");
+    if (!string.IsNullOrWhiteSpace(maintenanceConnectionString))
+    {
+        builder.Services.AddSingleton<IScanCacheMaintenance>(
+            new ScanCachePurger(maintenanceConnectionString));
+        builder.Services.AddHostedService<ScanCachePurgeService>();
+    }
+}
+else
+{
+    // Development / contract-test wiring: no database required.
+    builder.Services.AddSingleton<InMemoryCollectionStore>();
+    builder.Services.AddScoped<ICollectionRepository, InMemoryCollectionRepository>();
+    builder.Services.AddScoped<IIdempotencyStore, InMemoryIdempotencyStore>();
+    builder.Services.AddSingleton<IScanCacheInvalidationPort, NoOpScanCacheInvalidation>();
 }
 
 // Validation
