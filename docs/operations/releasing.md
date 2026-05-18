@@ -27,9 +27,12 @@ an automatic consequence of feature count.
 
 ## Cadence
 
-Release **when a meaningful, coherent set of changes has merged to `main`** —
-not on a fixed date and not per-PR. Because multiple streams (backend, iOS,
-infra, API) merge to `main`, batching keeps release notes readable.
+Releases are automated from `main` by `.github/workflows/release.yml`.
+
+- Every releasable PR must include a changeset file under `.changeset/`.
+- The release workflow computes the next semantic version from pending
+  changeset files and publishes a GitHub Release with generated notes.
+- If no pending changeset files exist since the last tag, no release is made.
 
 ## Prerequisites for readable notes
 
@@ -38,31 +41,13 @@ Release notes are only as good as PR hygiene. Every PR must:
 - Have a clear, user-meaningful title (it becomes a changelog line).
 - Carry exactly one primary `type:*` label so it lands in the right
   category. Categories are defined in [`.github/release.yml`](../../.github/release.yml).
+- Include a changeset file (`.changeset/*.md`) for releasable changes.
 
-## Cutting a release
+## Triggering a release
 
-> Tagging and publishing a release are release-impacting actions. Confirm the
-> intended scope before running these steps.
-
-1. Ensure `main` is green and at the commit you intend to release:
-   ```
-   git fetch origin --prune
-   git switch main && git merge --ff-only origin/main
-   ```
-2. Choose the next version per the rules above (e.g. `v0.1.0`).
-3. Create an annotated tag and push it:
-   ```
-   git tag -a v0.1.0 -m "v0.1.0"
-   git push origin v0.1.0
-   ```
-4. Draft the release from the tag, letting GitHub generate the notes:
-   ```
-   gh release create v0.1.0 --target main --title "v0.1.0" --generate-notes --draft
-   ```
-5. Review the draft in the GitHub UI (**Releases** → the draft). Reword
-   noisy lines, add a short human "Highlights" section at the top if useful,
-   recategorize PRs by fixing their labels and regenerating if needed.
-6. Publish the release.
+1. Merge PRs with valid changeset files into `main`.
+2. GitHub Actions `Release` workflow runs automatically on push to `main`.
+3. Optionally run the `Release` workflow manually via `workflow_dispatch`.
 
 ## Baseline release (`v0.0.0`)
 
