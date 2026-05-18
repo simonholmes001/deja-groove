@@ -42,7 +42,6 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          AZURE_POSTGRES_APP_PASSWORD: ${{ secrets.AZURE_POSTGRES_APP_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
@@ -51,10 +50,6 @@ jobs:
           fi
           if [ -z "${AZURE_POSTGRES_ADMIN_PASSWORD:-}" ]; then
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
-            exit 1
-          fi
-          if [ -z "${AZURE_POSTGRES_APP_PASSWORD:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_APP_PASSWORD secret."
             exit 1
           fi
           echo "LOGIN_LEN=${#AZURE_POSTGRES_ADMIN_LOGIN}"
@@ -75,7 +70,6 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          AZURE_POSTGRES_APP_PASSWORD: ${{ secrets.AZURE_POSTGRES_APP_PASSWORD }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
@@ -110,7 +104,6 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
-              --parameters postgresApplicationLoginPassword="${AZURE_POSTGRES_APP_PASSWORD}" \
               "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?
