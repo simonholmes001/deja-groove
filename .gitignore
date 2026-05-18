@@ -7,3 +7,6 @@ backend/**/TestResults/
 backend/**/.vs/
 backend/**/*.suo
 backend/coverage-results/
+
+# SwiftPM build artefacts
+ios/**/.build/
