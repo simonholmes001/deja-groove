@@ -7,6 +7,20 @@ on:
     branches: [main]
 
 jobs:
+  changeset-check:
+    name: Changeset Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require changeset for releasable changes
+        shell: bash
+        run: bash .github/scripts/changeset-check.sh
+
   codex-review-tests:
     name: Codex Review Script Tests
     runs-on: ubuntu-latest
@@ -21,6 +35,19 @@ jobs:
 
       - name: Run Codex review script tests
         run: node --test .github/scripts/*.test.mjs
+
+  release-script-tests:
+    name: Release Script Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run release script tests
+        shell: bash
+        run: |
+          bash .github/scripts/compute-next-release.test.sh
+          bash .github/scripts/changeset-check.test.sh
 
   node-tests:
     name: Node Tests
