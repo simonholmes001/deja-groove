@@ -127,6 +127,8 @@ public sealed class PostgresAmbiguousScanRepository(PostgresConnectionFactory fa
 
     public async Task PersistResolutionAsync(ResolvedScanSnapshot snapshot, CancellationToken ct = default)
     {
+        EnsurePersistableResolutionStatus(snapshot.Result.Status);
+
         _ = await UserScope.RunAsync(factory, snapshot.UserId, async (conn, tx) =>
         {
             await conn.ExecuteAsync(new CommandDefinition(
@@ -228,11 +230,19 @@ public sealed class PostgresAmbiguousScanRepository(PostgresConnectionFactory fa
         public ResolvedScanSnapshot ToSnapshot(Guid userId, Guid requestId)
         {
             var selected = AlbumIdentity.Create(selected_mbid, selected_discogs_release_id, null, null, null);
-            var album = AlbumIdentity.Create(album_mbid, album_discogs_release_id, album_title, album_artist, album_year);
             var status = ParseStatus(result_status, "scan_resolutions.result_status");
-            var result = status == ScanStatus.Owned
-                ? ScanResult.Owned(album, collection_record_id, confidence)
-                : ScanResult.SafeToBuy(album, confidence);
+            var result = status switch
+            {
+                ScanStatus.Owned => ScanResult.Owned(
+                    AlbumIdentity.Create(album_mbid, album_discogs_release_id, album_title, album_artist, album_year),
+                    collection_record_id,
+                    confidence),
+                ScanStatus.SafeToBuy => ScanResult.SafeToBuy(
+                    AlbumIdentity.Create(album_mbid, album_discogs_release_id, album_title, album_artist, album_year),
+                    confidence),
+                _ => throw new InvalidOperationException(
+                    $"Unsupported resolution status '{status}' read from scan_resolutions.result_status.")
+            };
             return new ResolvedScanSnapshot(userId, requestId, selected, result, resolved_at);
         }
     }
@@ -244,5 +254,14 @@ public sealed class PostgresAmbiguousScanRepository(PostgresConnectionFactory fa
 
         throw new InvalidOperationException(
             $"Unexpected scan status '{value}' read from {source}.");
+    }
+
+    private static void EnsurePersistableResolutionStatus(ScanStatus status)
+    {
+        if (status is ScanStatus.Owned or ScanStatus.SafeToBuy)
+            return;
+
+        throw new InvalidOperationException(
+            $"Unsupported resolution status '{status}' for scan_resolutions persistence.");
     }
 }

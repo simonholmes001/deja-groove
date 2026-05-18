@@ -126,4 +126,23 @@ public sealed class PostgresAmbiguousScanRepositoryTests(PostgresFixture fx)
         var status = await Repo().GetScanStatusAsync(Guid.NewGuid(), Guid.NewGuid());
         Assert.Null(status);
     }
+
+    [Fact]
+    public async Task PersistResolutionAsync_WhenStatusIsNotPersistable_ThrowsClearError()
+    {
+        var user = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var selected = AlbumIdentity.Create("sel-1", null, "Sel", "Artist", 2000);
+        var invalidResult = ScanResult.NoMatch();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Repo().PersistResolutionAsync(new ResolvedScanSnapshot(
+                user,
+                requestId,
+                selected,
+                invalidResult,
+                DateTimeOffset.UtcNow)));
+
+        Assert.Contains("Unsupported resolution status", ex.Message);
+    }
 }
