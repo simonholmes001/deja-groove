@@ -44,12 +44,9 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 context.Items[RequestIdMiddleware.RequestIdKey],
                 idempotencyConflict.Code);
 
-            await WriteErrorAsync(
+            await ApiErrorResponseWriter.WriteAsync(
                 context,
-                409,
-                idempotencyConflict.Code,
-                idempotencyConflict.Message,
-                retryable: false);
+                new ApiErrorDefinition(409, idempotencyConflict.Code, idempotencyConflict.Message, false));
         }
         catch (ServiceUnavailableException serviceUnavailableException)
         {

@@ -1,7 +1,7 @@
 -- Hardening (security-review follow-on): make every per-user RLS policy
 -- null-safe against an empty-string GUC.
 --
--- The V005/V009 policies cast current_setting('app.current_user_id', true)
+-- The V005/V010 policies cast current_setting('app.current_user_id', true)
 -- directly to uuid. A custom GUC that was set with is_local=true and then
 -- reset (the normal case on a pooled backend after a transaction) reads back
 -- as '' rather than NULL, and ''::uuid raises 22P02 — turning any statement
@@ -10,7 +10,7 @@
 -- preserving the intended fail-closed behaviour in every case.
 --
 -- Forward-only: the original policies are dropped and recreated rather than
--- editing the already-applied V005/V009 scripts.
+-- editing the already-applied V005/V010 scripts.
 
 DROP POLICY rls_collection_records          ON collection_records;
 DROP POLICY rls_scan_events                 ON scan_events;

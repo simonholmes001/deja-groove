@@ -21,7 +21,7 @@ ALTER TABLE collection_idempotency_keys FORCE ROW LEVEL SECURITY;
 -- These additional PERMISSIVE policies are scoped TO PUBLIC (every role,
 -- including the owner) and only grant visibility to rows of the single user
 -- currently being purged, identified by a transaction-local GUC that is set
--- exclusively by purge_user (V011). When the GUC is unset OR has been reset
+-- exclusively by purge_user (V012). When the GUC is unset OR has been reset
 -- to an empty string (a pooled backend that previously set it), NULLIF makes
 -- the predicate NULL (never true), so these policies grant nothing and normal
 -- app traffic is unaffected (multiple permissive policies are OR-combined).

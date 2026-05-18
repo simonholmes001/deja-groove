@@ -7,7 +7,7 @@
 -- the audit trail. The actor is the row's user_id; the timestamp is the audit
 -- row's occurred_at default (now()).
 --
--- GDPR safeguard: purge_user() (V008) sets dejagroove.suppress_audit = 'on'
+-- GDPR safeguard: purge_user() (V009) sets dejagroove.suppress_audit = 'on'
 -- so erasing a user does NOT re-create audit rows for the very data being
 -- erased. current_setting(..., true) returns NULL when unset, so auditing is
 -- on by default (fail-safe: a missing flag must never silence the audit).

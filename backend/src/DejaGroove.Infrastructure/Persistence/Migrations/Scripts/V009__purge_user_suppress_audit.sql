@@ -1,6 +1,6 @@
 -- Issue #46 follow-on: keep GDPR erasure (V006 purge_user) total.
 --
--- V007 added an AFTER DELETE audit trigger on collection_records. Without this
+-- V008 added an AFTER DELETE audit trigger on collection_records. Without this
 -- change, purging a user would DELETE their collection_records and the trigger
 -- would immediately re-insert audit rows referencing the just-erased data —
 -- defeating Article 17 erasure. We set dejagroove.suppress_audit for the
