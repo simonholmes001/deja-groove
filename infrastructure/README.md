@@ -1,11 +1,10 @@
 # Deja Groove Infrastructure (Dev Bootstrap)
 
-This repository currently implements **dev-only** infrastructure in Azure using Bicep.
+This repository currently implements infrastructure in Azure using Bicep, with dev validation and deploy workflows wired today.
 
 ## Scope
 
-- Environment: `dev` only
-- Region: `swedencentral` only
+- Dev region: `swedencentral`
 - Deployment scope: **subscription** (creates resource groups + deploys resources)
 
 ## Dev Resource Group Layout
@@ -21,9 +20,11 @@ The subscription-scope template creates and manages these RGs:
 ## Ingress Posture
 
 - APIM is the intended public ingress tier.
+- App Service remains the runtime platform behind APIM.
 - App Service uses inbound access restrictions with default deny.
 - App Service allows `ApiManagement` service-tag ingress and denies all other direct internet ingress.
 - SCM/Kudu restrictions are managed separately and default to deny.
+- `GET /health` is the shared backend and platform probe endpoint.
 - PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
 
 ## Directory
@@ -53,6 +54,7 @@ For CI/CD and local script execution:
 
 - `AZURE_POSTGRES_ADMIN_LOGIN`
 - `AZURE_POSTGRES_ADMIN_PASSWORD`
+- `AZURE_POSTGRES_APP_PASSWORD`
 
 For GitHub OIDC login:
 

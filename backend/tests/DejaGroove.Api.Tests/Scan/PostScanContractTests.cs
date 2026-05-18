@@ -197,4 +197,24 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
 
         Assert.NotEqual(Guid.Empty, body.Error.RequestId);
     }
+
+    [Fact]
+    public async Task ErrorResponses_UseIncomingCorrelationIdAsRequestId()
+    {
+        var correlationId = Guid.NewGuid();
+        var form = new MultipartFormDataContent();
+        form.Add(new StringContent(Guid.NewGuid().ToString()), "clientScanId");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/scan")
+        {
+            Content = form
+        };
+        request.Headers.Add("X-Correlation-Id", correlationId.ToString());
+
+        var response = await _client.SendAsync(request);
+        var body = await DeserializeAsync<ErrorResponse>(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(correlationId, body.Error.RequestId);
+    }
 }

@@ -4,6 +4,7 @@ using DejaGroove.Api.Middleware;
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Requests;
 using DejaGroove.Api.Validation;
+using DejaGroove.Api.Health;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Infrastructure.Persistence.Migrations;
@@ -11,6 +12,8 @@ using FluentValidation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using DejaGroove.Api.Errors;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,6 +63,10 @@ else
 
 // Validation
 builder.Services.AddScoped<IValidator<ScanRequest>, ScanRequestValidator>();
+builder.Services.AddSingleton<IPostgresReadinessProbe, NpgsqlPostgresReadinessProbe>();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), ["live"])
+    .AddCheck<PostgresReadinessHealthCheck>("postgres", tags: ["ready"]);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
@@ -105,9 +112,41 @@ if (!string.IsNullOrWhiteSpace(adminConnectionString))
 
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    var response = statusCodeContext.HttpContext.Response;
+    if (response.HasStarted ||
+        response.ContentLength is > 0 ||
+        !string.IsNullOrWhiteSpace(response.ContentType))
+    {
+        return;
+    }
+
+    await ApiErrorResponseWriter.WriteAsync(
+        statusCodeContext.HttpContext,
+        ApiErrorCatalog.FromStatusCode(response.StatusCode));
+});
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    AllowCachingResponses = false,
+    ResultStatusCodes =
+    {
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy] = StatusCodes.Status200OK,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+    },
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthEndpointResponseWriter.WriteAsync
+}).AllowAnonymous();
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    AllowCachingResponses = false,
+    Predicate = registration => registration.Tags.Contains("live"),
+    ResponseWriter = HealthEndpointResponseWriter.WriteAsync
+}).AllowAnonymous();
 app.MapControllers();
 
 app.Run();

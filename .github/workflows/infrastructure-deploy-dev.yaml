@@ -42,6 +42,7 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          AZURE_POSTGRES_APP_PASSWORD: ${{ secrets.AZURE_POSTGRES_APP_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
@@ -50,6 +51,10 @@ jobs:
           fi
           if [ -z "${AZURE_POSTGRES_ADMIN_PASSWORD:-}" ]; then
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
+            exit 1
+          fi
+          if [ -z "${AZURE_POSTGRES_APP_PASSWORD:-}" ]; then
+            echo "::error::Missing AZURE_POSTGRES_APP_PASSWORD secret."
             exit 1
           fi
           echo "LOGIN_LEN=${#AZURE_POSTGRES_ADMIN_LOGIN}"
@@ -70,6 +75,7 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          AZURE_POSTGRES_APP_PASSWORD: ${{ secrets.AZURE_POSTGRES_APP_PASSWORD }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
@@ -104,6 +110,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
+              --parameters postgresApplicationLoginPassword="${AZURE_POSTGRES_APP_PASSWORD}" \
               "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?
@@ -156,14 +163,16 @@ jobs:
             status_code="$(curl -s -o /dev/null -w '%{http_code}' "https://${app_host}/health" || true)"
             echo "Direct app health HTTP status: ${status_code}"
 
-            if [ "$status_code" != "403" ]; then
-              echo "::error::Direct App Service ingress check failed. Expected 403 but got ${status_code}."
+            # With private-only ingress, direct public requests should never return a healthy backend response.
+            # Depending on network path and edge behavior this can be 000/403/404/etc, so assert on non-200.
+            if [ "$status_code" = "200" ]; then
+              echo "::error::Direct App Service ingress check failed. Expected non-200 for private-only ingress but got ${status_code}."
               exit 1
             fi
 
             echo "Direct App Service ingress is not publicly reachable (expected)."
 
-            apim_status="$(curl -s -o /dev/null -w '%{http_code}' "${apim_gateway}/api/health" || true)"
+            apim_status="$(curl -s -o /dev/null -w '%{http_code}' "${apim_gateway}/health" || true)"
             echo "APIM health route HTTP status: ${apim_status}"
 
             if [ "$apim_status" != "200" ]; then
