@@ -16,6 +16,8 @@ This runbook covers issue scope for #95, #96, and #97.
   - `APP_STORE_CONNECT_API_KEY_ID`
   - `APP_STORE_CONNECT_API_ISSUER_ID`
   - `APP_STORE_CONNECT_API_KEY_BASE64`
+  - `DEJA_GROOVE_XCODE_SCHEME`
+  - `DEJA_GROOVE_XCODE_PROJECT` or `DEJA_GROOVE_XCODE_WORKSPACE` (set exactly one)
 
 ## Privacy Manifest (#96)
 
@@ -60,6 +62,7 @@ The lane uploads to the `Internal` tester group and skips waiting for full proce
 ## Local Readiness Gate
 
 ```bash
+bash .github/scripts/validate-ios-project.sh
 bash .github/scripts/ios-distribution-readiness.sh
 ```
 
