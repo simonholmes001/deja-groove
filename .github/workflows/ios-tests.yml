@@ -1,0 +1,29 @@
+name: iOS Tests
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-tests.yml'
+
+jobs:
+  swift-test:
+    name: Swift Tests
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Test DejaGrooveAuth
+        working-directory: ios/DejaGrooveAuth
+        run: swift test --parallel
+
+      - name: Test DejaGrooveApp
+        working-directory: ios/DejaGrooveApp
+        run: swift test --parallel
