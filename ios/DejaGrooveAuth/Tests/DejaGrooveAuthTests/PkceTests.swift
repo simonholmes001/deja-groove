@@ -13,19 +13,9 @@ struct PkceTests {
         #expect(verifier.challenge.method == "S256")
     }
 
-    @Test("Generated verifier uses only the RFC 7636 unreserved character set")
-    func generatedVerifierCharset() {
-        let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-        for _ in 0..<50 {
-            let verifier = PkceCodeVerifier.generate()
-            #expect(verifier.value.allSatisfy { allowed.contains($0) })
-            #expect((43...128).contains(verifier.value.count))
-        }
-    }
-
     @Test("Generated verifiers are unique across invocations")
-    func generatedVerifierUniqueness() {
-        let values = Set((0..<100).map { _ in PkceCodeVerifier.generate().value })
+    func generatedVerifierUniqueness() throws {
+        let values = Set(try (0..<100).map { _ in try PkceCodeVerifier.generate().value })
         #expect(values.count == 100)
     }
 

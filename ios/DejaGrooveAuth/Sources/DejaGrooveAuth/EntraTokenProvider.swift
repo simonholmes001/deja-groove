@@ -61,21 +61,24 @@ public protocol AuthorizationCodeRequesting: Sendable {
 /// Authorization Code + PKCE for sign-in and the refresh-token grant for
 /// silent renewal. ROPC (`signIn(username:password:)`) is intentionally
 /// unsupported — Entra External ID does not offer it for consumer identity.
-public final class EntraTokenProvider: AuthTokenProvider, @unchecked Sendable {
+public final class EntraTokenProvider: InteractiveAuthTokenProvider, @unchecked Sendable {
     private let config: EntraConfig
     private let transport: TokenEndpointTransport
     private let authorizer: AuthorizationCodeRequesting
+    private let random: SecureRandomGenerating
     private let now: @Sendable () -> Date
 
     public init(
         config: EntraConfig,
         transport: TokenEndpointTransport,
         authorizer: AuthorizationCodeRequesting,
+        random: SecureRandomGenerating = SystemRandom(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.config = config
         self.transport = transport
         self.authorizer = authorizer
+        self.random = random
         self.now = now
     }
 
@@ -86,8 +89,8 @@ public final class EntraTokenProvider: AuthTokenProvider, @unchecked Sendable {
     }
 
     public func signInInteractively() async throws -> AuthSession {
-        let verifier = PkceCodeVerifier.generate()
-        let state = Self.randomURLSafeToken()
+        let verifier = try PkceCodeVerifier.generate(using: random)
+        let state = Data(try random.bytes(32)).base64URLEncodedString()
 
         var components = URLComponents(url: config.authorizeEndpoint, resolvingAgainstBaseURL: false)!
         components.queryItems = [
@@ -146,15 +149,34 @@ public final class EntraTokenProvider: AuthTokenProvider, @unchecked Sendable {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            // 400/401 from the token endpoint means the grant is bad
-            // (expired/revoked refresh token, invalid code); anything else is
-            // a provider/configuration problem.
-            throw (http.statusCode == 400 || http.statusCode == 401)
-                ? AuthOnboardingError.invalidCredentials
-                : AuthOnboardingError.providerConfiguration
+            throw Self.mapTokenEndpointError(status: http.statusCode, body: data)
         }
 
         return try Self.mapSession(from: data, now: now())
+    }
+
+    /// Maps a non-2xx token-endpoint response. The RFC 6749 `error` code is
+    /// the correct discriminator: `invalid_grant` means the refresh token /
+    /// auth code is expired or revoked and the user must re-authenticate;
+    /// `invalid_client` / `invalid_request` / `unauthorized_client` /
+    /// `invalid_scope` are configuration faults that re-prompting will never
+    /// fix (so they must not drive a re-auth loop). When the body is not a
+    /// parseable OAuth error, fall back to the HTTP status.
+    private static func mapTokenEndpointError(status: Int, body: Data) -> AuthOnboardingError {
+        struct OAuthError: Decodable { let error: String }
+        if let oauth = try? JSONDecoder().decode(OAuthError.self, from: body) {
+            switch oauth.error {
+            case "invalid_grant":
+                return .invalidCredentials
+            case "invalid_client", "invalid_request", "unauthorized_client", "invalid_scope":
+                return .providerConfiguration
+            default:
+                return .providerConfiguration
+            }
+        }
+        return (status == 400 || status == 401)
+            ? .invalidCredentials
+            : .providerConfiguration
     }
 
     private static func mapSession(from data: Data, now: Date) throws -> AuthSession {
@@ -209,11 +231,5 @@ public final class EntraTokenProvider: AuthTokenProvider, @unchecked Sendable {
                 return "\(k)=\(v)"
             }
             .joined(separator: "&")
-    }
-
-    private static func randomURLSafeToken() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return Data(bytes).base64URLEncodedString()
     }
 }

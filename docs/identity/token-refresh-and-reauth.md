@@ -11,9 +11,10 @@ Backend issuer/audience/expiry validation and `sub`→user mapping are covered b
 |---|---|
 | `PkceCodeVerifier` / `PkceChallenge` | RFC 7636 verifier + S256 challenge (pure, no platform deps). |
 | `EntraTokenProvider` | OAuth 2.0 Authorization Code + PKCE sign-in and refresh-token grant against Entra External ID. ROPC is intentionally unsupported. |
-| `AuthorizationCodeRequesting` | Browser-leg seam (production: `ASWebAuthenticationSession`; tests: fake). |
+| `AuthorizationCodeRequesting` / `WebAuthenticationAuthorizer` | Browser-leg seam; production uses `ASWebAuthenticationSession` (iOS only), tests use a fake. |
+| `SecureRandomGenerating` / `SystemRandom` | Fail-closed CSPRNG seam — a `SecRandomCopyBytes` failure throws, never yields weak material. |
 | `KeychainSessionStore` | Persists the session (`WhenUnlockedThisDeviceOnly`, non-syncing). |
-| `AuthSessionManager` | State machine: sign-in, restore, refresh, expiry re-auth, sign-out. |
+| `AuthSessionManager` | State machine: `signInInteractively()`, restore, refresh, expiry re-auth, sign-out. |
 | `AuthenticatedApiClientFactory` | Binds `currentAccessToken()` into `LiveApiClient`'s bearer provider. |
 
 ## Sign-in (interactive, PKCE)
@@ -57,8 +58,10 @@ Backend issuer/audience/expiry validation and `sub`→user mapping are covered b
 | HTTP from token endpoint | Mapped error |
 |---|---|
 | 2xx | success |
-| 400 / 401 | `invalidCredentials` (expired/revoked grant) |
-| other non-2xx | `providerConfiguration` |
+| body `error=invalid_grant` | `invalidCredentials` (re-auth) |
+| body `error=invalid_client`/`invalid_request`/`unauthorized_client`/`invalid_scope` | `providerConfiguration` (no re-auth loop) |
+| non-2xx, unparseable body, 400/401 | `invalidCredentials` |
+| non-2xx, unparseable body, other status | `providerConfiguration` |
 | transport throw | `networkUnavailable` |
 
 ## Security properties

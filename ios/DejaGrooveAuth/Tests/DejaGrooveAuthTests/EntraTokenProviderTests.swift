@@ -64,6 +64,32 @@ struct EntraTokenProviderTests {
         }
     }
 
+    @Test("invalid_grant at 400 maps to credentials error (re-auth)")
+    func errorBodyInvalidGrant() async {
+        let transport = FakeTokenTransport(
+            response: (Data(#"{"error":"invalid_grant","error_description":"expired"}"#.utf8), 400))
+        let provider = EntraTokenProvider(
+            config: Self.config, transport: transport,
+            authorizer: FakeAuthorizer(), now: { Date() })
+
+        await #expect(throws: AuthOnboardingError.invalidCredentials) {
+            _ = try await provider.refresh(using: "rt")
+        }
+    }
+
+    @Test("invalid_client at 400 maps to provider configuration (no re-auth loop)")
+    func errorBodyInvalidClient() async {
+        let transport = FakeTokenTransport(
+            response: (Data(#"{"error":"invalid_client"}"#.utf8), 400))
+        let provider = EntraTokenProvider(
+            config: Self.config, transport: transport,
+            authorizer: FakeAuthorizer(), now: { Date() })
+
+        await #expect(throws: AuthOnboardingError.providerConfiguration) {
+            _ = try await provider.refresh(using: "rt")
+        }
+    }
+
     @Test("Interactive sign-in runs PKCE and exchanges the authorization code")
     func interactiveSignIn() async throws {
         let transport = FakeTokenTransport(

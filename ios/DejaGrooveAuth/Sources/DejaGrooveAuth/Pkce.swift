@@ -21,11 +21,6 @@ public struct PkceChallenge: Equatable, Sendable {
 public struct PkceCodeVerifier: Equatable, Sendable {
     public let value: String
 
-    /// The unreserved character set permitted by RFC 7636 §4.1.
-    private static let unreserved = Array(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-    )
-
     public init(value: String) throws {
         guard (43...128).contains(value.count) else {
             throw PkceError.invalidVerifierLength
@@ -33,13 +28,16 @@ public struct PkceCodeVerifier: Equatable, Sendable {
         self.value = value
     }
 
-    /// Generates a cryptographically random 64-character verifier.
-    public static func generate() -> PkceCodeVerifier {
-        var bytes = [UInt8](repeating: 0, count: 64)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        let value = String(bytes.map { unreserved[Int($0) % unreserved.count] })
-        // Length is fixed at 64 by construction; force-try is safe here.
-        return try! PkceCodeVerifier(value: value)
+    /// Generates a cryptographically random verifier. The value is the
+    /// base64url encoding of 48 random bytes: this is bias-free (base64 is a
+    /// bijection on the input bytes — no modulo sampling) and its alphabet
+    /// (`A–Z a–z 0–9 - _`) is a subset of the RFC 7636 unreserved set. A
+    /// random-source failure propagates rather than yielding weak output.
+    public static func generate(
+        using random: SecureRandomGenerating = SystemRandom()
+    ) throws -> PkceCodeVerifier {
+        let value = Data(try random.bytes(48)).base64URLEncodedString()
+        return try PkceCodeVerifier(value: value)
     }
 
     /// The S256 challenge: BASE64URL(SHA256(verifier)) without padding.
