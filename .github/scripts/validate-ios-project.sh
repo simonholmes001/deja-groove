@@ -35,11 +35,33 @@ echo "$LIST_JSON" | jq -e --arg scheme "$SCHEME" '.project.schemes // .workspace
 }
 
 [ -f "$MANIFEST_PATH" ] || { echo "Missing privacy manifest: $MANIFEST_PATH" >&2; exit 1; }
-plutil -lint "$MANIFEST_PATH" >/dev/null
 
-# Enforce required top-level keys for submission readiness.
-plutil -extract NSPrivacyTracking raw "$MANIFEST_PATH" >/dev/null
-plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "$MANIFEST_PATH" >/dev/null
-plutil -extract NSPrivacyAccessedAPITypes xml1 -o - "$MANIFEST_PATH" >/dev/null
+if command -v plutil >/dev/null 2>&1; then
+  plutil -lint "$MANIFEST_PATH" >/dev/null
+
+  # Enforce required top-level keys for submission readiness.
+  plutil -extract NSPrivacyTracking raw "$MANIFEST_PATH" >/dev/null
+  plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "$MANIFEST_PATH" >/dev/null
+  plutil -extract NSPrivacyAccessedAPITypes xml1 -o - "$MANIFEST_PATH" >/dev/null
+else
+  python3 - "$MANIFEST_PATH" <<'PY'
+import plistlib
+import sys
+
+path = sys.argv[1]
+with open(path, "rb") as f:
+    data = plistlib.load(f)
+
+required = [
+    "NSPrivacyTracking",
+    "NSPrivacyCollectedDataTypes",
+    "NSPrivacyAccessedAPITypes",
+]
+
+for key in required:
+    if key not in data:
+        raise SystemExit(f"Missing required privacy key: {key}")
+PY
+fi
 
 echo "iOS project and privacy manifest validation passed."
