@@ -18,7 +18,7 @@ public struct AuthSessionView: Equatable, Sendable {
     }
 }
 
-public struct AuthSession: Equatable, Sendable {
+public struct AuthSession: Equatable, Sendable, Codable {
     public let accessToken: String
     public let refreshToken: String
     public let expiresAt: Date

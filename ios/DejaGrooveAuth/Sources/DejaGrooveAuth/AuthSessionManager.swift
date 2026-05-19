@@ -36,6 +36,33 @@ public final class AuthSessionManager {
         }
     }
 
+    /// Starts the OAuth Authorization Code + PKCE interactive sign-in. This is
+    /// the production entry point for Entra External ID (password sign-in is
+    /// not supported). Fails with `.providerConfiguration` if the configured
+    /// provider does not support the interactive flow.
+    public func signInInteractively() async -> Result<AuthSession, AuthOnboardingError> {
+        guard let interactive = tokenProvider as? InteractiveAuthTokenProvider else {
+            return .failure(.providerConfiguration)
+        }
+        state = .authenticating
+        do {
+            let session = try await interactive.signInInteractively()
+            guard isStructurallyValid(session), !isExpired(session) else {
+                state = .unauthenticated
+                return .failure(.providerConfiguration)
+            }
+            try store.save(session)
+            transitionToAuthenticated(session)
+            return .success(session)
+        } catch let error as AuthOnboardingError {
+            handleSignInFailureCleanup(defaultState: .unauthenticated)
+            return .failure(error)
+        } catch {
+            handleSignInFailureCleanup(defaultState: .unauthenticated)
+            return .failure(.unknown)
+        }
+    }
+
     public func restoreSession() {
         if restoreBlockedBySignOutFailure {
             currentSession = nil
@@ -88,6 +115,20 @@ public final class AuthSessionManager {
         } catch {
             transitionAfterCredentialCleanup(defaultReason: .refreshFailed)
         }
+    }
+
+    /// Returns a usable access token for outbound API calls, transparently
+    /// refreshing an expired one. Returns `nil` when the caller is not
+    /// authenticated (or refresh failed), so the API client simply omits the
+    /// Authorization header and the server responds 401.
+    public func currentAccessToken() async -> String? {
+        await refreshIfNeeded()
+        guard case .authenticated = state,
+              let session = currentSession,
+              !isExpired(session) else {
+            return nil
+        }
+        return session.accessToken
     }
 
     public func signOut() {
