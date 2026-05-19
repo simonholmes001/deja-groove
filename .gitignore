@@ -10,3 +10,4 @@ backend/coverage-results/
 
 # SwiftPM build artefacts
 ios/**/.build/
+backend/coverage-run/

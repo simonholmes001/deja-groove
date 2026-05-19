@@ -9,6 +9,7 @@ using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Api.Hosting;
 using DejaGroove.Infrastructure.Persistence;
+using DejaGroove.Infrastructure.Recognition;
 using DejaGroove.Infrastructure.Persistence.Caching;
 using DejaGroove.Infrastructure.Persistence.Collection;
 using DejaGroove.Infrastructure.Persistence.Scanning;
@@ -59,7 +60,23 @@ else
     builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-    builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
+
+    // Issue #141: use the real OpenAI vision matcher when an API key is
+    // configured (Key Vault / environment); otherwise fail closed so a
+    // misconfigured deployment never silently degrades scanning.
+    if (!string.IsNullOrWhiteSpace(builder.Configuration[$"{OpenAiOptions.SectionName}:ApiKey"]))
+    {
+        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
+        builder.Services.AddOptions<OpenAiOptions>()
+            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
+    }
+
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
 }
