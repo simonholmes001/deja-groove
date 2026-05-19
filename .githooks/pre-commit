@@ -4,27 +4,11 @@ set -eu
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
-STAGED_FILES="$(git diff --cached --name-only)"
-
-is_staged_in_dir() {
-  DIR="$1"
-  echo "$STAGED_FILES" | grep -E "^${DIR}/" >/dev/null 2>&1
-}
-
-is_any_staged() {
-  echo "$STAGED_FILES" | grep -q .
-}
-
 run_node_tests() {
   DIR="$1"
-  if ! is_staged_in_dir "$DIR"; then
-    echo "⏭️  No staged changes in $DIR — skipping Node tests."
-    return 0
-  fi
-
   if [ -f "$DIR/package.json" ]; then
     echo ""
-    echo "🧪 Running Node tests in $DIR before commit..."
+    echo "🧪 Running Node tests in $DIR before commit (always)..."
     if [ -f "$DIR/package-lock.json" ]; then
       npm --prefix "$DIR" ci --workspaces=false >/dev/null 2>&1 || npm --prefix "$DIR" ci --workspaces=false
     else
@@ -46,19 +30,9 @@ run_node_tests() {
 
 run_dotnet_tests() {
   TARGET_DIR="$1"
-  if [ "$TARGET_DIR" != "." ] && ! is_staged_in_dir "$TARGET_DIR"; then
-    echo "⏭️  No staged changes in $TARGET_DIR — skipping .NET tests."
-    return 0
-  fi
-
-  if [ "$TARGET_DIR" = "." ] && ! is_any_staged; then
-    echo "⏭️  No staged changes — skipping root .NET tests."
-    return 0
-  fi
-
   if find "$TARGET_DIR" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
     echo ""
-    echo "🧪 Running .NET tests in $TARGET_DIR before commit..."
+    echo "🧪 Running .NET tests in $TARGET_DIR before commit (always)..."
     DOTNET_CMD="/usr/local/share/dotnet/dotnet"
     if [ ! -x "$DOTNET_CMD" ]; then
       DOTNET_CMD="dotnet"
@@ -79,23 +53,17 @@ run_dotnet_tests() {
 
 run_swift_tests() {
   TARGET_DIR="$1"
-  if ! is_staged_in_dir "$TARGET_DIR"; then
-    echo "⏭️  No staged changes in $TARGET_DIR — skipping Swift tests."
-    return 0
-  fi
-
-  # Fail closed: if ios/ files are staged but swift is not available, block
-  # the commit. This is an iOS project — Swift must be installed to commit
-  # iOS changes. Install Xcode and run ./scripts/setup-hooks.sh to proceed.
+  # Fail closed: Swift must be installed to commit in this repo because iOS
+  # unit tests are mandatory on every commit.
   if ! command -v swift >/dev/null 2>&1; then
-    echo "❌  swift not found in PATH. Cannot run iOS tests for staged changes in $TARGET_DIR."
+    echo "❌  swift not found in PATH. Cannot run mandatory iOS tests in $TARGET_DIR."
     echo "    Install Xcode (https://developer.apple.com/xcode/) then re-run ./scripts/setup-hooks.sh"
     return 1
   fi
 
   if [ -f "$TARGET_DIR/Package.swift" ]; then
     echo ""
-    echo "🧪 Running Swift tests in $TARGET_DIR before commit..."
+    echo "🧪 Running Swift tests in $TARGET_DIR before commit (always)..."
     swift test --package-path "$TARGET_DIR"
     echo "✅ Swift tests passed in $TARGET_DIR."
   else
@@ -108,6 +76,7 @@ run_node_tests "cli"
 run_node_tests "frontend"
 run_dotnet_tests "backend"
 run_swift_tests "ios/DejaGrooveAuth"
+run_swift_tests "ios/DejaGrooveApp"
 
 echo ""
 echo "✅ Pre-commit guardrails passed."
