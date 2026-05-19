@@ -10,6 +10,7 @@ public protocol ApiClient: Sendable {
     func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse
     func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse
     func fetchCollection(search: String?) async throws -> CollectionListResponse
+    func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
 }
 
 public protocol HttpTransport: Sendable {
@@ -86,6 +87,15 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
         return try await send(request)
     }
 
+    public func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
+        var request = URLRequest(url: baseUrl.appendingPathComponent("v1/collection/\(id.uuidString.lowercased())"))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        await applyAuth(to: &request)
+        request.httpBody = try JSONEncoder().encode(PatchCollectionBody(format: format, notes: notes))
+        return try await send(request)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await transport.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
@@ -102,6 +112,23 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
     private func applyAuth(to request: inout URLRequest) async {
         guard let token = await authTokenProvider(), !token.isEmpty else { return }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+}
+
+/// Encodes only the fields present in a PATCH request body.
+/// Nil fields are omitted from the JSON output, preserving true PATCH semantics.
+private struct PatchCollectionBody: Encodable {
+    let format: String?
+    let notes: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(format, forKey: .format)
+        try container.encodeIfPresent(notes, forKey: .notes)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case format, notes
     }
 }
 

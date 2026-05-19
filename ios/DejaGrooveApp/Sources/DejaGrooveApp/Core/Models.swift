@@ -6,6 +6,7 @@ public struct Album: Codable, Equatable, Sendable {
     public let title: String
     public let artist: String
     public let year: Int?
+    public let format: String?
 
     enum CodingKeys: String, CodingKey {
         case mbid
@@ -13,6 +14,7 @@ public struct Album: Codable, Equatable, Sendable {
         case title
         case artist
         case year
+        case format
     }
 }
 
@@ -68,5 +70,31 @@ public struct ApiError: Codable, Equatable, Sendable {
         case message
         case retryable
         case requestId = "request_id"
+    }
+}
+
+public struct CollectionItemResponse: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let mbid: String?
+    public let discogsReleaseId: String?
+    public let title: String
+    public let artist: String
+    public let year: Int?
+    public let format: String?
+    public let notes: String?
+    public let createdAt: String
+    public let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case mbid
+        case discogsReleaseId = "discogs_release_id"
+        case title
+        case artist
+        case year
+        case format
+        case notes
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }

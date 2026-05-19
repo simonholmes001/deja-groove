@@ -4,6 +4,7 @@ using DejaGroove.Api.Responses;
 using DejaGroove.Application.Collection;
 using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
+using DejaGroove.Domain.Collection;
 using DejaGroove.Domain.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ namespace DejaGroove.Api.Controllers;
 public sealed class CollectionController(
     IAddToCollectionUseCase addUseCase,
     ICollectionQueryUseCase queryUseCase,
+    IUpdateCollectionUseCase updateUseCase,
     ICurrentUser currentUser) : ControllerBase
 {
     private const string IdempotencyHeader = "Idempotency-Key";
@@ -114,6 +116,38 @@ public sealed class CollectionController(
         return record is null
             ? NotFound(Error("not_found", "Collection record not found.", RequestId()))
             : Ok(CollectionItemDto.From(record));
+    }
+
+    [HttpPatch("{id:guid}")]
+    public async Task<IActionResult> PatchAsync(Guid id, [FromBody] PatchCollectionItemRequest request, CancellationToken ct)
+    {
+        var requestId = RequestId();
+
+        RecordFormat? format = null;
+        if (request.Format is not null && !RecordFormat.TryParse(request.Format, out format))
+            return BadRequest(Error("invalid_format",
+                $"'{request.Format}' is not a valid format. Allowed: vinyl, cd, cassette, other.", requestId));
+
+        if (request.Notes is { Length: > 1000 })
+            return BadRequest(Error("notes_too_long",
+                "notes must not exceed 1000 characters.", requestId));
+
+        var result = await updateUseCase.ExecuteAsync(new UpdateCollectionCommand
+        {
+            UserId = currentUser.UserId,
+            RecordId = id,
+            Format = format,
+            Notes = request.Notes
+        }, ct);
+
+        return result.Outcome switch
+        {
+            UpdateCollectionOutcome.Updated   => Ok(CollectionItemDto.From(result.Record!)),
+            UpdateCollectionOutcome.NotFound  => NotFound(Error("not_found", "Collection record not found.", requestId)),
+            UpdateCollectionOutcome.Forbidden => StatusCode(StatusCodes.Status403Forbidden,
+                Error("forbidden", "You do not have permission to update this record.", requestId)),
+            _ => throw new InvalidOperationException($"Unhandled update outcome {result.Outcome}.")
+        };
     }
 
     private static bool TryParseSort(string? sort, out CollectionSortField field)

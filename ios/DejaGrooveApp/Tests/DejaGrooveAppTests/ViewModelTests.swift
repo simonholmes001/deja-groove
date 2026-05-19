@@ -7,7 +7,7 @@ final class ViewModelTests: XCTestCase {
             status: "ambiguous",
             confidence: 0.61,
             album: nil,
-            candidates: [Album(mbid: "a", discogsReleaseId: nil, title: "T", artist: "AR", year: 2000)],
+            candidates: [Album(mbid: "a", discogsReleaseId: nil, title: "T", artist: "AR", year: 2000, format: nil)],
             requestId: UUID()
         )
         let api = MockApiClient(scanResponse: response)
@@ -29,14 +29,14 @@ final class ViewModelTests: XCTestCase {
         let resolved = ScanResponse(
             status: "safe_to_buy",
             confidence: 0.8,
-            album: Album(mbid: "x", discogsReleaseId: nil, title: "X", artist: "Y", year: 1999),
+            album: Album(mbid: "x", discogsReleaseId: nil, title: "X", artist: "Y", year: 1999, format: nil),
             candidates: [],
             requestId: requestId
         )
         let api = MockApiClient(scanResponse: resolved, resolveResponse: resolved)
         let sut = await ScanViewModel(api: api)
 
-        let candidate = Album(mbid: "x", discogsReleaseId: nil, title: "X", artist: "Y", year: 1999)
+        let candidate = Album(mbid: "x", discogsReleaseId: nil, title: "X", artist: "Y", year: 1999, format: nil)
         await sut.resolve(requestId: requestId, candidate: candidate)
 
         let calls = await api.resolveCallCount
@@ -47,7 +47,7 @@ final class ViewModelTests: XCTestCase {
         let response = CollectionListResponse(items: [
             CollectionRecord(
                 id: UUID(),
-                album: Album(mbid: "m", discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957),
+                album: Album(mbid: "m", discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: nil),
                 notes: nil,
                 version: 1,
                 createdAt: "2026-01-01T00:00:00Z",
@@ -85,4 +85,8 @@ actor MockApiClient: ApiClient {
     }
 
     func fetchCollection(search: String?) async throws -> CollectionListResponse { collectionResponse }
+
+    func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
+        CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
+    }
 }
