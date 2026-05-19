@@ -70,6 +70,7 @@ builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAddToCollectionUseCase, AddToCollectionUseCase>();
 builder.Services.AddScoped<ICollectionQueryUseCase, CollectionQueryUseCase>();
+builder.Services.AddScoped<IUpdateCollectionUseCase, UpdateCollectionUseCase>();
 
 var runtimeConnectionString = builder.Configuration.GetConnectionString("Postgres");
 if (!string.IsNullOrWhiteSpace(runtimeConnectionString))

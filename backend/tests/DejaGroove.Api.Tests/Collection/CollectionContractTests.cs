@@ -29,7 +29,15 @@ public sealed class CollectionContractTests
 
     private static HttpClient CreateClient(string subject = "collector-1")
     {
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        var factory = CreateFactory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", BuildToken(subject));
+        return client;
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -52,14 +60,140 @@ public sealed class CollectionContractTests
                 }));
         });
 
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", BuildToken(subject));
-        return client;
-    }
-
     private static object Album(string mbid = "mbid-rumours", string? notes = "VG+") =>
         new { mbid, title = "Rumours", artist = "Fleetwood Mac", year = 1977, notes };
+
+    [Fact]
+    public async Task Patch_WithoutToken_Returns401()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var id = Guid.NewGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Patch_ValidFormat_Returns200WithUpdatedRecord()
+    {
+        using var client = CreateClient("patch-1");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album());
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { format = "vinyl" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("vinyl", body.GetProperty("format").GetString());
+        Assert.Equal(id, body.GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task Patch_NotesOnly_Returns200()
+    {
+        using var client = CreateClient("patch-2");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album());
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { notes = "new notes" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("new notes", body.GetProperty("notes").GetString());
+    }
+
+    [Fact]
+    public async Task Patch_FormatOnly_Returns200()
+    {
+        using var client = CreateClient("patch-3");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album(notes: "keep me"));
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { format = "cd" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("cd", body.GetProperty("format").GetString());
+        Assert.Equal("keep me", body.GetProperty("notes").GetString());
+    }
+
+    [Fact]
+    public async Task Patch_InvalidFormat_Returns400()
+    {
+        using var client = CreateClient("patch-4");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album());
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { format = "8track" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("invalid_format", body.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Patch_NotesTooLong_Returns400()
+    {
+        using var client = CreateClient("patch-5");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album());
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{id}",
+            new { notes = new string('x', 1001) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("notes_too_long", body.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Patch_UnknownId_Returns404()
+    {
+        using var client = CreateClient("patch-6");
+
+        var response = await PatchAsJsonAsync(client, $"/v1/collection/{Guid.NewGuid()}", new { format = "vinyl" });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Patch_OtherUsersRecord_Returns403()
+    {
+        using var factory = CreateFactory();
+        using var ownerClient = factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", BuildToken("owner-patch"));
+        using var otherClient = factory.CreateClient();
+        otherClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", BuildToken("other-patch"));
+
+        var post = await ownerClient.PostAsJsonAsync("/v1/collection", Album(mbid: "mbid-owner-patch"));
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await PatchAsJsonAsync(otherClient, $"/v1/collection/{id}", new { format = "vinyl" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Patch_IsIdempotent_SameValuesReturnsSameRecord()
+    {
+        using var client = CreateClient("patch-idem");
+        var post = await client.PostAsJsonAsync("/v1/collection", Album(mbid: "mbid-patch-idem"));
+        var id = (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var first = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { format = "vinyl", notes = "same" });
+        var second = await PatchAsJsonAsync(client, $"/v1/collection/{id}", new { format = "vinyl", notes = "same" });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var b1 = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var b2 = await second.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(b1.GetProperty("format").GetString(), b2.GetProperty("format").GetString());
+        Assert.Equal(b1.GetProperty("notes").GetString(), b2.GetProperty("notes").GetString());
+    }
 
     [Fact]
     public async Task Post_WithoutToken_Returns401()
@@ -215,6 +349,15 @@ public sealed class CollectionContractTests
             Content = JsonContent.Create(body)
         };
         message.Headers.Add("Idempotency-Key", key);
+        return client.SendAsync(message);
+    }
+
+    private static Task<HttpResponseMessage> PatchAsJsonAsync(HttpClient client, string url, object body)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = JsonContent.Create(body)
+        };
         return client.SendAsync(message);
     }
 

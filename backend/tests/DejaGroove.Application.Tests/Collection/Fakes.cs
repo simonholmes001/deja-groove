@@ -49,6 +49,21 @@ internal sealed class FakeCollectionRepository : ICollectionRepository
         Guid userId, Guid id, CancellationToken ct = default) =>
         Task.FromResult(_records.FirstOrDefault(r => r.UserId == userId && r.Id == id));
 
+    public int UpdateCalls { get; private set; }
+
+    public Task<CollectionRecord?> UpdateAsync(CollectionRecord updated, CancellationToken ct = default)
+    {
+        UpdateCalls++;
+        var i = _records.FindIndex(r => r.Id == updated.Id && r.UserId == updated.UserId && r.IsActive);
+        if (i < 0)
+            return Task.FromResult<CollectionRecord?>(null);
+        _records[i] = updated;
+        return Task.FromResult<CollectionRecord?>(updated);
+    }
+
+    public Task<CollectionRecord?> FindByIdAcrossUsersAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(_records.FirstOrDefault(r => r.Id == id));
+
     public Task<CollectionPage> ListAsync(CollectionQuery query, CancellationToken ct = default) =>
         Task.FromResult(new CollectionPage(
             _records.Where(r => r.UserId == query.UserId && r.IsActive).ToList(), null));
@@ -65,7 +80,7 @@ internal sealed class FakeCollectionRepository : ICollectionRepository
         var r = _records[i];
         _records[i] = CollectionRecord.Rehydrate(
             r.Id, r.UserId, r.Identity, r.Notes, r.Version,
-            r.CreatedAt, r.UpdatedAt, DateTimeOffset.UtcNow);
+            r.CreatedAt, r.UpdatedAt, DateTimeOffset.UtcNow, r.Format);
     }
 }
 

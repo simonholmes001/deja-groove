@@ -13,3 +13,8 @@ public interface ICollectionQueryUseCase
     Task<CollectionPage> ListAsync(CollectionQuery query, CancellationToken ct = default);
     Task<CollectionRecord?> GetAsync(Guid userId, Guid id, CancellationToken ct = default);
 }
+
+public interface IUpdateCollectionUseCase
+{
+    Task<UpdateCollectionResult> ExecuteAsync(UpdateCollectionCommand command, CancellationToken ct = default);
+}

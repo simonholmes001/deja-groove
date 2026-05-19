@@ -194,4 +194,63 @@ public sealed class PostgresCollectionRepositoryTests(PostgresFixture fx)
         Assert.Single(page.Items);
         Assert.Equal("John Coltrane", page.Items[0].Identity.Artist);
     }
+
+    [Fact]
+    public async Task Update_ChangeFormatAndNotes_PersistsAndReturnsUpdated()
+    {
+        var user = Guid.NewGuid();
+        var record = CollectionRecord.Rehydrate(
+            Guid.NewGuid(), user, Mbid($"upd-{Guid.NewGuid():N}"), "orig", 1,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, RecordFormat.Cd);
+        await Repo().AddAsync(record, null);
+
+        var updated = record.WithUpdate(RecordFormat.Vinyl, "updated notes", DateTimeOffset.UtcNow);
+        var result = await Repo().UpdateAsync(updated);
+
+        Assert.NotNull(result);
+        Assert.Equal(RecordFormat.Vinyl, result!.Format);
+        Assert.Equal("updated notes", result.Notes);
+        Assert.Equal(2, result.Version);
+    }
+
+    [Fact]
+    public async Task Update_NotExistent_ReturnsNull()
+    {
+        var user = Guid.NewGuid();
+        var phantom = CollectionRecord.Rehydrate(
+            Guid.NewGuid(), user, Mbid("phantom"), "n", 1,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+
+        var result = await Repo().UpdateAsync(phantom);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task Update_IncrementsVersion()
+    {
+        var user = Guid.NewGuid();
+        var record = New(user, Mbid($"ver-{Guid.NewGuid():N}"));
+        await Repo().AddAsync(record, null);
+
+        var updated = record.WithUpdate(RecordFormat.Cd, "notes", DateTimeOffset.UtcNow);
+        var result = await Repo().UpdateAsync(updated);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.Version);
+    }
+
+    [Fact]
+    public async Task Update_Format_IsPersistedInDb()
+    {
+        var user = Guid.NewGuid();
+        var record = New(user, Mbid($"fmt-{Guid.NewGuid():N}"));
+        await Repo().AddAsync(record, null);
+
+        var updated = record.WithUpdate(RecordFormat.Cassette, record.Notes, DateTimeOffset.UtcNow);
+        await Repo().UpdateAsync(updated);
+
+        var reloaded = await Repo().GetByIdAsync(user, record.Id);
+        Assert.Equal(RecordFormat.Cassette, reloaded!.Format);
+    }
 }

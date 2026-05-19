@@ -13,6 +13,7 @@ public sealed class CollectionRecord
     public Guid UserId { get; }
     public AlbumIdentity Identity { get; }
     public string? Notes { get; }
+    public RecordFormat? Format { get; }
     public int Version { get; }
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset UpdatedAt { get; }
@@ -25,6 +26,7 @@ public sealed class CollectionRecord
         Guid userId,
         AlbumIdentity identity,
         string? notes,
+        RecordFormat? format,
         int version,
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
@@ -34,6 +36,7 @@ public sealed class CollectionRecord
         UserId = userId;
         Identity = identity;
         Notes = notes;
+        Format = format;
         Version = version;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
@@ -45,7 +48,8 @@ public sealed class CollectionRecord
         Guid userId,
         AlbumIdentity identity,
         string? notes,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        RecordFormat? format = null)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("userId must not be empty.", nameof(userId));
@@ -56,6 +60,7 @@ public sealed class CollectionRecord
             userId: userId,
             identity: identity,
             notes: notes,
+            format: format,
             version: 1,
             createdAt: now,
             updatedAt: now,
@@ -72,6 +77,15 @@ public sealed class CollectionRecord
         int version,
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
-        DateTimeOffset? deletedAt) =>
-        new(id, userId, identity, notes, version, createdAt, updatedAt, deletedAt);
+        DateTimeOffset? deletedAt,
+        RecordFormat? format = null) =>
+        new(id, userId, identity, notes, format, version, createdAt, updatedAt, deletedAt);
+
+    /// <summary>
+    /// Returns a new <see cref="CollectionRecord"/> with the supplied values applied,
+    /// an incremented <see cref="Version"/>, and <see cref="UpdatedAt"/> set to <paramref name="now"/>.
+    /// All other fields (Id, UserId, Identity, CreatedAt, DeletedAt) are preserved.
+    /// </summary>
+    public CollectionRecord WithUpdate(RecordFormat? format, string? notes, DateTimeOffset now) =>
+        new(Id, UserId, Identity, notes, format, Version + 1, CreatedAt, now, DeletedAt);
 }
