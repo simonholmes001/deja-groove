@@ -3,7 +3,6 @@ import DejaGrooveApp
 
 struct AuthGateView<Content: View>: View {
     @ObservedObject var coordinator: AppAuthCoordinator
-    @State private var signInInFlight = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -22,15 +21,10 @@ struct AuthGateView<Content: View>: View {
                             .foregroundStyle(.red)
                     }
                     Button("Sign In") {
-                        guard !signInInFlight else { return }
-                        signInInFlight = true
-                        Task {
-                            await coordinator.signInInteractively()
-                            signInInFlight = false
-                        }
+                        Task { await coordinator.signInInteractively() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(signInInFlight)
+                    .disabled(coordinator.isSigningIn)
                 }
                 .padding(24)
                 .task { coordinator.bootstrap() }

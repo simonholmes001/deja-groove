@@ -5,6 +5,7 @@ import DejaGrooveAuth
 public final class AppAuthCoordinator: ObservableObject {
     @Published public private(set) var requiresSignIn = true
     @Published public private(set) var lastError: AuthOnboardingRecovery?
+    @Published public private(set) var isSigningIn = false
 
     private let authManager: AuthSessionManager
 
@@ -18,6 +19,10 @@ public final class AppAuthCoordinator: ObservableObject {
     }
 
     public func signInInteractively() async {
+        guard !isSigningIn else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+
         let result = await authManager.signInInteractively()
         switch result {
         case .success:
