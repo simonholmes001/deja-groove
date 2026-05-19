@@ -1,0 +1,66 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-testflight:
+    runs-on: macos-latest
+    env:
+      DEJA_GROOVE_APP_IDENTIFIER: ${{ secrets.DEJA_GROOVE_APP_IDENTIFIER }}
+      DEJA_GROOVE_APPLE_ID: ${{ secrets.DEJA_GROOVE_APPLE_ID }}
+      DEJA_GROOVE_ITC_TEAM_ID: ${{ secrets.DEJA_GROOVE_ITC_TEAM_ID }}
+      DEJA_GROOVE_TEAM_ID: ${{ secrets.DEJA_GROOVE_TEAM_ID }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      DEJA_GROOVE_XCODE_SCHEME: DejaGroove
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          required=(
+            DEJA_GROOVE_APP_IDENTIFIER
+            DEJA_GROOVE_APPLE_ID
+            DEJA_GROOVE_ITC_TEAM_ID
+            DEJA_GROOVE_TEAM_ID
+            MATCH_GIT_URL
+            MATCH_PASSWORD
+            APP_STORE_CONNECT_API_KEY_ID
+            APP_STORE_CONNECT_API_ISSUER_ID
+          )
+          for key in "${required[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: $key" >&2
+              exit 1
+            fi
+          done
+
+      - name: Decode App Store Connect API key
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" ]; then
+            echo "Missing required secret: APP_STORE_CONNECT_API_KEY_BASE64" >&2
+            exit 1
+          fi
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > /tmp/AuthKey.p8
+          echo "APP_STORE_CONNECT_API_KEY_PATH=/tmp/AuthKey.p8" >> "$GITHUB_ENV"
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Validate Xcode scheme exists
+        shell: bash
+        run: xcodebuild -list -json
+
+      - name: Upload internal TestFlight build
+        working-directory: ios
+        run: bundle exec fastlane ios upload_internal_testflight

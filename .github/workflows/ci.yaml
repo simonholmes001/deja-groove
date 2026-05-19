@@ -48,6 +48,7 @@ jobs:
         run: |
           bash .github/scripts/compute-next-release.test.sh
           bash .github/scripts/changeset-check.test.sh
+          bash .github/scripts/ios-distribution-readiness.test.sh
 
   node-tests:
     name: Node Tests
