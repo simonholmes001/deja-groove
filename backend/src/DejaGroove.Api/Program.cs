@@ -61,14 +61,17 @@ else
     builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
 
-    // Issue #141: use the real OpenAI vision matcher when an API key is
-    // configured (Key Vault / environment); otherwise fail closed so a
-    // misconfigured deployment never silently degrades scanning.
-    if (!string.IsNullOrWhiteSpace(builder.Configuration[$"{OpenAiOptions.SectionName}:ApiKey"]))
+    // Issue #141: use the real OpenAI vision matcher when the OPENAI_KEY
+    // environment variable is set; otherwise fail closed so a misconfigured
+    // deployment never silently degrades scanning. Non-secret tunables still
+    // bind from the "OpenAi" section.
+    var openAiKey = builder.Configuration["OPENAI_KEY"];
+    if (!string.IsNullOrWhiteSpace(openAiKey))
     {
         builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
         builder.Services.AddOptions<OpenAiOptions>()
             .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+            .Configure(o => o.ApiKey = openAiKey)
             .ValidateOnStart();
         builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>();
     }

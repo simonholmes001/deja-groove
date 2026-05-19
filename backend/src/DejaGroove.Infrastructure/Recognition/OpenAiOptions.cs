@@ -2,16 +2,18 @@ namespace DejaGroove.Infrastructure.Recognition;
 
 /// <summary>
 /// Configuration for the OpenAI vision recognition adapter (issue #141).
-/// Bound from the "OpenAi" configuration section; the API key is supplied at
-/// runtime (Key Vault / environment) and is never committed.
+/// Non-secret tunables bind from the "OpenAi" configuration section. The API
+/// key is sourced separately from the <c>OPENAI_KEY</c> environment variable
+/// (never committed, never bound from appsettings).
 /// </summary>
 public sealed record OpenAiOptions
 {
     public const string SectionName = "OpenAi";
 
-    public string ApiKey { get; init; } = string.Empty;
+    /// <summary>Injected from the OPENAI_KEY environment variable at startup.</summary>
+    public string ApiKey { get; set; } = string.Empty;
 
-    public string Model { get; init; } = "gpt-5.4-vision";
+    public string Model { get; init; } = "gpt-5.4-mini";
 
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
 

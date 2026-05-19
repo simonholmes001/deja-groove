@@ -17,7 +17,7 @@ public sealed class OpenAiAlbumMatchingPortTests
     private static OpenAiOptions Options(int retries = 1, int timeoutSeconds = 5) => new()
     {
         ApiKey = "sk-test-123",
-        Model = "gpt-5.4-vision",
+        Model = "gpt-5.4-mini",
         BaseUrl = "https://api.openai.test/v1",
         TimeoutSeconds = timeoutSeconds,
         MaxRetryAttempts = retries,
@@ -90,7 +90,7 @@ public sealed class OpenAiAlbumMatchingPortTests
         Assert.Equal("sk-test-123", request.Headers.Authorization.Parameter);
 
         var body = handler.RequestBodies.Single();
-        Assert.Contains("gpt-5.4-vision", body);
+        Assert.Contains("gpt-5.4-mini", body);
         Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes("fake-jpeg-bytes")), body);
         Assert.Contains("STRICT JSON", body); // prompt text from the pinned registry version
     }
