@@ -39,3 +39,12 @@ public sealed class AddCollectionItemRequest
             SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 }
+
+public sealed class PatchCollectionItemRequest
+{
+    [JsonPropertyName("format")]
+    public string? Format { get; init; }
+
+    [JsonPropertyName("notes")]
+    public string? Notes { get; init; }
+}

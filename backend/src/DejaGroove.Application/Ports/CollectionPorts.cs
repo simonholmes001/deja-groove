@@ -46,6 +46,16 @@ public interface ICollectionRepository
     Task<CollectionRecord?> GetByIdIncludingDeletedAsync(
         Guid userId, Guid id, CancellationToken ct = default);
 
+    Task<CollectionRecord?> UpdateAsync(CollectionRecord updated, CancellationToken ct = default);
+
+    /// <summary>
+    /// Looks up a record by id across all users (not ownership-scoped).
+    /// Used to distinguish 403 (exists, wrong owner) from 404 (not found).
+    /// Implementations that enforce RLS may return <c>null</c> for cross-user records,
+    /// which causes the caller to degrade gracefully to <see cref="UpdateCollectionOutcome.NotFound"/>.
+    /// </summary>
+    Task<CollectionRecord?> FindByIdAcrossUsersAsync(Guid id, CancellationToken ct = default);
+
     Task<CollectionPage> ListAsync(CollectionQuery query, CancellationToken ct = default);
 }
 

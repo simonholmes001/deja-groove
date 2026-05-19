@@ -73,4 +73,59 @@ public sealed class CollectionRecordTests
         Assert.Equal(deleted, record.DeletedAt);
         Assert.False(record.IsActive);
     }
+
+    [Fact]
+    public void WithUpdate_Format_UpdatesFormatIncrementsVersionAndTimestamp()
+    {
+        var record = CollectionRecord.Create(Guid.NewGuid(), Identity, notes: "original", Now);
+        var later = Now.AddHours(1);
+
+        var updated = record.WithUpdate(RecordFormat.Vinyl, record.Notes, later);
+
+        Assert.Equal(RecordFormat.Vinyl, updated.Format);
+        Assert.Equal(2, updated.Version);
+        Assert.Equal(later, updated.UpdatedAt);
+        Assert.Equal(Now, updated.CreatedAt);
+    }
+
+    [Fact]
+    public void WithUpdate_Notes_UpdatesNotesPreservesFormat()
+    {
+        var record = CollectionRecord.Rehydrate(
+            Guid.NewGuid(), Guid.NewGuid(), Identity, "old notes", 1, Now, Now, null, RecordFormat.Cd);
+
+        var updated = record.WithUpdate(record.Format, "new notes", Now.AddMinutes(1));
+
+        Assert.Equal("new notes", updated.Notes);
+        Assert.Equal(RecordFormat.Cd, updated.Format);
+        Assert.Equal(2, updated.Version);
+    }
+
+    [Fact]
+    public void WithUpdate_NullFormatAndNullNotes_CanClearBothFields()
+    {
+        var record = CollectionRecord.Rehydrate(
+            Guid.NewGuid(), Guid.NewGuid(), Identity, "notes", 1, Now, Now, null, RecordFormat.Vinyl);
+
+        var updated = record.WithUpdate(null, null, Now.AddMinutes(1));
+
+        Assert.Null(updated.Format);
+        Assert.Null(updated.Notes);
+        Assert.Equal(2, updated.Version);
+    }
+
+    [Fact]
+    public void WithUpdate_PreservesIdentityAndUserId()
+    {
+        var userId = Guid.NewGuid();
+        var record = CollectionRecord.Create(userId, Identity, "notes", Now);
+
+        var updated = record.WithUpdate(RecordFormat.Other, "new notes", Now.AddHours(1));
+
+        Assert.Equal(record.Id, updated.Id);
+        Assert.Equal(userId, updated.UserId);
+        Assert.Same(Identity, updated.Identity);
+        Assert.Equal(record.CreatedAt, updated.CreatedAt);
+        Assert.Equal(record.DeletedAt, updated.DeletedAt);
+    }
 }

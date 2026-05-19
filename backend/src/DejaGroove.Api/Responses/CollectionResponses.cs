@@ -11,6 +11,7 @@ public sealed class CollectionItemDto
     [JsonPropertyName("title")] public string? Title { get; init; }
     [JsonPropertyName("artist")] public string? Artist { get; init; }
     [JsonPropertyName("year")] public int? Year { get; init; }
+    [JsonPropertyName("format")] public string? Format { get; init; }
     [JsonPropertyName("notes")] public string? Notes { get; init; }
     [JsonPropertyName("created_at")] public DateTimeOffset CreatedAt { get; init; }
     [JsonPropertyName("updated_at")] public DateTimeOffset UpdatedAt { get; init; }
@@ -23,6 +24,7 @@ public sealed class CollectionItemDto
         Title = r.Identity.Title,
         Artist = r.Identity.Artist,
         Year = r.Identity.Year,
+        Format = r.Format?.ToString(),
         Notes = r.Notes,
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt

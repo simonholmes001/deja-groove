@@ -1,0 +1,104 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload-testflight:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          DEJA_GROOVE_APP_IDENTIFIER: ${{ secrets.DEJA_GROOVE_APP_IDENTIFIER }}
+          DEJA_GROOVE_APPLE_ID: ${{ secrets.DEJA_GROOVE_APPLE_ID }}
+          DEJA_GROOVE_ITC_TEAM_ID: ${{ secrets.DEJA_GROOVE_ITC_TEAM_ID }}
+          DEJA_GROOVE_TEAM_ID: ${{ secrets.DEJA_GROOVE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          DEJA_GROOVE_XCODE_PROJECT: ${{ secrets.DEJA_GROOVE_XCODE_PROJECT }}
+          DEJA_GROOVE_XCODE_WORKSPACE: ${{ secrets.DEJA_GROOVE_XCODE_WORKSPACE }}
+          DEJA_GROOVE_XCODE_SCHEME: ${{ secrets.DEJA_GROOVE_XCODE_SCHEME }}
+        run: |
+          required=(
+            DEJA_GROOVE_APP_IDENTIFIER
+            DEJA_GROOVE_APPLE_ID
+            DEJA_GROOVE_ITC_TEAM_ID
+            DEJA_GROOVE_TEAM_ID
+            MATCH_GIT_URL
+            MATCH_PASSWORD
+            APP_STORE_CONNECT_API_KEY_ID
+            APP_STORE_CONNECT_API_ISSUER_ID
+            DEJA_GROOVE_XCODE_SCHEME
+          )
+          for key in "${required[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: $key" >&2
+              exit 1
+            fi
+          done
+          if [ -n "${DEJA_GROOVE_XCODE_PROJECT:-}" ] && [ -n "${DEJA_GROOVE_XCODE_WORKSPACE:-}" ]; then
+            echo "Set only one of DEJA_GROOVE_XCODE_PROJECT or DEJA_GROOVE_XCODE_WORKSPACE" >&2
+            exit 1
+          fi
+          if [ -z "${DEJA_GROOVE_XCODE_PROJECT:-}" ] && [ -z "${DEJA_GROOVE_XCODE_WORKSPACE:-}" ]; then
+            echo "Either DEJA_GROOVE_XCODE_PROJECT or DEJA_GROOVE_XCODE_WORKSPACE is required" >&2
+            exit 1
+          fi
+
+      - name: Decode App Store Connect API key
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" ]; then
+            echo "Missing required secret: APP_STORE_CONNECT_API_KEY_BASE64" >&2
+            exit 1
+          fi
+          umask 077
+          key_path="$(mktemp /tmp/deja-groove-authkey.XXXXXX.p8)"
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Validate iOS project, scheme, and privacy manifest
+        shell: bash
+        env:
+          DEJA_GROOVE_XCODE_PROJECT: ${{ secrets.DEJA_GROOVE_XCODE_PROJECT }}
+          DEJA_GROOVE_XCODE_WORKSPACE: ${{ secrets.DEJA_GROOVE_XCODE_WORKSPACE }}
+          DEJA_GROOVE_XCODE_SCHEME: ${{ secrets.DEJA_GROOVE_XCODE_SCHEME }}
+        run: bash .github/scripts/validate-ios-project.sh
+
+      - name: Upload internal TestFlight build
+        working-directory: ios
+        env:
+          DEJA_GROOVE_APP_IDENTIFIER: ${{ secrets.DEJA_GROOVE_APP_IDENTIFIER }}
+          DEJA_GROOVE_APPLE_ID: ${{ secrets.DEJA_GROOVE_APPLE_ID }}
+          DEJA_GROOVE_ITC_TEAM_ID: ${{ secrets.DEJA_GROOVE_ITC_TEAM_ID }}
+          DEJA_GROOVE_TEAM_ID: ${{ secrets.DEJA_GROOVE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          DEJA_GROOVE_XCODE_PROJECT: ${{ secrets.DEJA_GROOVE_XCODE_PROJECT }}
+          DEJA_GROOVE_XCODE_WORKSPACE: ${{ secrets.DEJA_GROOVE_XCODE_WORKSPACE }}
+          DEJA_GROOVE_XCODE_SCHEME: ${{ secrets.DEJA_GROOVE_XCODE_SCHEME }}
+        run: bundle exec fastlane ios upload_internal_testflight
+
+      - name: Cleanup App Store Connect API key
+        if: always()
+        shell: bash
+        run: rm -f "${APP_STORE_CONNECT_API_KEY_PATH:-}"

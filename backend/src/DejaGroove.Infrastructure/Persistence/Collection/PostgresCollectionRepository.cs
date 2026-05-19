@@ -18,7 +18,7 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
     : ICollectionRepository
 {
     private const string SelectColumns =
-        "id, user_id, mbid, discogs_release_id, title, artist, year, notes, version, created_at, updated_at, deleted_at";
+        "id, user_id, mbid, discogs_release_id, title, artist, year, format, notes, version, created_at, updated_at, deleted_at";
 
     public Task<CollectionRecord> AddAsync(
         CollectionRecord record, IdempotencyWrite? idempotency, CancellationToken ct = default) =>
@@ -29,9 +29,9 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
                 await conn.ExecuteAsync(new CommandDefinition(
                     """
                     INSERT INTO collection_records
-                        (id, user_id, mbid, discogs_release_id, title, artist, year, notes, version, created_at, updated_at)
+                        (id, user_id, mbid, discogs_release_id, title, artist, year, format, notes, version, created_at, updated_at)
                     VALUES
-                        (@Id, @UserId, @Mbid, @Discogs, @Title, @Artist, @Year, @Notes, @Version, @CreatedAt, @UpdatedAt)
+                        (@Id, @UserId, @Mbid, @Discogs, @Title, @Artist, @Year, @Format, @Notes, @Version, @CreatedAt, @UpdatedAt)
                     """,
                     new
                     {
@@ -42,6 +42,7 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
                         Title = record.Identity.Title,
                         Artist = record.Identity.Artist,
                         Year = (short?)record.Identity.Year,
+                        Format = record.Format?.ToString(),
                         record.Notes,
                         record.Version,
                         record.CreatedAt,
@@ -112,6 +113,47 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
                       (activeOnly ? " AND deleted_at IS NULL" : "");
             var row = await conn.QuerySingleOrDefaultAsync<Row>(new CommandDefinition(
                 sql, new { userId, id }, tx, cancellationToken: ct));
+            return row?.ToDomain();
+        }, ct);
+
+    public async Task<CollectionRecord?> FindByIdAcrossUsersAsync(
+        Guid id, CancellationToken ct = default)
+    {
+        // RLS prevents cross-user visibility in production — this query will return
+        // null for records owned by another user, degrading Forbidden → NotFound.
+        // This is intentionally security-conservative: callers cannot infer record
+        // existence from the response. The Forbidden path is exercised by contract
+        // tests via the in-memory adapter which has no RLS constraint.
+        await using var connection = await factory.OpenAsync(ct);
+        var row = await connection.QuerySingleOrDefaultAsync<Row>(new CommandDefinition(
+            $"SELECT {SelectColumns} FROM collection_records WHERE id = @id",
+            new { id }, cancellationToken: ct));
+        return row?.ToDomain();
+    }
+
+    public Task<CollectionRecord?> UpdateAsync(
+        CollectionRecord updated, CancellationToken ct = default) =>
+        UserScope.RunAsync(factory, updated.UserId, async (conn, tx) =>
+        {
+            var row = await conn.QuerySingleOrDefaultAsync<Row>(new CommandDefinition(
+                $"""
+                UPDATE collection_records
+                SET format     = @Format,
+                    notes      = @Notes,
+                    version    = @Version,
+                    updated_at = @UpdatedAt
+                WHERE id = @Id AND user_id = @UserId AND deleted_at IS NULL
+                RETURNING {SelectColumns}
+                """,
+                new
+                {
+                    updated.Id,
+                    updated.UserId,
+                    Format = updated.Format?.ToString(),
+                    updated.Notes,
+                    updated.Version,
+                    updated.UpdatedAt
+                }, tx, cancellationToken: ct));
             return row?.ToDomain();
         }, ct);
 
@@ -213,6 +255,7 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
         public string? title { get; init; }
         public string? artist { get; init; }
         public short? year { get; init; }
+        public string? format { get; init; }
         public string? notes { get; init; }
         public int version { get; init; }
         public DateTimeOffset created_at { get; init; }
@@ -220,9 +263,19 @@ public sealed class PostgresCollectionRepository(PostgresConnectionFactory facto
         public DateTimeOffset? deleted_at { get; init; }
         public string? sort_key { get; init; }
 
-        public CollectionRecord ToDomain() => CollectionRecord.Rehydrate(
-            id, user_id,
-            AlbumIdentity.Create(mbid, discogs_release_id, title, artist, year),
-            notes, version, created_at, updated_at, deleted_at);
+        public CollectionRecord ToDomain()
+        {
+            RecordFormat? recordFormat = null;
+            if (format is not null && !RecordFormat.TryParse(format, out recordFormat))
+                throw new InvalidOperationException(
+                    $"Database contains unrecognised format value '{format}' for record {id}. " +
+                    "This indicates data corruption or a migration was applied without a corresponding code deployment.");
+
+            return CollectionRecord.Rehydrate(
+                id, user_id,
+                AlbumIdentity.Create(mbid, discogs_release_id, title, artist, year),
+                notes, version, created_at, updated_at, deleted_at,
+                recordFormat);
+        }
     }
 }

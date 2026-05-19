@@ -1,0 +1,4 @@
+app_identifier(ENV.fetch("DEJA_GROOVE_APP_IDENTIFIER"))
+apple_id(ENV.fetch("DEJA_GROOVE_APPLE_ID"))
+itc_team_id(ENV.fetch("DEJA_GROOVE_ITC_TEAM_ID"))
+team_id(ENV.fetch("DEJA_GROOVE_TEAM_ID"))

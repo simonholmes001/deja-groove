@@ -51,6 +51,25 @@ public sealed class InMemoryCollectionRepository(InMemoryCollectionStore store) 
         Guid userId, Guid id, CancellationToken ct = default) =>
         Task.FromResult(store.Records.FirstOrDefault(r => r.UserId == userId && r.Id == id));
 
+    public Task<CollectionRecord?> UpdateAsync(CollectionRecord updated, CancellationToken ct = default)
+    {
+        var snapshot = store.Records.ToList();
+        var idx = snapshot.FindIndex(r => r.Id == updated.Id && r.UserId == updated.UserId && r.IsActive);
+        if (idx < 0)
+            return Task.FromResult<CollectionRecord?>(null);
+
+        // Drain and refill — ConcurrentBag doesn't support indexed removal.
+        while (store.Records.TryTake(out _)) { }
+        snapshot[idx] = updated;
+        foreach (var r in snapshot)
+            store.Records.Add(r);
+
+        return Task.FromResult<CollectionRecord?>(updated);
+    }
+
+    public Task<CollectionRecord?> FindByIdAcrossUsersAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(store.Records.FirstOrDefault(r => r.Id == id));
+
     public Task<CollectionPage> ListAsync(CollectionQuery query, CancellationToken ct = default)
     {
         var ascending = query.SortDirection == SortDirection.Ascending;
