@@ -28,7 +28,8 @@ public struct ScanView: View {
             }
             .onChange(of: selectedItem) { _, newItem in
                 Task {
-                    guard let data = try? await newItem?.loadTransferable(type: Data.self), let data else { return }
+                    guard let item = newItem,
+                          let data = try? await item.loadTransferable(type: Data.self) else { return }
                     await viewModel.submitScan(imageData: data)
                 }
             }
