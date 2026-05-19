@@ -90,6 +90,20 @@ public final class AuthSessionManager {
         }
     }
 
+    /// Returns a usable access token for outbound API calls, transparently
+    /// refreshing an expired one. Returns `nil` when the caller is not
+    /// authenticated (or refresh failed), so the API client simply omits the
+    /// Authorization header and the server responds 401.
+    public func currentAccessToken() async -> String? {
+        await refreshIfNeeded()
+        guard case .authenticated = state,
+              let session = currentSession,
+              !isExpired(session) else {
+            return nil
+        }
+        return session.accessToken
+    }
+
     public func signOut() {
         do {
             try store.clear()
