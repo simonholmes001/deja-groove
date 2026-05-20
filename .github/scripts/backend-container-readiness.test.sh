@@ -13,6 +13,21 @@ make_repo() {
   echo "$dir"
 }
 
+write_publish_workflow_stub() {
+  local path="$1"
+  cat > "$path" <<'WF'
+name: Backend Container Publish
+# release_channel must be one of dev|staging|prod
+jobs:
+  publish:
+    steps:
+      - uses: docker/login-action@v3
+      - uses: docker/build-push-action@v6
+      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
+      # docker buildx imagetools create
+WF
+}
+
 test_passes_with_required_wiring() {
   local repo
   repo="$(make_repo)"
@@ -21,16 +36,7 @@ test_passes_with_required_wiring() {
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 DF
 
-  cat > "$repo/.github/workflows/backend-container-publish.yml" <<'WF'
-name: Backend Container Publish
-jobs:
-  publish:
-    steps:
-      - uses: docker/login-action@v3
-      - uses: docker/metadata-action@v5
-      - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
-WF
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
@@ -60,16 +66,7 @@ test_fails_when_dockerfile_missing() {
   local repo
   repo="$(make_repo)"
 
-  cat > "$repo/.github/workflows/backend-container-publish.yml" <<'WF'
-name: Backend Container Publish
-jobs:
-  publish:
-    steps:
-      - uses: docker/login-action@v3
-      - uses: docker/metadata-action@v5
-      - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
-WF
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
@@ -120,16 +117,7 @@ test_fails_when_dev_param_still_placeholder() {
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 DF
 
-  cat > "$repo/.github/workflows/backend-container-publish.yml" <<'WF'
-name: Backend Container Publish
-jobs:
-  publish:
-    steps:
-      - uses: docker/login-action@v3
-      - uses: docker/metadata-action@v5
-      - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
-WF
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
@@ -180,16 +168,7 @@ test_fails_when_deploy_workflow_missing_env_wiring() {
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 DF
 
-  cat > "$repo/.github/workflows/backend-container-publish.yml" <<'WF'
-name: Backend Container Publish
-jobs:
-  publish:
-    steps:
-      - uses: docker/login-action@v3
-      - uses: docker/metadata-action@v5
-      - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
-WF
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
@@ -240,16 +219,7 @@ test_fails_when_deploy_workflow_missing_parameter_passthrough() {
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 DF
 
-  cat > "$repo/.github/workflows/backend-container-publish.yml" <<'WF'
-name: Backend Container Publish
-jobs:
-  publish:
-    steps:
-      - uses: docker/login-action@v3
-      - uses: docker/metadata-action@v5
-      - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
-WF
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)

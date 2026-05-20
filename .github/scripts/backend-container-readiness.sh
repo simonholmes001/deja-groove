@@ -19,8 +19,8 @@ grep -q "docker/login-action@" .github/workflows/backend-container-publish.yml |
   echo "Missing docker/login-action in backend container workflow." >&2
   exit 1
 }
-grep -q "docker/metadata-action@" .github/workflows/backend-container-publish.yml || {
-  echo "Missing docker/metadata-action in backend container workflow." >&2
+grep -Fq "release_channel must be one of dev|staging|prod" .github/workflows/backend-container-publish.yml || {
+  echo "Missing release-channel validation in backend container workflow." >&2
   exit 1
 }
 grep -q "docker/build-push-action@" .github/workflows/backend-container-publish.yml || {
@@ -29,6 +29,10 @@ grep -q "docker/build-push-action@" .github/workflows/backend-container-publish.
 }
 grep -q "aquasecurity/trivy-action@" .github/workflows/backend-container-publish.yml || {
   echo "Missing Trivy vulnerability scan gate in backend container workflow." >&2
+  exit 1
+}
+grep -q "docker buildx imagetools create" .github/workflows/backend-container-publish.yml || {
+  echo "Missing channel tag promotion step in backend container workflow." >&2
   exit 1
 }
 
