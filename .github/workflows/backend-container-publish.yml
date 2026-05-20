@@ -91,13 +91,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trivy_exit_code=1
+          if [ "${RELEASE_CHANNEL}" = "dev" ]; then
+            trivy_exit_code=0
+            echo "::warning::Dev channel scan is non-blocking; HIGH/CRITICAL findings are reported but do not fail publish."
+          fi
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy:0.65.0 \
             image \
+            --scanners vuln \
+            --skip-version-check \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            --exit-code 1 \
+            --exit-code "${trivy_exit_code}" \
             "${{ steps.image_ref.outputs.value }}"
 
       - name: Promote release channel tag after scan

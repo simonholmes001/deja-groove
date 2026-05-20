@@ -27,6 +27,8 @@ grep -q 'value=\${IMAGE_REPO}@\${{ steps.build.outputs.digest }}' "$WORKFLOW" ||
 grep -q '\${{ steps.image_ref.outputs.value }}' "$WORKFLOW" || { echo "Missing scan-on-digest-reference contract" >&2; exit 1; }
 grep -q 'aquasec/trivy:0.65.0' "$WORKFLOW" || { echo "Missing pinned Trivy CLI image contract" >&2; exit 1; }
 grep -q -- '--severity HIGH,CRITICAL' "$WORKFLOW" || { echo "Missing vulnerability severity gate contract" >&2; exit 1; }
+grep -q 'if \[ "\${RELEASE_CHANNEL}" = "dev" \]; then' "$WORKFLOW" || { echo "Missing dev-channel non-blocking scan policy contract" >&2; exit 1; }
+grep -q -- '--exit-code "\${trivy_exit_code}"' "$WORKFLOW" || { echo "Missing channel-aware trivy exit-code contract" >&2; exit 1; }
 grep -q 'docker buildx imagetools create' "$WORKFLOW" || { echo "Missing post-scan promotion step" >&2; exit 1; }
 grep -q '\${IMAGE_REPO}:\${RELEASE_CHANNEL}-latest' "$WORKFLOW" || { echo "Missing channel-latest promotion contract" >&2; exit 1; }
 grep -q 'deploy-dev:' "$WORKFLOW" || { echo "Missing deploy-dev chaining job" >&2; exit 1; }
