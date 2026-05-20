@@ -6,6 +6,7 @@ WORKFLOW=".github/workflows/backend-container-publish.yml"
 [ -f "$WORKFLOW" ] || { echo "Missing workflow: $WORKFLOW" >&2; exit 1; }
 
 grep -q '^name: Backend Container Publish' "$WORKFLOW" || { echo "Wrong workflow name" >&2; exit 1; }
+grep -q 'id-token: write' "$WORKFLOW" || { echo "Missing id-token: write permission for reusable deploy call" >&2; exit 1; }
 grep -q 'push:' "$WORKFLOW" || { echo "Missing push trigger" >&2; exit 1; }
 grep -q 'branches: \[main\]' "$WORKFLOW" || { echo "Missing main branch trigger" >&2; exit 1; }
 grep -q 'release_channel:' "$WORKFLOW" || { echo "Missing release channel input" >&2; exit 1; }
