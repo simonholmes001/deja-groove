@@ -9,6 +9,7 @@ using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Api.Hosting;
 using DejaGroove.Infrastructure.Persistence;
+using DejaGroove.Infrastructure.Recognition;
 using DejaGroove.Infrastructure.Persistence.Caching;
 using DejaGroove.Infrastructure.Persistence.Collection;
 using DejaGroove.Infrastructure.Persistence.Scanning;
@@ -59,7 +60,33 @@ else
     builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-    builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
+
+    // Issue #141: use the real OpenAI vision matcher when the OPENAI_KEY
+    // environment variable is set; otherwise fail closed so a misconfigured
+    // deployment never silently degrades scanning. Non-secret tunables still
+    // bind from the "OpenAi" section.
+    var openAiKey = builder.Configuration["OPENAI_KEY"];
+    if (!string.IsNullOrWhiteSpace(openAiKey))
+    {
+        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
+        builder.Services.AddOptions<OpenAiOptions>()
+            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+            .Configure(o => o.ApiKey = openAiKey)
+            .ValidateOnStart();
+        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
+            {
+                // Defensive backstop above the Polly per-attempt timeout (≤6s) ×
+                // retries: stops a bypassed-pipeline code path hanging on the
+                // 100s HttpClient default.
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+    }
+    else
+    {
+        builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
+    }
+
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
 }
