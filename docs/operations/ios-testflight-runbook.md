@@ -64,6 +64,34 @@ The lane uploads to the `Internal` tester group and skips waiting for full proce
 ```bash
 bash .github/scripts/validate-ios-project.sh
 bash .github/scripts/ios-distribution-readiness.sh
+bash .github/scripts/backend-container-readiness.sh
 ```
 
 This verifies all required files and expected workflow/fastlane hooks exist.
+
+## Backend Runtime (Docker Hub + Azure)
+
+Before testing on iPhone, the Azure backend must run a real API image instead of a placeholder:
+
+- Publish workflow: `.github/workflows/backend-container-publish.yml`
+- Infra deploy secret: `DOCKER_IMAGE_REFERENCE`
+- Expected image format: `<dockerhub-user>/deja-groove-api:<tag>`
+- Image policy and promotion/retention contract: `docs/operations/container-image-policy.md`
+
+For dev, set `DOCKER_IMAGE_REFERENCE` to a pushed image tag like:
+
+`simonholmes001/deja-groove-api:dev-latest`
+
+Then run or trigger `.github/workflows/infrastructure-deploy-dev.yaml`.
+
+## Xcode iPhone API Endpoint
+
+For real-device testing, set the app API base URL to APIM. Resolve the current gateway URL from the latest deploy output:
+
+```bash
+az deployment sub show \
+  --name "<latest-deployment-name>" \
+  --query "properties.outputs.apimGatewayUrl.value" -o tsv
+```
+
+Do not use the direct App Service hostname as the client base URL.

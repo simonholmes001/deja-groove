@@ -42,6 +42,7 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
         run: |
           set -euo pipefail
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
@@ -52,10 +53,18 @@ jobs:
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
             exit 1
           fi
-          echo "LOGIN_LEN=${#AZURE_POSTGRES_ADMIN_LOGIN}"
-          echo -n "$AZURE_POSTGRES_ADMIN_LOGIN" | sha256sum
-          echo "PASS_LEN=${#AZURE_POSTGRES_ADMIN_PASSWORD}"
-          echo -n "$AZURE_POSTGRES_ADMIN_PASSWORD" | sha256sum
+          if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
+            echo "::error::Missing DOCKER_IMAGE_REFERENCE secret."
+            exit 1
+          fi
+          if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
+            echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
+            exit 1
+          fi
+          if ! echo "${DOCKER_IMAGE_REFERENCE}" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_.-]+$'; then
+            echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag>."
+            exit 1
+          fi
 
       - name: Build Bicep template
         uses: azure/cli@v2
@@ -70,11 +79,16 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
           inlineScript: |
             set -euo pipefail
+            if ! docker manifest inspect "${DOCKER_IMAGE_REFERENCE}" >/dev/null 2>&1; then
+              echo "::error::DOCKER_IMAGE_REFERENCE does not exist or is not readable: ${DOCKER_IMAGE_REFERENCE}"
+              exit 1
+            fi
             az account show --query "{name:name, subscriptionId:id}" -o table
             # Build optional Entra params — omitted until Entra tenant is provisioned (issue #8).
             # Both secrets must be set together or both must be absent.
@@ -104,6 +118,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
+              --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}" \
               "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?

@@ -1,0 +1,81 @@
+name: Backend Container Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-container-publish.yml"
+      - "backend/src/DejaGroove.Api/Dockerfile"
+  workflow_dispatch:
+    inputs:
+      release_channel:
+        description: "Channel tag to publish (dev|staging|prod)"
+        required: false
+        default: "dev"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCKERHUB_USERNAME:-}" ]; then
+            echo "Missing required secret: DOCKERHUB_USERNAME" >&2
+            exit 1
+          fi
+          if [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "Missing required secret: DOCKERHUB_TOKEN" >&2
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Prepare image metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        env:
+          RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'dev' }}
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/deja-groove-api
+          tags: |
+            type=raw,value=${{ env.RELEASE_CHANNEL }}-latest
+            type=sha,format=short,prefix=sha-
+
+      - name: Build and push API image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: backend/src/DejaGroove.Api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Vulnerability scan gate
+        env:
+          RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'dev' }}
+        uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f # 0.28.0
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/deja-groove-api:${{ env.RELEASE_CHANNEL }}-latest
+          format: table
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
