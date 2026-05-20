@@ -4,7 +4,7 @@ param location = 'swedencentral'
 param ownerEmail = 'simonholmes001@hotmail.com'
 param apimPublisherName = 'Deja Groove'
 param apimPublisherEmail = 'simonholmes001@hotmail.com'
-param dockerImageReference = 'nginx:latest'
+param dockerImageReference = 'simonholmes001/deja-groove-api:dev-latest'
 
 param rgNetworkName = 'rg-deja-dev-network'
 param rgDataName = 'rg-deja-dev-data'

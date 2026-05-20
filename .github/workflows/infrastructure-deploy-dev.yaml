@@ -42,6 +42,7 @@ jobs:
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
         run: |
           set -euo pipefail
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
@@ -52,10 +53,18 @@ jobs:
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
             exit 1
           fi
-          echo "LOGIN_LEN=${#AZURE_POSTGRES_ADMIN_LOGIN}"
-          echo -n "$AZURE_POSTGRES_ADMIN_LOGIN" | sha256sum
-          echo "PASS_LEN=${#AZURE_POSTGRES_ADMIN_PASSWORD}"
-          echo -n "$AZURE_POSTGRES_ADMIN_PASSWORD" | sha256sum
+          if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
+            echo "::error::Missing DOCKER_IMAGE_REFERENCE secret."
+            exit 1
+          fi
+          if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
+            echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
+            exit 1
+          fi
+          if ! echo "${DOCKER_IMAGE_REFERENCE}" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_.-]+$'; then
+            echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag>."
+            exit 1
+          fi
 
       - name: Build Bicep template
         uses: azure/cli@v2
@@ -65,11 +74,30 @@ jobs:
             az bicep install
             az bicep build --file infrastructure/bicep/main.bicep
 
+      - name: Validate Docker Hub image exists
+        shell: bash
+        env:
+          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
+        run: |
+          set -euo pipefail
+          repo="${DOCKER_IMAGE_REFERENCE%:*}"
+          tag="${DOCKER_IMAGE_REFERENCE##*:}"
+          if [ -z "${repo}" ] || [ -z "${tag}" ]; then
+            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed."
+            exit 1
+          fi
+          url="https://hub.docker.com/v2/repositories/${repo}/tags/${tag}"
+          if ! curl --silent --show-error --fail "$url" >/dev/null; then
+            echo "::error::DOCKER_IMAGE_REFERENCE does not exist on Docker Hub: ${DOCKER_IMAGE_REFERENCE}"
+            exit 1
+          fi
+
       - name: Deploy dev infrastructure (subscription scope)
         uses: azure/cli@v2
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
@@ -104,6 +132,7 @@ jobs:
               --parameters infrastructure/bicep/parameters/dev.bicepparam \
               --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
               --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
+              --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}" \
               "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
               --output table
             deploy_rc=$?
