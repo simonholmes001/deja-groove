@@ -41,8 +41,10 @@ DF
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
 # @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
 # auth.docker.io/token
 # registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
 workflow_call:
   inputs:
     docker_image_reference:
@@ -81,8 +83,10 @@ test_fails_when_dockerfile_missing() {
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
 # @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
 # auth.docker.io/token
 # registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
 workflow_call:
   inputs:
     docker_image_reference:
@@ -142,8 +146,10 @@ DF
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
 # @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
 # auth.docker.io/token
 # registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
 workflow_call:
   inputs:
     docker_image_reference:
@@ -203,8 +209,10 @@ DF
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
 # @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
 # auth.docker.io/token
 # registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
 workflow_call:
   inputs:
     docker_image_reference:
@@ -264,8 +272,10 @@ DF
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
 # @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
 # auth.docker.io/token
 # registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
 workflow_call:
   inputs:
     docker_image_reference:

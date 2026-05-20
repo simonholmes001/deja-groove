@@ -67,6 +67,12 @@ jobs:
           DOCKER_IMAGE_REFERENCE: ${{ inputs.docker_image_reference || secrets.DOCKER_IMAGE_REFERENCE }}
         run: |
           set -euo pipefail
+          is_digest_ref() {
+            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'
+          }
+          is_tag_ref() {
+            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
+          }
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
             echo "::error::Missing AZURE_POSTGRES_ADMIN_LOGIN secret."
             exit 1
@@ -87,9 +93,16 @@ jobs:
             echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
             exit 1
           fi
-          if ! echo "${DOCKER_IMAGE_REFERENCE}" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'; then
-            echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>@sha256:<64-hex>."
-            exit 1
+          if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ]; then
+            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}"; then
+              echo "::error::workflow_call requires digest-pinned DOCKER_IMAGE_REFERENCE (<namespace>/<image>@sha256:<64-hex>)."
+              exit 1
+            fi
+          else
+            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}" && ! is_tag_ref "${DOCKER_IMAGE_REFERENCE}"; then
+              echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag> or <namespace>/<image>@sha256:<64-hex>."
+              exit 1
+            fi
           fi
           echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
 
@@ -105,19 +118,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          repo="${DOCKER_IMAGE_REFERENCE%@*}"
-          digest="${DOCKER_IMAGE_REFERENCE#*@}"
-          if [ -z "${repo}" ] || [ -z "${digest}" ]; then
-            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo@sha256:digest)."
+          repo="${DOCKER_IMAGE_REFERENCE%%[@:]*}"
+          ref="${DOCKER_IMAGE_REFERENCE##*[@:]}"
+          if [ -z "${repo}" ] || [ -z "${ref}" ]; then
+            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo:tag or repo@sha256:digest)."
             exit 1
           fi
           token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull"
-          token="$(curl --silent --show-error --fail "$token_url" | sed -n 's/.*\"token\":\"\\([^\"]*\\)\".*/\\1/p')"
+          token="$(
+            curl --silent --show-error --fail "$token_url" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+          )"
           if [ -z "${token}" ]; then
             echo "::error::Unable to acquire Docker registry token for ${repo}."
             exit 1
           fi
-          manifest_url="https://registry-1.docker.io/v2/${repo}/manifests/${digest}"
+          manifest_url="https://registry-1.docker.io/v2/${repo}/manifests/${ref}"
           if ! curl --silent --show-error --fail \
             -H "Authorization: Bearer ${token}" \
             -H "Accept: application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.index.v1+json" \

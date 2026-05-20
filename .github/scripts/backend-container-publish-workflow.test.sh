@@ -27,7 +27,7 @@ grep -q 'aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2' "$W
 grep -q 'deploy-dev:' "$WORKFLOW" || { echo "Missing deploy-dev chaining job" >&2; exit 1; }
 grep -q 'uses: ./.github/workflows/infrastructure-deploy-dev.yaml' "$WORKFLOW" || { echo "Missing reusable deploy workflow call" >&2; exit 1; }
 grep -q 'docker_image_reference: \${{ needs.publish.outputs.image_ref }}' "$WORKFLOW" || { echo "Missing deploy image_ref handoff contract" >&2; exit 1; }
-grep -Fq "if: \${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev') }}" "$WORKFLOW" || { echo "Missing deploy gating condition contract" >&2; exit 1; }
+grep -Fq "if: \${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}" "$WORKFLOW" || { echo "Missing deploy gating condition contract" >&2; exit 1; }
 grep -q 'secrets:' "$WORKFLOW" || { echo "Missing reusable workflow secret mapping" >&2; exit 1; }
 grep -q 'AZURE_CLIENT_ID: \${{ secrets.AZURE_CLIENT_ID }}' "$WORKFLOW" || { echo "Missing explicit AZURE_CLIENT_ID secret mapping" >&2; exit 1; }
 grep -q 'severity: HIGH,CRITICAL' "$WORKFLOW" || { echo "Missing vulnerability severity gate" >&2; exit 1; }

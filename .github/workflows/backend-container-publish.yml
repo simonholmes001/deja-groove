@@ -101,7 +101,7 @@ jobs:
   deploy-dev:
     name: Deploy Dev Infra With Published Image
     needs: publish
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}
     uses: ./.github/workflows/infrastructure-deploy-dev.yaml
     with:
       docker_image_reference: ${{ needs.publish.outputs.image_ref }}
