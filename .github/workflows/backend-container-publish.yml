@@ -18,9 +18,14 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: dev
     outputs:
       image_ref: ${{ steps.image_ref.outputs.value }}
     env:

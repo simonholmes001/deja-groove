@@ -7,6 +7,7 @@ WORKFLOW=".github/workflows/backend-container-publish.yml"
 
 grep -q '^name: Backend Container Publish' "$WORKFLOW" || { echo "Wrong workflow name" >&2; exit 1; }
 grep -q 'id-token: write' "$WORKFLOW" || { echo "Missing id-token: write permission for reusable deploy call" >&2; exit 1; }
+grep -q 'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"' "$WORKFLOW" || { echo "Missing Node 24 opt-in flag" >&2; exit 1; }
 grep -q 'push:' "$WORKFLOW" || { echo "Missing push trigger" >&2; exit 1; }
 grep -q 'branches: \[main\]' "$WORKFLOW" || { echo "Missing main branch trigger" >&2; exit 1; }
 grep -q 'release_channel:' "$WORKFLOW" || { echo "Missing release channel input" >&2; exit 1; }
@@ -15,6 +16,8 @@ grep -q 'push: true' "$WORKFLOW" || { echo "Build is not configured to push" >&2
 grep -q 'file: backend/src/DejaGroove.Api/Dockerfile' "$WORKFLOW" || { echo "Wrong Dockerfile path" >&2; exit 1; }
 grep -q 'release_channel must be one of dev|staging|prod' "$WORKFLOW" || { echo "Missing release channel validation contract" >&2; exit 1; }
 grep -q 'IMAGE_REPO: \${{ secrets.DOCKERHUB_USERNAME }}/deja-groove-api' "$WORKFLOW" || { echo "Wrong image naming contract" >&2; exit 1; }
+grep -q 'environment:' "$WORKFLOW" || { echo "Missing publish job environment configuration" >&2; exit 1; }
+grep -q 'name: dev' "$WORKFLOW" || { echo "Publish job must target dev environment for secrets" >&2; exit 1; }
 grep -q 'tags: \${{ env.IMAGE_REPO }}:sha-\${{ github.sha }}' "$WORKFLOW" || { echo "Missing immutable sha publish tag contract" >&2; exit 1; }
 grep -q 'outputs:' "$WORKFLOW" || { echo "Missing publish job outputs block" >&2; exit 1; }
 grep -q 'image_ref: \${{ steps.image_ref.outputs.value }}' "$WORKFLOW" || { echo "Missing image_ref output contract" >&2; exit 1; }
