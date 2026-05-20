@@ -35,15 +35,15 @@
         <string>UIInterfaceOrientationPortrait</string>
     </array>
     <key>DEJA_GROOVE_API_BASE_URL</key>
-    <string>https://api.dejagroove.example</string>
+    <string>$(DEJA_GROOVE_API_BASE_URL)</string>
     <key>DEJA_GROOVE_ENTRA_AUTHORITY</key>
-    <string>https://login.microsoftonline.com/common</string>
+    <string>$(DEJA_GROOVE_ENTRA_AUTHORITY)</string>
     <key>DEJA_GROOVE_ENTRA_CLIENT_ID</key>
-    <string>REPLACE_WITH_CLIENT_ID</string>
+    <string>$(DEJA_GROOVE_ENTRA_CLIENT_ID)</string>
     <key>DEJA_GROOVE_ENTRA_REDIRECT_URI</key>
-    <string>msauth.com.dejagroove.app://auth</string>
+    <string>$(DEJA_GROOVE_ENTRA_REDIRECT_URI)</string>
     <key>DEJA_GROOVE_ENTRA_SCOPES</key>
-    <string>openid profile offline_access api://dejagroove/access_as_user</string>
+    <string>$(DEJA_GROOVE_ENTRA_SCOPES)</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
