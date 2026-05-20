@@ -73,7 +73,14 @@ else
             .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
             .Configure(o => o.ApiKey = openAiKey)
             .ValidateOnStart();
-        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>();
+        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
+            {
+                // Defensive backstop above the Polly per-attempt timeout (≤6s) ×
+                // retries: stops a bypassed-pipeline code path hanging on the
+                // 100s HttpClient default.
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
     }
     else
     {

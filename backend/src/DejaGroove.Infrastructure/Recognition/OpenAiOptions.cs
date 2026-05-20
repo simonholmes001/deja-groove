@@ -13,7 +13,7 @@ public sealed record OpenAiOptions
     /// <summary>Injected from the OPENAI_KEY environment variable at startup.</summary>
     public string ApiKey { get; set; } = string.Empty;
 
-    public string Model { get; init; } = "gpt-5.4-mini";
+    public string Model { get; init; } = "gpt-5.4";
 
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
 

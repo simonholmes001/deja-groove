@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using DejaGroove.Application.Exceptions;
 using DejaGroove.Application.Ports;
 using DejaGroove.Domain.Scanning;
 using Microsoft.Extensions.Logging;
@@ -20,12 +21,23 @@ namespace DejaGroove.Infrastructure.Recognition;
 /// </summary>
 /// <remarks>
 /// Resilience: a per-attempt timeout (bounded by the scan budget) wrapped by a
-/// jittered exponential retry over transient faults only. Timeouts surface as
-/// <see cref="TimeoutException"/> so <c>ScanWorkflowUseCase</c> treats them as
-/// transient. Non-transient faults (4xx, unparseable model output) fail fast.
+/// jittered exponential retry over transient faults only. Failure mapping:
+/// timeouts → <see cref="TimeoutException"/> (so <c>ScanWorkflowUseCase</c>
+/// retries once); exhausted transient/transport faults → a controlled
+/// <see cref="ServiceUnavailableException"/> (API 503, retryable) rather than a
+/// leaked infrastructure type; 4xx and unparseable model output fail fast as
+/// <see cref="OpenAiRecognitionException"/>. The upstream response is read with
+/// a hard byte cap and parsed with bounded depth/breadth so a hostile or
+/// misconfigured endpoint cannot exhaust memory.
 /// </remarks>
 public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
 {
+    // The model JSON for ≤5 candidates is a few KB; this is a generous ceiling
+    // that still forecloses a memory-exhaustion response.
+    private const int MaxResponseBytes = 1024 * 1024;
+    private const int MaxJsonDepth = 32;
+    private const int MaxCandidatesParsed = 25;
+    private const string ProviderUnavailableCode = "scan_provider_unavailable";
     private readonly HttpClient _httpClient;
     private readonly OpenAiOptions _options;
     private readonly ILogger<OpenAiAlbumMatchingPort> _logger;
@@ -62,6 +74,14 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         {
             throw new TimeoutException("OpenAI recognition timed out.", ex);
         }
+        catch (Exception ex) when (ex is TransientRecognitionException or HttpRequestException)
+        {
+            // Retries exhausted against a transient/transport fault: surface a
+            // controlled 503 (retryable) instead of leaking the infra type.
+            _logger.LogError(ex, "OpenAI recognition unavailable after retries.");
+            throw new ServiceUnavailableException(
+                ProviderUnavailableCode, "Album recognition is temporarily unavailable.");
+        }
     }
 
     private async Task<ScanResult> CallModelAsync(string base64Image, CancellationToken ct)
@@ -82,7 +102,7 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
             throw new OpenAiRecognitionException(
                 $"OpenAI returned non-success status {(int)response.StatusCode}.");
 
-        var payload = await response.Content.ReadAsStringAsync(ct);
+        var payload = await ReadCappedAsync(response.Content, ct);
         var candidates = ParseCandidates(payload);
 
         _logger.LogDebug(
@@ -121,12 +141,14 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         return JsonSerializer.Serialize(payload);
     }
 
+    private static readonly JsonDocumentOptions BoundedJson = new() { MaxDepth = MaxJsonDepth };
+
     private static IReadOnlyList<RecognitionCandidate> ParseCandidates(string responsePayload)
     {
         string content;
         try
         {
-            using var envelope = JsonDocument.Parse(responsePayload);
+            using var envelope = JsonDocument.Parse(responsePayload, BoundedJson);
             content = envelope.RootElement
                 .GetProperty("choices")[0]
                 .GetProperty("message")
@@ -140,13 +162,13 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
 
         try
         {
-            using var model = JsonDocument.Parse(content);
+            using var model = JsonDocument.Parse(content, BoundedJson);
             if (!model.RootElement.TryGetProperty("candidates", out var array) ||
                 array.ValueKind != JsonValueKind.Array)
                 return [];
 
-            var candidates = new List<RecognitionCandidate>();
-            foreach (var element in array.EnumerateArray())
+            var candidates = new List<RecognitionCandidate>(MaxCandidatesParsed);
+            foreach (var element in array.EnumerateArray().Take(MaxCandidatesParsed))
             {
                 candidates.Add(new RecognitionCandidate(
                     Title: ReadString(element, "title"),
@@ -161,6 +183,26 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         {
             throw new OpenAiRecognitionException("OpenAI model output was not valid JSON.", ex);
         }
+    }
+
+    private static async Task<string> ReadCappedAsync(HttpContent content, CancellationToken ct)
+    {
+        if (content.Headers.ContentLength is long declared && declared > MaxResponseBytes)
+            throw new OpenAiRecognitionException(
+                $"OpenAI response exceeded {MaxResponseBytes} bytes (Content-Length={declared}).");
+
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+        int read;
+        while ((read = await stream.ReadAsync(chunk.AsMemory(), ct)) > 0)
+        {
+            if (buffer.Length + read > MaxResponseBytes)
+                throw new OpenAiRecognitionException(
+                    $"OpenAI response exceeded {MaxResponseBytes} bytes while streaming.");
+            buffer.Write(chunk, 0, read);
+        }
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     private static string? ReadString(JsonElement element, string name) =>
@@ -189,9 +231,15 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         return buffer.ToArray();
     }
 
-    private static ResiliencePipeline BuildPipeline(OpenAiOptions options, ILogger logger) =>
-        new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
+    private static ResiliencePipeline BuildPipeline(OpenAiOptions options, ILogger logger)
+    {
+        var builder = new ResiliencePipelineBuilder();
+
+        // Polly v8 rejects MaxRetryAttempts = 0; skip the strategy entirely
+        // when retries are disabled (valid operational mode).
+        if (options.MaxRetryAttempts > 0)
+        {
+            builder.AddRetry(new RetryStrategyOptions
             {
                 ShouldHandle = new PredicateBuilder()
                     .Handle<TransientRecognitionException>()
@@ -210,10 +258,14 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
                         args.AttemptNumber + 1);
                     return ValueTask.CompletedTask;
                 },
-            })
-            .AddTimeout(new TimeoutStrategyOptions
-            {
-                Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
-            })
-            .Build();
+            });
+        }
+
+        builder.AddTimeout(new TimeoutStrategyOptions
+        {
+            Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
+        });
+
+        return builder.Build();
+    }
 }

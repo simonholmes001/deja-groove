@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
+using DejaGroove.Application.Exceptions;
 using DejaGroove.Domain.Scanning;
 using DejaGroove.Infrastructure.Recognition;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,7 +19,7 @@ public sealed class OpenAiAlbumMatchingPortTests
     private static OpenAiOptions Options(int retries = 1, int timeoutSeconds = 5) => new()
     {
         ApiKey = "sk-test-123",
-        Model = "gpt-5.4-mini",
+        Model = "gpt-5.4",
         BaseUrl = "https://api.openai.test/v1",
         TimeoutSeconds = timeoutSeconds,
         MaxRetryAttempts = retries,
@@ -90,7 +92,7 @@ public sealed class OpenAiAlbumMatchingPortTests
         Assert.Equal("sk-test-123", request.Headers.Authorization.Parameter);
 
         var body = handler.RequestBodies.Single();
-        Assert.Contains("gpt-5.4-mini", body);
+        Assert.Contains("gpt-5.4", body);
         Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes("fake-jpeg-bytes")), body);
         Assert.Contains("STRICT JSON", body); // prompt text from the pinned registry version
     }
@@ -110,23 +112,92 @@ public sealed class OpenAiAlbumMatchingPortTests
     }
 
     [Fact]
-    public async Task PersistentServerError_ThrowsAfterRetriesExhausted()
+    public async Task PersistentServerError_ThrowsServiceUnavailable_AfterRetriesExhausted()
     {
         var handler = new StubHttpMessageHandler()
             .EnqueueStatus(HttpStatusCode.BadGateway)
             .EnqueueStatus(HttpStatusCode.BadGateway);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
+        // Controlled 503-mapping exception, not a leaked infrastructure type.
+        await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Fact]
-    public async Task ClientError_IsNotRetried()
+    public async Task PersistentTransportFailure_ThrowsServiceUnavailable()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueThrow(new HttpRequestException("connection reset"))
+            .EnqueueThrow(new HttpRequestException("connection reset"));
+
+        await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
+    }
+
+    [Fact]
+    public async Task ClientError_IsNotRetried_AndThrowsRecognitionException()
     {
         var handler = new StubHttpMessageHandler().EnqueueStatus(HttpStatusCode.Unauthorized);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => Port(handler, Options(retries: 3)).IdentifyAsync(Image()));
+        await Assert.ThrowsAsync<OpenAiRecognitionException>(
+            () => Port(handler, Options(retries: 3)).IdentifyAsync(Image()));
 
         Assert.Single(handler.Requests); // 401 must not burn retry budget
+    }
+
+    [Fact]
+    public async Task PollyTimeout_IsTranslatedToTimeoutException()
+    {
+        // Per-attempt timeout fires (Polly AddTimeout → TimeoutRejectedException);
+        // the adapter must surface TimeoutException so ScanWorkflowUseCase
+        // treats it as transient. Must NOT block for the full upstream delay.
+        var handler = new StubHttpMessageHandler().EnqueueDelay(TimeSpan.FromSeconds(30));
+        var sw = Stopwatch.StartNew();
+
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => Port(handler, Options(retries: 0, timeoutSeconds: 1)).IdentifyAsync(Image()));
+
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"timed out too slowly: {sw.Elapsed}");
+    }
+
+    [Fact]
+    public async Task ResponseExceedingSizeCap_ThrowsRecognitionException_AndIsNotRetried()
+    {
+        // A *valid* but oversized response: without the cap this parses
+        // cleanly to SafeToBuy, so the test only passes once the read is
+        // bounded and rejected.
+        var padding = new string('a', 2 * 1024 * 1024);
+        var handler = new StubHttpMessageHandler().EnqueueJson(ChatResponse(
+            $$"""{ "candidates": [ { "title": "Big", "artist": "A", "year": 2000, "confidence": 0.95, "note": "{{padding}}" } ] }"""));
+
+        await Assert.ThrowsAsync<OpenAiRecognitionException>(
+            () => Port(handler, Options(retries: 3)).IdentifyAsync(Image()));
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task DeeplyNestedModelJson_ThrowsRecognitionException()
+    {
+        var nested = string.Concat(Enumerable.Repeat("[", 200)) + string.Concat(Enumerable.Repeat("]", 200));
+        var handler = new StubHttpMessageHandler().EnqueueJson(ChatResponse(nested));
+
+        await Assert.ThrowsAsync<OpenAiRecognitionException>(
+            () => Port(handler).IdentifyAsync(Image()));
+    }
+
+    [Fact]
+    public async Task ExcessiveCandidates_AreBounded_AndTopStillResolves()
+    {
+        var many = string.Join(",", Enumerable.Range(0, 500)
+            .Select(i => $$"""{ "title": "T{{i}}", "artist": "A", "year": 2000, "confidence": 0.10 }"""));
+        var handler = new StubHttpMessageHandler().EnqueueJson(ChatResponse(
+            $$"""{ "candidates": [ { "title": "Winner", "artist": "A", "year": 1990, "confidence": 0.97 }, {{many}} ] }"""));
+
+        var result = await Port(handler).IdentifyAsync(Image());
+
+        Assert.Equal(ScanStatus.SafeToBuy, result.Status);
+        Assert.Equal("Winner", result.AlbumIdentity!.Title);
     }
 
     [Fact]

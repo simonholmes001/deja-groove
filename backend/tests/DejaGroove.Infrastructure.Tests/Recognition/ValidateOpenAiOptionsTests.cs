@@ -13,7 +13,7 @@ public sealed class ValidateOpenAiOptionsTests
     private static OpenAiOptions Valid() => new()
     {
         ApiKey = "sk-test-key",
-        Model = "gpt-5.4-mini",
+        Model = "gpt-5.4",
         BaseUrl = "https://api.openai.com/v1",
         TimeoutSeconds = 5,
         MaxRetryAttempts = 1,
