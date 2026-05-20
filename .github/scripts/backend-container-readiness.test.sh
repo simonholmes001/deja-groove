@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: docker/login-action@v3
       - uses: docker/build-push-action@v6
-      - uses: aquasecurity/trivy-action@79c9ab38587148a04b4bb5f683ffec8395e26b2f
+            - run: docker run --rm aquasec/trivy:0.65.0 image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 simonholmes001/deja-groove-api:dev-latest
       # docker buildx imagetools create
 WF
 }

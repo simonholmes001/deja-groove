@@ -116,6 +116,9 @@ jobs:
 
       - name: Validate Docker Hub image exists
         shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
           repo="${DOCKER_IMAGE_REFERENCE%%[@:]*}"
@@ -125,8 +128,12 @@ jobs:
             exit 1
           fi
           token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull"
+          curl_args=(--silent --show-error --fail)
+          if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+            curl_args+=(--user "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}")
+          fi
           token="$(
-            curl --silent --show-error --fail "$token_url" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+            curl "${curl_args[@]}" "$token_url" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
           )"
           if [ -z "${token}" ]; then
             echo "::error::Unable to acquire Docker registry token for ${repo}."

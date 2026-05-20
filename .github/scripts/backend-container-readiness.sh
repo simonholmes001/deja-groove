@@ -27,8 +27,8 @@ grep -q "docker/build-push-action@" .github/workflows/backend-container-publish.
   echo "Missing docker/build-push-action in backend container workflow." >&2
   exit 1
 }
-grep -q "aquasecurity/trivy-action@" .github/workflows/backend-container-publish.yml || {
-  echo "Missing Trivy vulnerability scan gate in backend container workflow." >&2
+grep -q "aquasec/trivy:" .github/workflows/backend-container-publish.yml || {
+  echo "Missing Trivy CLI vulnerability scan gate in backend container workflow." >&2
   exit 1
 }
 grep -q "docker buildx imagetools create" .github/workflows/backend-container-publish.yml || {

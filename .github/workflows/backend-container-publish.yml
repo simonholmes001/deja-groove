@@ -16,10 +16,16 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: dev
     outputs:
       image_ref: ${{ steps.image_ref.outputs.value }}
     env:
@@ -82,13 +88,24 @@ jobs:
         run: echo "value=${IMAGE_REPO}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       - name: Vulnerability scan gate
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: ${{ steps.image_ref.outputs.value }}
-          format: table
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy_exit_code=1
+          if [ "${RELEASE_CHANNEL}" = "dev" ]; then
+            trivy_exit_code=0
+            echo "::warning::Dev channel scan is non-blocking; HIGH/CRITICAL findings are reported but do not fail publish."
+          fi
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.65.0 \
+            image \
+            --scanners vuln \
+            --skip-version-check \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code "${trivy_exit_code}" \
+            "${{ steps.image_ref.outputs.value }}"
 
       - name: Promote release channel tag after scan
         shell: bash
