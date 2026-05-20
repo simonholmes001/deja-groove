@@ -40,8 +40,46 @@ grep -q "DOCKER_IMAGE_REFERENCE" .github/workflows/infrastructure-deploy-dev.yam
   echo "Infrastructure deploy workflow is not wired for DOCKER_IMAGE_REFERENCE." >&2
   exit 1
 }
+grep -q "workflow_call:" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is not callable as reusable workflow." >&2
+  exit 1
+}
+grep -q "docker_image_reference:" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy reusable input docker_image_reference is missing." >&2
+  exit 1
+}
+grep -q "workflow_call execution requires inputs.docker_image_reference" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is not fail-closed for workflow_call missing image reference." >&2
+  exit 1
+}
 grep -q -- '--parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"' .github/workflows/infrastructure-deploy-dev.yaml || {
   echo "Infrastructure deploy workflow does not pass dockerImageReference parameter." >&2
+  exit 1
+}
+grep -q 'DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not persist DOCKER_IMAGE_REFERENCE via GITHUB_ENV." >&2
+  exit 1
+}
+if ! grep -q "workflow_call requires digest-pinned DOCKER_IMAGE_REFERENCE" .github/workflows/infrastructure-deploy-dev.yaml \
+  && ! grep -q "@sha256:" .github/workflows/infrastructure-deploy-dev.yaml; then
+  echo "Infrastructure deploy workflow does not enforce digest-pinned references for workflow_call runs." >&2
+  exit 1
+fi
+if ! grep -q "must match <namespace>/<image>:<tag> or <namespace>/<image>@sha256:<64-hex>" .github/workflows/infrastructure-deploy-dev.yaml \
+  && ! grep -q "must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>" .github/workflows/infrastructure-deploy-dev.yaml; then
+  echo "Infrastructure deploy workflow does not support compatible tag-or-digest validation for direct/manual runs." >&2
+  exit 1
+fi
+grep -q "auth.docker.io/token" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow missing Docker registry token-based manifest validation." >&2
+  exit 1
+}
+grep -q "registry-1.docker.io/v2/" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow missing Docker registry manifest lookup." >&2
+  exit 1
+}
+grep -q "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"token\",\"\"))'" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow missing robust JSON token parsing." >&2
   exit 1
 }
 

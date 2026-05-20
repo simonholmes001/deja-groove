@@ -1,6 +1,27 @@
 name: Infrastructure Deploy (Dev)
 
 on:
+  workflow_call:
+    inputs:
+      docker_image_reference:
+        description: "Exact backend image reference to deploy (for chained publish->deploy runs)."
+        required: false
+        type: string
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      AZURE_POSTGRES_ADMIN_LOGIN:
+        required: true
+      AZURE_POSTGRES_ADMIN_PASSWORD:
+        required: true
+      ENTRA_OIDC_CONFIG_URL:
+        required: false
+      ENTRA_API_CLIENT_ID:
+        required: false
   push:
     branches: [main]
     paths:
@@ -25,13 +46,13 @@ jobs:
       name: dev
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: APIM policy sanity check
         run: bash ./infrastructure/scripts/check-apim-policy.sh
 
       - name: Login to Azure (OIDC)
-        uses: azure/login@v3
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -40,11 +61,18 @@ jobs:
       - name: Validate required deployment secrets
         shell: bash
         env:
+          WORKFLOW_EVENT_NAME: ${{ github.event_name }}
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
+          DOCKER_IMAGE_REFERENCE: ${{ inputs.docker_image_reference || secrets.DOCKER_IMAGE_REFERENCE }}
         run: |
           set -euo pipefail
+          is_digest_ref() {
+            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'
+          }
+          is_tag_ref() {
+            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
+          }
           if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
             echo "::error::Missing AZURE_POSTGRES_ADMIN_LOGIN secret."
             exit 1
@@ -53,21 +81,33 @@ jobs:
             echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
             exit 1
           fi
-          if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            echo "::error::Missing DOCKER_IMAGE_REFERENCE secret."
+          if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ] && [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
+            echo "::error::workflow_call execution requires inputs.docker_image_reference."
             exit 1
+          fi
+          if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
+            DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
+            echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
           fi
           if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
             echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
             exit 1
           fi
-          if ! echo "${DOCKER_IMAGE_REFERENCE}" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_.-]+$'; then
-            echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag>."
-            exit 1
+          if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ]; then
+            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}"; then
+              echo "::error::workflow_call requires digest-pinned DOCKER_IMAGE_REFERENCE (<namespace>/<image>@sha256:<64-hex>)."
+              exit 1
+            fi
+          else
+            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}" && ! is_tag_ref "${DOCKER_IMAGE_REFERENCE}"; then
+              echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag> or <namespace>/<image>@sha256:<64-hex>."
+              exit 1
+            fi
           fi
+          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
 
       - name: Build Bicep template
-        uses: azure/cli@v2
+        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
         with:
           inlineScript: |
             set -euo pipefail
@@ -76,28 +116,37 @@ jobs:
 
       - name: Validate Docker Hub image exists
         shell: bash
-        env:
-          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
         run: |
           set -euo pipefail
-          repo="${DOCKER_IMAGE_REFERENCE%:*}"
-          tag="${DOCKER_IMAGE_REFERENCE##*:}"
-          if [ -z "${repo}" ] || [ -z "${tag}" ]; then
-            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed."
+          repo="${DOCKER_IMAGE_REFERENCE%%[@:]*}"
+          ref="${DOCKER_IMAGE_REFERENCE##*[@:]}"
+          if [ -z "${repo}" ] || [ -z "${ref}" ]; then
+            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo:tag or repo@sha256:digest)."
             exit 1
           fi
-          url="https://hub.docker.com/v2/repositories/${repo}/tags/${tag}"
-          if ! curl --silent --show-error --fail "$url" >/dev/null; then
+          token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull"
+          token="$(
+            curl --silent --show-error --fail "$token_url" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+          )"
+          if [ -z "${token}" ]; then
+            echo "::error::Unable to acquire Docker registry token for ${repo}."
+            exit 1
+          fi
+          manifest_url="https://registry-1.docker.io/v2/${repo}/manifests/${ref}"
+          if ! curl --silent --show-error --fail \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.index.v1+json" \
+            "$manifest_url" >/dev/null; then
             echo "::error::DOCKER_IMAGE_REFERENCE does not exist on Docker Hub: ${DOCKER_IMAGE_REFERENCE}"
             exit 1
           fi
 
       - name: Deploy dev infrastructure (subscription scope)
-        uses: azure/cli@v2
+        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
         env:
           AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
           AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          DOCKER_IMAGE_REFERENCE: ${{ secrets.DOCKER_IMAGE_REFERENCE }}
+          DOCKER_IMAGE_REFERENCE: ${{ env.DOCKER_IMAGE_REFERENCE }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
         with:
@@ -153,7 +202,7 @@ jobs:
             fi
 
       - name: Verify App Service direct ingress is blocked
-        uses: azure/cli@v2
+        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
         with:
           inlineScript: |
             set -euo pipefail

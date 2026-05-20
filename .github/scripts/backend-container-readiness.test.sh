@@ -40,6 +40,17 @@ DF
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
+# @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
+# auth.docker.io/token
+# registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+workflow_call:
+  inputs:
+    docker_image_reference:
+      required: false
+      type: string
+# workflow_call execution requires inputs.docker_image_reference
 jobs:
   deploy-dev:
     steps:
@@ -47,6 +58,7 @@ jobs:
         run: |
           az deployment sub create \
             --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"
+          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
 WF
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
@@ -70,6 +82,17 @@ test_fails_when_dockerfile_missing() {
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
+# @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
+# auth.docker.io/token
+# registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+workflow_call:
+  inputs:
+    docker_image_reference:
+      required: false
+      type: string
+# workflow_call execution requires inputs.docker_image_reference
 jobs:
   deploy-dev:
     steps:
@@ -77,6 +100,7 @@ jobs:
         run: |
           az deployment sub create \
             --parameters dockerImageReference="simonholmes001/deja-groove-api:dev"
+          echo "DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev" >> "$GITHUB_ENV"
 WF
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
@@ -121,6 +145,17 @@ DF
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
+# @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
+# auth.docker.io/token
+# registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+workflow_call:
+  inputs:
+    docker_image_reference:
+      required: false
+      type: string
+# workflow_call execution requires inputs.docker_image_reference
 jobs:
   deploy-dev:
     steps:
@@ -128,6 +163,7 @@ jobs:
         run: |
           az deployment sub create \
             --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"
+          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
 WF
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
@@ -172,6 +208,17 @@ DF
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
+# @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
+# auth.docker.io/token
+# registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+workflow_call:
+  inputs:
+    docker_image_reference:
+      required: false
+      type: string
+# workflow_call execution requires inputs.docker_image_reference
 jobs:
   deploy-dev:
     steps:
@@ -179,6 +226,7 @@ jobs:
         run: |
           az deployment sub create \
             --parameters dockerImageReference="simonholmes001/deja-groove-api:dev"
+          echo "DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev" >> "$GITHUB_ENV"
 WF
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
@@ -201,7 +249,7 @@ PARAM
     exit 1
   fi
 
-  grep -q "not wired for DOCKER_IMAGE_REFERENCE" /tmp/backend-container-readiness.out || {
+  grep -Eq "not wired for DOCKER_IMAGE_REFERENCE|does not pass dockerImageReference parameter" /tmp/backend-container-readiness.out || {
     echo "expected DOCKER_IMAGE_REFERENCE wiring message" >&2
     cat /tmp/backend-container-readiness.out >&2 || true
     rm -rf "$repo"
@@ -223,6 +271,17 @@ DF
 
   cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
 name: Infrastructure Deploy (Dev)
+# @sha256:
+# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
+# auth.docker.io/token
+# registry-1.docker.io/v2/
+# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
+workflow_call:
+  inputs:
+    docker_image_reference:
+      required: false
+      type: string
+# workflow_call execution requires inputs.docker_image_reference
 jobs:
   deploy-dev:
     steps:
