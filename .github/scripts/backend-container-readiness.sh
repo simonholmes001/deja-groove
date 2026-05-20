@@ -40,8 +40,36 @@ grep -q "DOCKER_IMAGE_REFERENCE" .github/workflows/infrastructure-deploy-dev.yam
   echo "Infrastructure deploy workflow is not wired for DOCKER_IMAGE_REFERENCE." >&2
   exit 1
 }
+grep -q "workflow_call:" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is not callable as reusable workflow." >&2
+  exit 1
+}
+grep -q "docker_image_reference:" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy reusable input docker_image_reference is missing." >&2
+  exit 1
+}
+grep -q "workflow_call execution requires inputs.docker_image_reference" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is not fail-closed for workflow_call missing image reference." >&2
+  exit 1
+}
 grep -q -- '--parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"' .github/workflows/infrastructure-deploy-dev.yaml || {
   echo "Infrastructure deploy workflow does not pass dockerImageReference parameter." >&2
+  exit 1
+}
+grep -q 'DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not persist DOCKER_IMAGE_REFERENCE via GITHUB_ENV." >&2
+  exit 1
+}
+grep -q "@sha256:" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not enforce digest-based image references." >&2
+  exit 1
+}
+grep -q "auth.docker.io/token" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow missing Docker registry token-based manifest validation." >&2
+  exit 1
+}
+grep -q "registry-1.docker.io/v2/" .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow missing Docker registry manifest lookup." >&2
   exit 1
 }
 
