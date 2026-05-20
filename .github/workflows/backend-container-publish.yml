@@ -83,13 +83,17 @@ jobs:
         run: echo "value=${IMAGE_REPO}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       - name: Vulnerability scan gate
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: ${{ steps.image_ref.outputs.value }}
-          format: table
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.65.0 \
+            image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            "${{ steps.image_ref.outputs.value }}"
 
       - name: Promote release channel tag after scan
         shell: bash
