@@ -1,4 +1,5 @@
 .env
+.worktrees/
 # .NET build artefacts
 backend/**/bin/
 backend/**/obj/
@@ -11,3 +12,7 @@ backend/coverage-results/
 # SwiftPM build artefacts
 ios/**/.build/
 backend/coverage-run/
+ios/.DS_Store
+ios/DejaGroove.xcodeproj/project.xcworkspace/
+ios/DejaGroove.xcodeproj/xcuserdata/
+ios/DejaGrooveApp/.swiftpm/
