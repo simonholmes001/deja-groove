@@ -1,4 +1,7 @@
 .env
+# Local multi-worktree metadata is developer-only and should never be versioned.
+# Do not store secrets or executable project scripts under this path.
+.worktrees/
 # .NET build artefacts
 backend/**/bin/
 backend/**/obj/
@@ -11,3 +14,8 @@ backend/coverage-results/
 # SwiftPM build artefacts
 ios/**/.build/
 backend/coverage-run/
+# Local iOS/Xcode machine-specific artifacts from opening/running the app in Xcode.
+ios/.DS_Store
+ios/DejaGroove.xcodeproj/project.xcworkspace/
+ios/DejaGroove.xcodeproj/xcuserdata/
+ios/DejaGrooveApp/.swiftpm/

@@ -54,6 +54,7 @@ jobs:
           bash .github/scripts/backend-container-readiness.test.sh
           bash .github/scripts/backend-container-publish-workflow.test.sh
           bash .github/scripts/backend-dockerfile-contract.test.sh
+          bash .github/scripts/gitignore-ios-artifacts.test.sh
 
   node-tests:
     name: Node Tests
