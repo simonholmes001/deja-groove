@@ -1,5 +1,5 @@
 DEJA_GROOVE_API_BASE_URL = https://api.dejagroove.example
-DEJA_GROOVE_ENTRA_AUTHORITY = https://login.microsoftonline.com/common
-DEJA_GROOVE_ENTRA_CLIENT_ID = REPLACE_WITH_CLIENT_ID
+DEJA_GROOVE_ENTRA_AUTHORITY = https://login.microsoftonline.com/17ca2540-dd3e-4204-b2f7-a3e3ad209719
+DEJA_GROOVE_ENTRA_CLIENT_ID = 796546b6-6807-4d0d-bf88-be01094ce767
 DEJA_GROOVE_ENTRA_REDIRECT_URI = msauth.com.dejagroove.app://auth
 DEJA_GROOVE_ENTRA_SCOPES = openid profile offline_access api://4035a0b6-3282-41de-bf55-e17a498f0877/access_as_user
