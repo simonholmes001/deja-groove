@@ -35,11 +35,11 @@
         <string>UIInterfaceOrientationPortrait</string>
     </array>
     <key>DEJA_GROOVE_API_BASE_URL</key>
-    <string>https://api.dejagroove.example</string>
+    <string>https://apim-deja-dev-v2-szhywz.azure-api.net</string>
     <key>DEJA_GROOVE_ENTRA_AUTHORITY</key>
-    <string>https://login.microsoftonline.com/common</string>
+    <string>https://login.microsoftonline.com/17ca2540-dd3e-4204-b2f7-a3e3ad209719</string>
     <key>DEJA_GROOVE_ENTRA_CLIENT_ID</key>
-    <string>REPLACE_WITH_CLIENT_ID</string>
+    <string>796546b6-6807-4d0d-bf88-be01094ce767</string>
     <key>DEJA_GROOVE_ENTRA_REDIRECT_URI</key>
     <string>msauth.com.dejagroove.app://auth</string>
     <key>DEJA_GROOVE_ENTRA_SCOPES</key>
