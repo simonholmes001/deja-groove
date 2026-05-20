@@ -147,6 +147,23 @@ public sealed class OpenAiAlbumMatchingPortTests
     }
 
     [Fact]
+    public async Task CallerCancellation_PropagatesWithoutRetryOrTimeoutMapping()
+    {
+        // The caller's own cancellation is not a transient fault and is not a
+        // timeout: it must propagate as OperationCanceledException without
+        // burning the retry budget and without being mapped to TimeoutException
+        // (which would trigger ScanWorkflowUseCase's transient retry).
+        var handler = new StubHttpMessageHandler().EnqueueDelay(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        var thrown = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Port(handler, Options(retries: 2, timeoutSeconds: 10)).IdentifyAsync(Image(), cts.Token));
+
+        Assert.IsNotType<TimeoutException>(thrown);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task PollyTimeout_IsTranslatedToTimeoutException()
     {
         // Per-attempt timeout fires (Polly AddTimeout → TimeoutRejectedException);
@@ -209,13 +226,19 @@ public sealed class OpenAiAlbumMatchingPortTests
     }
 
     [Fact]
-    public async Task TransportTimeout_IsTranslatedToTimeoutException()
+    public async Task TransportTimeout_IsTranslatedToTimeoutException_WithoutRetry()
     {
-        // Surfaced as TimeoutException so ScanWorkflowUseCase treats it as transient.
+        // A raw TaskCanceledException from the transport (e.g. the HttpClient
+        // backstop timeout firing — not caller cancellation, not Polly's own
+        // timeout strategy) is mapped to TimeoutException so ScanWorkflowUseCase
+        // treats it as transient. It is NOT retried at this layer — Polly only
+        // retries provider-side transients (5xx) and its own timeout, not raw
+        // cancellation.
         var handler = new StubHttpMessageHandler()
-            .EnqueueThrow(new TaskCanceledException("timed out"))
             .EnqueueThrow(new TaskCanceledException("timed out"));
 
-        await Assert.ThrowsAsync<TimeoutException>(() => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
+        Assert.Single(handler.Requests);
     }
 }

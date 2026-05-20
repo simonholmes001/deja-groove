@@ -241,11 +241,15 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         {
             builder.AddRetry(new RetryStrategyOptions
             {
+                // Deliberately NOT handling TaskCanceledException: a caller's
+                // own cancellation is not a transient provider fault and must
+                // propagate unchanged. Polly's timeout strategy surfaces its
+                // own cancellation as TimeoutRejectedException, which IS
+                // handled below.
                 ShouldHandle = new PredicateBuilder()
                     .Handle<TransientRecognitionException>()
                     .Handle<HttpRequestException>()
-                    .Handle<TimeoutRejectedException>()
-                    .Handle<TaskCanceledException>(),
+                    .Handle<TimeoutRejectedException>(),
                 MaxRetryAttempts = options.MaxRetryAttempts,
                 Delay = TimeSpan.FromMilliseconds(200),
                 BackoffType = DelayBackoffType.Exponential,
