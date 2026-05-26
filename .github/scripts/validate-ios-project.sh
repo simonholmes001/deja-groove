@@ -5,6 +5,7 @@ PROJECT_PATH="${DEJA_GROOVE_XCODE_PROJECT:-}"
 WORKSPACE_PATH="${DEJA_GROOVE_XCODE_WORKSPACE:-}"
 SCHEME="${DEJA_GROOVE_XCODE_SCHEME:-}"
 MANIFEST_PATH="ios/DejaGrooveApp/PrivacyInfo.xcprivacy"
+INFO_PLIST_PATH="ios/DejaGroove/Info.plist"
 
 if [ -z "$SCHEME" ]; then
   echo "DEJA_GROOVE_XCODE_SCHEME is required" >&2
@@ -35,22 +36,31 @@ echo "$LIST_JSON" | jq -e --arg scheme "$SCHEME" '.project.schemes // .workspace
 }
 
 [ -f "$MANIFEST_PATH" ] || { echo "Missing privacy manifest: $MANIFEST_PATH" >&2; exit 1; }
+[ -f "$INFO_PLIST_PATH" ] || { echo "Missing app Info.plist: $INFO_PLIST_PATH" >&2; exit 1; }
 
 if command -v plutil >/dev/null 2>&1; then
   plutil -lint "$MANIFEST_PATH" >/dev/null
+  plutil -lint "$INFO_PLIST_PATH" >/dev/null
 
   # Enforce required top-level keys for submission readiness.
   plutil -extract NSPrivacyTracking raw "$MANIFEST_PATH" >/dev/null
   plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "$MANIFEST_PATH" >/dev/null
   plutil -extract NSPrivacyAccessedAPITypes xml1 -o - "$MANIFEST_PATH" >/dev/null
+  plutil -extract NSCameraUsageDescription raw "$INFO_PLIST_PATH" >/dev/null
+  plutil -extract NSPhotoLibraryUsageDescription raw "$INFO_PLIST_PATH" >/dev/null
 else
-  python3 - "$MANIFEST_PATH" <<'PY'
+  python3 - "$MANIFEST_PATH" "$INFO_PLIST_PATH" <<'PY'
 import plistlib
 import sys
 
-path = sys.argv[1]
-with open(path, "rb") as f:
+manifest_path = sys.argv[1]
+info_path = sys.argv[2]
+
+with open(manifest_path, "rb") as f:
     data = plistlib.load(f)
+
+with open(info_path, "rb") as f:
+    info = plistlib.load(f)
 
 required = [
     "NSPrivacyTracking",
@@ -61,6 +71,10 @@ required = [
 for key in required:
     if key not in data:
         raise SystemExit(f"Missing required privacy key: {key}")
+
+for key in ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription"]:
+    if key not in info or not str(info[key]).strip():
+        raise SystemExit(f"Missing required usage description key: {key}")
 PY
 fi
 

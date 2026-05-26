@@ -12,9 +12,21 @@ fail() {
 new_repo() {
   local dir
   dir="$(mktemp -d)"
-  mkdir -p "$dir/ios/DejaGrooveApp" "$dir/bin"
+  mkdir -p "$dir/ios/DejaGrooveApp" "$dir/ios/DejaGroove" "$dir/bin"
   touch "$dir/ios/DejaGroove.xcodeproj"
   touch "$dir/ios/DejaGroove.xcworkspace"
+  cat > "$dir/ios/DejaGroove/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>Camera access is required for cover scanning.</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Photo access is required for library-based scanning.</string>
+</dict>
+</plist>
+PLIST
   cat > "$dir/ios/DejaGrooveApp/PrivacyInfo.xcprivacy" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -137,6 +149,24 @@ MOCK
   fi
 }
 
+test_fails_when_camera_usage_description_missing() {
+  local repo
+  repo="$(new_repo)"
+  cat > "$repo/ios/DejaGroove/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Photo access is required for library-based scanning.</string>
+</dict>
+</plist>
+PLIST
+  if run_check "$repo"; then
+    fail "expected failure when camera usage description is missing"
+  fi
+}
+
 test_passes_for_valid_project_scheme_and_manifest
 test_fails_when_scheme_missing
 test_fails_when_manifest_missing
@@ -144,5 +174,6 @@ test_fails_when_project_and_workspace_set
 test_passes_for_workspace_mode
 test_fails_when_neither_project_nor_workspace_set
 test_fails_on_malformed_xcodebuild_json
+test_fails_when_camera_usage_description_missing
 
 echo "validate-ios-project tests passed."
