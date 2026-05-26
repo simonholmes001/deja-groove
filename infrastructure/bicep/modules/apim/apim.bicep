@@ -43,16 +43,15 @@ param entraApiClientId string = ''
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var apimName = 'apim-deja-${environment}-${instanceSuffix}-${suffix}'
 var backendUrlNormalized = endsWith(backendUrl, '/') ? substring(backendUrl, 0, length(backendUrl) - 1) : backendUrl
+// JWT validation is active only when both Entra params are supplied.
+// Until the Entra External ID tenant is provisioned (issue #8), the gateway
+// falls back to an IP-based rate limit so infrastructure can deploy cleanly.
+var jwtEnabled = !empty(entraOidcConfigUrl) && !empty(entraApiClientId)
 // Deployment guard: production must never run with JWT validation disabled.
 // If prod is misconfigured, force template validation failure with an invalid SKU name.
 var apimSkuName = environment == 'prod' && !jwtEnabled
   ? 'INVALID_SKU_PROD_REQUIRES_ENTRA_JWT'
   : 'Developer'
-
-// JWT validation is active only when both Entra params are supplied.
-// Until the Entra External ID tenant is provisioned (issue #8), the gateway
-// falls back to an IP-based rate limit so infrastructure can deploy cleanly.
-var jwtEnabled = !empty(entraOidcConfigUrl) && !empty(entraApiClientId)
 
 // Global service policy: inject X-Correlation-Id on every request at the gateway edge.
 // The header is generated if the client does not supply one, and echoed back in all responses

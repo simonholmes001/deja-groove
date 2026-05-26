@@ -23,35 +23,43 @@ BICEP
 
 run_expect_pass() {
   local repo="$1"
+  local out_file
+  out_file="$(mktemp)"
   (
     cd "$repo"
-    bash infrastructure/scripts/check-apim-policy.sh >/tmp/check-apim-policy.out 2>&1
+    bash infrastructure/scripts/check-apim-policy.sh >"$out_file" 2>&1
   )
+  rm -f "$out_file"
 }
 
 run_expect_fail_contains() {
   local repo="$1"
   local expected="$2"
+  local out_file
+  out_file="$(mktemp)"
 
   set +e
   (
     cd "$repo"
-    bash infrastructure/scripts/check-apim-policy.sh >/tmp/check-apim-policy.out 2>&1
+    bash infrastructure/scripts/check-apim-policy.sh >"$out_file" 2>&1
   )
   local rc=$?
   set -e
 
   if [ "$rc" -eq 0 ]; then
     echo "expected check-apim-policy.sh to fail" >&2
-    cat /tmp/check-apim-policy.out >&2 || true
+    cat "$out_file" >&2 || true
+    rm -f "$out_file"
     exit 1
   fi
 
-  grep -q "$expected" /tmp/check-apim-policy.out || {
+  grep -q "$expected" "$out_file" || {
     echo "expected error output to contain: $expected" >&2
-    cat /tmp/check-apim-policy.out >&2 || true
+    cat "$out_file" >&2 || true
+    rm -f "$out_file"
     exit 1
   }
+  rm -f "$out_file"
 }
 
 test_passes_for_valid_policy() {
