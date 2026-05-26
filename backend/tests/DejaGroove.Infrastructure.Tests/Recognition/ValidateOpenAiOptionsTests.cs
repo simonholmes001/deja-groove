@@ -17,6 +17,11 @@ public sealed class ValidateOpenAiOptionsTests
         BaseUrl = "https://api.openai.com/v1",
         TimeoutSeconds = 5,
         MaxRetryAttempts = 1,
+        MaxConcurrentRequests = 8,
+        CircuitBreakerFailureThresholdPercent = 50,
+        CircuitBreakerMinimumThroughput = 4,
+        CircuitBreakerSamplingSeconds = 30,
+        CircuitBreakerBreakSeconds = 20,
         PromptVersion = RecognitionPromptRegistry.CurrentVersion,
     };
 
@@ -68,6 +73,46 @@ public sealed class ValidateOpenAiOptionsTests
     public void RetryAttemptsOutOfRange_Fails(int attempts)
     {
         Assert.True(Run(Valid() with { MaxRetryAttempts = attempts }).Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(65)]
+    public void MaxConcurrentRequestsOutOfRange_Fails(int value)
+    {
+        Assert.True(Run(Valid() with { MaxConcurrentRequests = value }).Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public void CircuitBreakerFailureThresholdPercentOutOfRange_Fails(int value)
+    {
+        Assert.True(Run(Valid() with { CircuitBreakerFailureThresholdPercent = value }).Failed);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(101)]
+    public void CircuitBreakerMinimumThroughputOutOfRange_Fails(int value)
+    {
+        Assert.True(Run(Valid() with { CircuitBreakerMinimumThroughput = value }).Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(301)]
+    public void CircuitBreakerSamplingSecondsOutOfRange_Fails(int value)
+    {
+        Assert.True(Run(Valid() with { CircuitBreakerSamplingSeconds = value }).Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(301)]
+    public void CircuitBreakerBreakSecondsOutOfRange_Fails(int value)
+    {
+        Assert.True(Run(Valid() with { CircuitBreakerBreakSeconds = value }).Failed);
     }
 
     [Fact]

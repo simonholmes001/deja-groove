@@ -22,5 +22,15 @@ public sealed record OpenAiOptions
 
     public int MaxRetryAttempts { get; init; } = 1;
 
+    public int MaxConcurrentRequests { get; init; } = 8;
+
+    public int CircuitBreakerFailureThresholdPercent { get; init; } = 50;
+
+    public int CircuitBreakerMinimumThroughput { get; init; } = 4;
+
+    public int CircuitBreakerSamplingSeconds { get; init; } = 30;
+
+    public int CircuitBreakerBreakSeconds { get; init; } = 20;
+
     public string PromptVersion { get; init; } = RecognitionPromptRegistry.CurrentVersion;
 }

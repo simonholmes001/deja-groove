@@ -8,7 +8,9 @@ using DejaGroove.Domain.Scanning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
+using Polly.CircuitBreaker;
 using Polly.Retry;
+using Polly.RateLimiting;
 using Polly.Timeout;
 
 namespace DejaGroove.Infrastructure.Recognition;
@@ -74,7 +76,7 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         {
             throw new TimeoutException("OpenAI recognition timed out.", ex);
         }
-        catch (Exception ex) when (ex is TransientRecognitionException or HttpRequestException)
+        catch (Exception ex) when (ex is TransientRecognitionException or HttpRequestException or BrokenCircuitException or RateLimiterRejectedException)
         {
             // Retries exhausted against a transient/transport fault: surface a
             // controlled 503 (retryable) instead of leaking the infra type.
@@ -235,6 +237,8 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
     {
         var builder = new ResiliencePipelineBuilder();
 
+        builder.AddConcurrencyLimiter(options.MaxConcurrentRequests, queueLimit: 0);
+
         // Polly v8 rejects MaxRetryAttempts = 0; skip the strategy entirely
         // when retries are disabled (valid operational mode).
         if (options.MaxRetryAttempts > 0)
@@ -268,6 +272,28 @@ public sealed class OpenAiAlbumMatchingPort : IAlbumMatchingPort
         builder.AddTimeout(new TimeoutStrategyOptions
         {
             Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
+        });
+
+        builder.AddCircuitBreaker(new CircuitBreakerStrategyOptions
+        {
+            ShouldHandle = new PredicateBuilder()
+                .Handle<TransientRecognitionException>()
+                .Handle<HttpRequestException>()
+                .Handle<TimeoutRejectedException>(),
+            FailureRatio = options.CircuitBreakerFailureThresholdPercent / 100.0,
+            MinimumThroughput = options.CircuitBreakerMinimumThroughput,
+            SamplingDuration = TimeSpan.FromSeconds(options.CircuitBreakerSamplingSeconds),
+            BreakDuration = TimeSpan.FromSeconds(options.CircuitBreakerBreakSeconds),
+            OnOpened = _ =>
+            {
+                logger.LogWarning("OpenAI circuit breaker opened.");
+                return ValueTask.CompletedTask;
+            },
+            OnClosed = _ =>
+            {
+                logger.LogInformation("OpenAI circuit breaker closed.");
+                return ValueTask.CompletedTask;
+            },
         });
 
         return builder.Build();

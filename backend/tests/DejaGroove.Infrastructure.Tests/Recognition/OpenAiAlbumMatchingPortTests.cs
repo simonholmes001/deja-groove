@@ -23,6 +23,11 @@ public sealed class OpenAiAlbumMatchingPortTests
         BaseUrl = "https://api.openai.test/v1",
         TimeoutSeconds = timeoutSeconds,
         MaxRetryAttempts = retries,
+        MaxConcurrentRequests = 8,
+        CircuitBreakerFailureThresholdPercent = 50,
+        CircuitBreakerMinimumThroughput = 4,
+        CircuitBreakerSamplingSeconds = 30,
+        CircuitBreakerBreakSeconds = 20,
         PromptVersion = RecognitionPromptRegistry.CurrentVersion,
     };
 
@@ -240,5 +245,49 @@ public sealed class OpenAiAlbumMatchingPortTests
         await Assert.ThrowsAsync<TimeoutException>(
             () => Port(handler, Options(retries: 1)).IdentifyAsync(Image()));
         Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task CircuitBreaker_OpensAfterThreshold_AndShortCircuitsSubsequentCalls()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueStatus(HttpStatusCode.BadGateway)
+            .EnqueueStatus(HttpStatusCode.BadGateway);
+
+        var options = Options(retries: 0) with
+        {
+            CircuitBreakerMinimumThroughput = 2,
+            CircuitBreakerFailureThresholdPercent = 50,
+            CircuitBreakerSamplingSeconds = 30,
+            CircuitBreakerBreakSeconds = 30,
+        };
+        var port = Port(handler, options);
+
+        await Assert.ThrowsAsync<ServiceUnavailableException>(() => port.IdentifyAsync(Image()));
+        await Assert.ThrowsAsync<ServiceUnavailableException>(() => port.IdentifyAsync(Image()));
+        await Assert.ThrowsAsync<ServiceUnavailableException>(() => port.IdentifyAsync(Image()));
+
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task ConcurrencyLimiter_RejectsSecondConcurrentCall_AsServiceUnavailable()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueDelayedJson(TimeSpan.FromMilliseconds(400), ChatResponse("""{ "candidates": [] }"""))
+            .EnqueueJson(ChatResponse("""{ "candidates": [] }"""));
+
+        var options = Options(retries: 0) with { MaxConcurrentRequests = 1 };
+        var port = Port(handler, options);
+
+        var first = port.IdentifyAsync(Image());
+        await Task.Delay(50);
+        var second = port.IdentifyAsync(Image());
+
+        var secondEx = await Assert.ThrowsAsync<ServiceUnavailableException>(async () => await second);
+        var firstResult = await first;
+
+        Assert.Equal("scan_provider_unavailable", secondEx.Code);
+        Assert.Equal(ScanStatus.NoMatch, firstResult.Status);
     }
 }
