@@ -25,6 +25,16 @@ if ! grep -Eq '^var mainApiJwtPolicyXml = .+GetValueOrDefault\(&quot;sub&quot;, 
   exit 1
 fi
 
+if ! grep -Eq '^var mainApiPassthroughPolicyXml = .+<set-backend-service base-url="\{\{backend-url\}\}/v1" />' "${APIM_BICEP_FILE}"; then
+  echo "Error: Missing APIM passthrough policy backend rewrite to /v1; /v1/* routes will 404 at backend." >&2
+  exit 1
+fi
+
+if ! grep -Eq '^var mainApiJwtPolicyXml = .+<set-backend-service base-url="\{\{backend-url\}\}/v1" />' "${APIM_BICEP_FILE}"; then
+  echo "Error: Missing APIM JWT policy backend rewrite to /v1; /v1/* routes will 404 at backend." >&2
+  exit 1
+fi
+
 if grep -Fq 'return-response' "${APIM_BICEP_FILE}"; then
   echo "Error: APIM health endpoint must forward to the backend; mock return-response policies are not allowed." >&2
   exit 1

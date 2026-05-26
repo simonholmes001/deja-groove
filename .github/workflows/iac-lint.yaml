@@ -21,6 +21,9 @@ jobs:
       - name: APIM policy sanity check
         run: bash ./infrastructure/scripts/check-apim-policy.sh
 
+      - name: APIM policy sanity tests
+        run: bash ./infrastructure/scripts/check-apim-policy.test.sh
+
       - name: Install Bicep CLI
         run: az bicep install
 
