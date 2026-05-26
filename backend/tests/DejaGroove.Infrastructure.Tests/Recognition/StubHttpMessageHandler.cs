@@ -39,6 +39,16 @@ public sealed class StubHttpMessageHandler : HttpMessageHandler
             };
         });
 
+    public StubHttpMessageHandler EnqueueDelayedJson(TimeSpan delay, string json, HttpStatusCode status = HttpStatusCode.OK)
+        => Enqueue(async ct =>
+        {
+            await Task.Delay(delay, ct);
+            return new HttpResponseMessage(status)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            };
+        });
+
     private StubHttpMessageHandler Enqueue(Func<CancellationToken, Task<HttpResponseMessage>> factory)
     {
         _responses.Enqueue(factory);

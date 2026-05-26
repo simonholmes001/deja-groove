@@ -13,6 +13,16 @@ public sealed class ValidateOpenAiOptions : IValidateOptions<OpenAiOptions>
     private const int MaxTimeoutSeconds = 6;
     private const int MinRetryAttempts = 0;
     private const int MaxRetryAttempts = 3;
+    private const int MinConcurrentRequests = 1;
+    private const int MaxConcurrentRequests = 64;
+    private const int MinFailurePercent = 1;
+    private const int MaxFailurePercent = 100;
+    private const int MinMinimumThroughput = 2;
+    private const int MaxMinimumThroughput = 100;
+    private const int MinSamplingSeconds = 1;
+    private const int MaxSamplingSeconds = 300;
+    private const int MinBreakSeconds = 1;
+    private const int MaxBreakSeconds = 300;
 
     public ValidateOptionsResult Validate(string? name, OpenAiOptions options)
     {
@@ -31,6 +41,21 @@ public sealed class ValidateOpenAiOptions : IValidateOptions<OpenAiOptions>
 
         if (options.MaxRetryAttempts is < MinRetryAttempts or > MaxRetryAttempts)
             return Fail($"MaxRetryAttempts must be between {MinRetryAttempts} and {MaxRetryAttempts}");
+
+        if (options.MaxConcurrentRequests is < MinConcurrentRequests or > MaxConcurrentRequests)
+            return Fail($"MaxConcurrentRequests must be between {MinConcurrentRequests} and {MaxConcurrentRequests}");
+
+        if (options.CircuitBreakerFailureThresholdPercent is < MinFailurePercent or > MaxFailurePercent)
+            return Fail($"CircuitBreakerFailureThresholdPercent must be between {MinFailurePercent} and {MaxFailurePercent}");
+
+        if (options.CircuitBreakerMinimumThroughput is < MinMinimumThroughput or > MaxMinimumThroughput)
+            return Fail($"CircuitBreakerMinimumThroughput must be between {MinMinimumThroughput} and {MaxMinimumThroughput}");
+
+        if (options.CircuitBreakerSamplingSeconds is < MinSamplingSeconds or > MaxSamplingSeconds)
+            return Fail($"CircuitBreakerSamplingSeconds must be between {MinSamplingSeconds} and {MaxSamplingSeconds}");
+
+        if (options.CircuitBreakerBreakSeconds is < MinBreakSeconds or > MaxBreakSeconds)
+            return Fail($"CircuitBreakerBreakSeconds must be between {MinBreakSeconds} and {MaxBreakSeconds}");
 
         if (!RecognitionPromptRegistry.Versions.Contains(options.PromptVersion))
             return Fail(

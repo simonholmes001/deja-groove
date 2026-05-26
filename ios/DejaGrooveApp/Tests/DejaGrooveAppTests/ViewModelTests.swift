@@ -62,6 +62,69 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual(1, records.count)
         XCTAssertEqual("John Coltrane", records.first?.album.artist)
     }
+
+    func testScanViewModelRetryableHttpErrorExposesRetryFlagAndCanRetryLastScan() async {
+        let failure = ApiClientError.httpError(
+            503,
+            ApiError(code: "scan_provider_unavailable", message: "try again", retryable: true, requestId: UUID()))
+        let success = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: nil, title: "T", artist: "A", year: 2001, format: nil),
+            candidates: [],
+            requestId: UUID())
+
+        let api = MockApiClient(scanResponse: success, scanErrorSequence: [failure])
+        let sut = await ScanViewModel(api: api)
+
+        await sut.submitScan(imageData: Data([0x1]))
+        let retryable = await sut.isLastErrorRetryable
+        XCTAssertTrue(retryable)
+
+        await sut.retryLastScan()
+
+        let scanCalls = await api.scanCallCount
+        XCTAssertEqual(2, scanCalls)
+        let state = await sut.state
+        if case .result(let result) = state {
+            XCTAssertEqual("safe_to_buy", result.status)
+        } else {
+            XCTFail("Expected result state after retry")
+        }
+        let retryableAfterSuccess = await sut.isLastErrorRetryable
+        XCTAssertFalse(retryableAfterSuccess)
+    }
+
+    func testRetryLastScan_NoPreviousSubmission_DoesNothing() async {
+        let api = MockApiClient()
+        let sut = await ScanViewModel(api: api)
+
+        await sut.retryLastScan()
+
+        let scanCalls = await api.scanCallCount
+        XCTAssertEqual(0, scanCalls)
+        let state = await sut.state
+        XCTAssertEqual(.idle, state)
+    }
+
+    func testResolveRetryableHttpError_DoesNotExposeScanRetryAction() async {
+        let resolveError = ApiClientError.httpError(
+            503,
+            ApiError(code: "scan_provider_unavailable", message: "try again", retryable: true, requestId: UUID()))
+        let api = MockApiClient(resolveErrorSequence: [resolveError])
+        let sut = await ScanViewModel(api: api)
+
+        let candidate = Album(mbid: "x", discogsReleaseId: nil, title: "X", artist: "Y", year: 1999, format: nil)
+        await sut.resolve(requestId: UUID(), candidate: candidate)
+
+        let retryable = await sut.isLastErrorRetryable
+        XCTAssertFalse(retryable)
+        let state = await sut.state
+        if case .error = state {
+        } else {
+            XCTFail("Expected error state")
+        }
+    }
 }
 
 actor MockApiClient: ApiClient {
@@ -69,18 +132,38 @@ actor MockApiClient: ApiClient {
     let resolveResponse: ScanResponse
     let collectionResponse: CollectionListResponse
     private(set) var resolveCallCount = 0
+    private(set) var scanCallCount = 0
+    private var scanErrorSequence: [ApiClientError]
+    private var resolveErrorSequence: [ApiClientError]
 
-    init(scanResponse: ScanResponse? = nil, resolveResponse: ScanResponse? = nil, collectionResponse: CollectionListResponse? = nil) {
+    init(
+        scanResponse: ScanResponse? = nil,
+        resolveResponse: ScanResponse? = nil,
+        collectionResponse: CollectionListResponse? = nil,
+        scanErrorSequence: [ApiClientError] = [],
+        resolveErrorSequence: [ApiClientError] = []
+    ) {
         let fallback = ScanResponse(status: "no_match", confidence: 0, album: nil, candidates: [], requestId: UUID())
         self.scanResponse = scanResponse ?? fallback
         self.resolveResponse = resolveResponse ?? fallback
         self.collectionResponse = collectionResponse ?? CollectionListResponse(items: [], nextCursor: nil)
+        self.scanErrorSequence = scanErrorSequence
+        self.resolveErrorSequence = resolveErrorSequence
     }
 
-    func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse { scanResponse }
+    func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse {
+        scanCallCount += 1
+        if !scanErrorSequence.isEmpty {
+            throw scanErrorSequence.removeFirst()
+        }
+        return scanResponse
+    }
 
     func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
         resolveCallCount += 1
+        if !resolveErrorSequence.isEmpty {
+            throw resolveErrorSequence.removeFirst()
+        }
         return resolveResponse
     }
 

@@ -6,6 +6,7 @@ public struct ScanView: View {
     @StateObject private var viewModel: ScanViewModel
     @StateObject private var inputCoordinator: ScanInputCoordinator
     @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedCandidateIndex: Int?
 
     public init(viewModel: ScanViewModel, inputCoordinator: ScanInputCoordinator = ScanInputCoordinator()) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -66,13 +67,27 @@ public struct ScanView: View {
             switch viewModel.state {
             case .idle:
                 Text("Take a clear photo to start.")
+                qualityGuidance
             case .loading:
                 ProgressView("Analyzing cover...")
             case .error(let message):
-                Text(message).foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message).foregroundStyle(.red)
+                    if viewModel.isLastErrorRetryable {
+                        Button("Retry Scan") {
+                            Task { await viewModel.retryLastScan() }
+                        }
+                    }
+                }
             case .result(let response):
-                ScanResultView(response: response) { candidate in
-                    Task { await viewModel.resolve(requestId: response.requestId, candidate: candidate) }
+                ScanResultView(
+                    response: response,
+                    selectedCandidateIndex: $selectedCandidateIndex
+                ) { candidate in
+                    Task {
+                        await viewModel.resolve(requestId: response.requestId, candidate: candidate)
+                        selectedCandidateIndex = nil
+                    }
                 }
             }
 
@@ -80,10 +95,21 @@ public struct ScanView: View {
         }
         .padding()
     }
+
+    private var qualityGuidance: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Capture tips")
+                .font(.subheadline.bold())
+            Text("Use bright light, avoid reflections, and fill most of the frame with the album cover.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
 
 private struct ScanResultView: View {
     let response: ScanResponse
+    @Binding var selectedCandidateIndex: Int?
     let onResolve: (Album) -> Void
 
     var body: some View {
@@ -98,7 +124,9 @@ private struct ScanResultView: View {
                     .font(.subheadline.bold())
                 ForEach(Array(response.candidates.enumerated()), id: \.offset) { _, candidate in
                     Button {
-                        onResolve(candidate)
+                        if let index = response.candidates.firstIndex(of: candidate) {
+                            selectedCandidateIndex = index
+                        }
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {
@@ -106,13 +134,23 @@ private struct ScanResultView: View {
                                 Text(candidate.title).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Image(systemName: "chevron.right")
+                            Image(systemName: selectedCandidateIndex == response.candidates.firstIndex(of: candidate) ? "checkmark.circle.fill" : "circle")
                         }
                     }
                     .buttonStyle(.plain)
                     .padding(.vertical, 6)
                 }
+
+                Button("Resolve Selection") {
+                    guard let selectedCandidateIndex,
+                          response.candidates.indices.contains(selectedCandidateIndex) else { return }
+                    onResolve(response.candidates[selectedCandidateIndex])
+                }
+                .disabled(selectedCandidateIndex == nil || !response.candidates.indices.contains(selectedCandidateIndex ?? -1))
             }
+        }
+        .onChange(of: response.requestId) { _, _ in
+            selectedCandidateIndex = nil
         }
     }
 }
