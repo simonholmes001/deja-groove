@@ -46,7 +46,13 @@ builder.Services.Configure<ApiBehaviorOptions>(o =>
 // Application layer
 builder.Services.AddScoped<IScanWorkflowUseCase, ScanWorkflowUseCase>();
 builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUseCase>();
-if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+
+var openAiKey = builder.Configuration["OPENAI_KEY"];
+var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
+var isTesting = builder.Environment.IsEnvironment("Testing");
+var useStubPorts = !hasOpenAiKey && (builder.Environment.IsDevelopment() || isTesting);
+
+if (useStubPorts)
 {
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
@@ -61,17 +67,13 @@ else
     builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
 
-    // Issue #141: use the real OpenAI vision matcher when the OPENAI_KEY
-    // environment variable is set; otherwise fail closed so a misconfigured
-    // deployment never silently degrades scanning. Non-secret tunables still
-    // bind from the "OpenAi" section.
-    var openAiKey = builder.Configuration["OPENAI_KEY"];
-    if (!string.IsNullOrWhiteSpace(openAiKey))
+    // OpenAI is enabled in any environment when OPENAI_KEY is present.
+    if (hasOpenAiKey)
     {
         builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
         builder.Services.AddOptions<OpenAiOptions>()
             .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
-            .Configure(o => o.ApiKey = openAiKey)
+            .Configure(o => o.ApiKey = openAiKey!)
             .ValidateOnStart();
         builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
             {
