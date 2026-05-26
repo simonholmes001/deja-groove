@@ -4,10 +4,12 @@ import PhotosUI
 #if os(iOS)
 public struct ScanView: View {
     @StateObject private var viewModel: ScanViewModel
+    @StateObject private var inputCoordinator: ScanInputCoordinator
     @State private var selectedItem: PhotosPickerItem?
 
-    public init(viewModel: ScanViewModel) {
+    public init(viewModel: ScanViewModel, inputCoordinator: ScanInputCoordinator = ScanInputCoordinator()) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _inputCoordinator = StateObject(wrappedValue: inputCoordinator)
     }
 
     public var body: some View {
@@ -18,7 +20,9 @@ public struct ScanView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            PhotosPicker(selection: $selectedItem, matching: .images) {
+            Button {
+                inputCoordinator.handlePrimaryAction()
+            } label: {
                 Text("Pick or Capture Cover")
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -26,12 +30,37 @@ public struct ScanView: View {
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            .buttonStyle(.plain)
+            .confirmationDialog("Scan Source", isPresented: $inputCoordinator.isSourceDialogPresented) {
+                if inputCoordinator.isCameraAvailable {
+                    Button("Take Photo") {
+                        inputCoordinator.chooseCamera()
+                    }
+                }
+                Button("Choose from Library") {
+                    inputCoordinator.choosePhotoLibrary()
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photosPicker(isPresented: $inputCoordinator.isPhotoLibraryPresented, selection: $selectedItem, matching: .images)
             .onChange(of: selectedItem) { _, newItem in
                 Task {
                     guard let item = newItem,
                           let data = try? await item.loadTransferable(type: Data.self) else { return }
                     await viewModel.submitScan(imageData: data)
                 }
+            }
+            .sheet(isPresented: $inputCoordinator.isCameraPresented) {
+                CameraCaptureView(
+                    onImageCaptured: { data in
+                        inputCoordinator.dismissCamera()
+                        Task { await viewModel.submitScan(imageData: data) }
+                    },
+                    onCancel: {
+                        inputCoordinator.dismissCamera()
+                    }
+                )
+                .ignoresSafeArea()
             }
 
             switch viewModel.state {
