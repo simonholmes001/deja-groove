@@ -117,6 +117,26 @@ jobs:
             az bicep install
             az bicep build --file infrastructure/bicep/main.bicep
 
+      - name: Remove legacy APIM wildcard operation (migration)
+        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            rg="rg-deja-dev-app"
+            apim_name="$(az apim list -g "$rg" --query "[?starts_with(name, 'apim-deja-dev-')].name | [0]" -o tsv)"
+            if [ -z "${apim_name}" ] || [ "${apim_name}" = "null" ]; then
+              echo "No APIM service found in ${rg}; skipping legacy operation cleanup."
+              exit 0
+            fi
+
+            echo "APIM service: ${apim_name}"
+            if az apim api operation show -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" >/dev/null 2>&1; then
+              echo "Deleting legacy operation deja-main/v1-wildcard..."
+              az apim api operation delete -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" --yes
+            else
+              echo "Legacy operation deja-main/v1-wildcard not found; no cleanup needed."
+            fi
+
       - name: Validate Docker Hub image exists
         shell: bash
         env:
