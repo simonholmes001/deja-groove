@@ -132,7 +132,7 @@ jobs:
             echo "APIM service: ${apim_name}"
             if az apim api operation show -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" >/dev/null 2>&1; then
               echo "Deleting legacy operation deja-main/v1-wildcard..."
-              az apim api operation delete -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" --yes
+              az apim api operation delete -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard"
             else
               echo "Legacy operation deja-main/v1-wildcard not found; no cleanup needed."
             fi
