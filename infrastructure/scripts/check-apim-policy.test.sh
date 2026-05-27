@@ -18,6 +18,14 @@ write_apim_file() {
   cat > "$path" <<'BICEP'
 var mainApiPassthroughPolicyXml = '<policies><inbound><base /><set-backend-service base-url="{{backend-url}}/v1" /><rate-limit-by-key calls="30" renewal-period="60" counter-key="@(context.Request.IpAddress)" remaining-calls-header-name="X-RateLimit-Remaining" retry-after-header-name="Retry-After" /></inbound><backend><base /></backend><outbound><base /><set-header name="X-RateLimit-Limit" exists-action="override"><value>30</value></set-header></outbound><on-error><base /><set-header name="X-RateLimit-Limit" exists-action="override"><value>30</value></set-header></on-error></policies>'
 var mainApiJwtPolicyXml = '<policies><inbound><base /><set-backend-service base-url="{{backend-url}}/v1" /><validate-jwt header-name="Authorization"><openid-config url="https://example/.well-known/openid-configuration" /><required-claims><claim name="aud" match="any"><value>x</value></claim></required-claims></validate-jwt><rate-limit-by-key calls="30" renewal-period="60" counter-key="@(context.Request.Claims.GetValueOrDefault(&quot;sub&quot;, context.Request.IpAddress))" remaining-calls-header-name="X-RateLimit-Remaining" retry-after-header-name="Retry-After" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+var backendUrlNormalized = endsWith(backendUrl, '/') ? substring(backendUrl, 0, length(backendUrl) - 1) : backendUrl
+var apimSkuName = environment == 'prod' && !jwtEnabled ? 'INVALID_SKU_PROD_REQUIRES_ENTRA_JWT' : 'Developer'
+resource mainApiPostWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  properties: {
+    method: 'POST'
+    urlTemplate: '/{*path}'
+  }
+}
 BICEP
 }
 
@@ -53,7 +61,7 @@ run_expect_fail_contains() {
     exit 1
   fi
 
-  grep -q "$expected" "$out_file" || {
+  grep -Fq "$expected" "$out_file" || {
     echo "expected error output to contain: $expected" >&2
     cat "$out_file" >&2 || true
     rm -f "$out_file"
@@ -127,6 +135,42 @@ test_fails_when_apim_file_missing() {
   rm -rf "$repo"
 }
 
+test_fails_for_wildcard_method_star() {
+  local repo
+  repo="$(make_repo)"
+  write_apim_file "$repo/infrastructure/bicep/modules/apim/apim.bicep"
+  cat >> "$repo/infrastructure/bicep/modules/apim/apim.bicep" <<'BICEP'
+resource mainApiCatchAllOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  properties: {
+    method: '*'
+    urlTemplate: '/{*path}'
+  }
+}
+BICEP
+  run_expect_fail_contains "$repo" "wildcard operation method '*' is not allowed"
+  rm -rf "$repo"
+}
+
+test_fails_when_backend_url_normalization_missing() {
+  local repo
+  repo="$(make_repo)"
+  write_apim_file "$repo/infrastructure/bicep/modules/apim/apim.bicep"
+  sed -i.bak "s|^var backendUrlNormalized = .*|var backendUrlNormalized = backendUrl|" "$repo/infrastructure/bicep/modules/apim/apim.bicep"
+  rm -f "$repo/infrastructure/bicep/modules/apim/apim.bicep.bak"
+  run_expect_fail_contains "$repo" "Missing backendUrlNormalized trailing-slash normalization"
+  rm -rf "$repo"
+}
+
+test_fails_when_prod_jwt_guard_missing() {
+  local repo
+  repo="$(make_repo)"
+  write_apim_file "$repo/infrastructure/bicep/modules/apim/apim.bicep"
+  sed -i.bak "s|^var apimSkuName = .*|var apimSkuName = 'Developer'|" "$repo/infrastructure/bicep/modules/apim/apim.bicep"
+  rm -f "$repo/infrastructure/bicep/modules/apim/apim.bicep.bak"
+  run_expect_fail_contains "$repo" "Missing production JWT enforcement guard in APIM SKU selection"
+  rm -rf "$repo"
+}
+
 test_passes_for_valid_policy
 test_fails_for_connection_ip_expression
 test_fails_when_passthrough_rewrite_missing
@@ -134,5 +178,8 @@ test_fails_when_jwt_rewrite_missing
 test_fails_when_jwt_ip_fallback_missing
 test_fails_for_return_response
 test_fails_when_apim_file_missing
+test_fails_for_wildcard_method_star
+test_fails_when_backend_url_normalization_missing
+test_fails_when_prod_jwt_guard_missing
 
 echo "check-apim-policy tests passed."

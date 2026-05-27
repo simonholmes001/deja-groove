@@ -51,6 +51,9 @@ jobs:
       - name: APIM policy sanity check
         run: bash ./infrastructure/scripts/check-apim-policy.sh
 
+      - name: APIM policy sanity tests
+        run: bash ./infrastructure/scripts/check-apim-policy.test.sh
+
       - name: Login to Azure (OIDC)
         uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
         with:
@@ -259,3 +262,23 @@ jobs:
             fi
 
             echo "APIM route is reachable."
+
+            # Route smoke-test for main API operation matching.
+            # We intentionally send an invalid scan request body and assert a
+            # known non-success/non-server-error response class.
+            scan_status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${apim_gateway}/v1/scan" || true)"
+            echo "APIM scan route HTTP status: ${scan_status}"
+            case "$scan_status" in
+              400|401|403|413|415|422|429)
+                ;;
+              *)
+                echo "::error::APIM scan route smoke test failed. Expected one of 400/401/403/413/415/422/429, got ${scan_status}."
+                exit 1
+                ;;
+            esac
+            if [ "${scan_status#5}" != "$scan_status" ]; then
+              echo "::error::APIM scan route smoke test received server error: ${scan_status}."
+              exit 1
+            fi
+
+            echo "APIM /v1/scan route is matched."

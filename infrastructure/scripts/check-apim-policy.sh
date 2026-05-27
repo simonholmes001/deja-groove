@@ -35,8 +35,24 @@ if ! grep -Eq '^var mainApiJwtPolicyXml = .+<set-backend-service base-url="\{\{b
   exit 1
 fi
 
+if ! grep -Eq '^var backendUrlNormalized = endsWith\(backendUrl, '\''/'\''\) \? substring\(backendUrl, 0, length\(backendUrl\) - 1\) : backendUrl' "${APIM_BICEP_FILE}"; then
+  echo "Error: Missing backendUrlNormalized trailing-slash normalization." >&2
+  exit 1
+fi
+
+if ! grep -Eq "^var apimSkuName = environment == 'prod' && !jwtEnabled" "${APIM_BICEP_FILE}" || \
+   ! grep -Fq "INVALID_SKU_PROD_REQUIRES_ENTRA_JWT" "${APIM_BICEP_FILE}"; then
+  echo "Error: Missing production JWT enforcement guard in APIM SKU selection." >&2
+  exit 1
+fi
+
 if grep -Fq 'return-response' "${APIM_BICEP_FILE}"; then
   echo "Error: APIM health endpoint must forward to the backend; mock return-response policies are not allowed." >&2
+  exit 1
+fi
+
+if grep -Eq "method:\\s*'\\*'" "${APIM_BICEP_FILE}"; then
+  echo "Error: APIM wildcard operation method '*' is not allowed; define explicit HTTP method operations." >&2
   exit 1
 fi
 
