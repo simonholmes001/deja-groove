@@ -36,6 +36,15 @@ param dockerImageReference string
 @secure()
 param openAiKey string = ''
 
+@description('JWT authority for backend bearer validation.')
+param identityJwtAuthority string = ''
+
+@description('JWT metadata address for backend bearer validation.')
+param identityJwtMetadataAddress string = ''
+
+@description('JWT audience for backend bearer validation.')
+param identityJwtAudience string = ''
+
 @description('Dev network resource group name.')
 param rgNetworkName string = 'rg-deja-dev-network'
 
@@ -151,6 +160,9 @@ module appService 'modules/app-service/app-service.bicep' = {
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     dockerImageReference: dockerImageReference
     openAiKey: openAiKey
+    identityJwtAuthority: identityJwtAuthority
+    identityJwtMetadataAddress: identityJwtMetadataAddress
+    identityJwtAudience: identityJwtAudience
   }
 }
 

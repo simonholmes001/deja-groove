@@ -33,7 +33,37 @@ param dockerImageReference string = 'nginx:latest'
 @secure()
 param openAiKey string = ''
 
+@description('JWT authority for backend bearer validation.')
+param identityJwtAuthority string = ''
+
+@description('JWT metadata address for backend bearer validation.')
+param identityJwtMetadataAddress string = ''
+
+@description('JWT audience for backend bearer validation.')
+param identityJwtAudience string = ''
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
+var hasIdentityJwtConfig = !empty(identityJwtAuthority) && !empty(identityJwtAudience)
+var identityJwtSettings = hasIdentityJwtConfig
+  ? [
+      {
+        name: 'IdentityJwt__Authority'
+        value: identityJwtAuthority
+      }
+      {
+        name: 'IdentityJwt__MetadataAddress'
+        value: identityJwtMetadataAddress
+      }
+      {
+        name: 'IdentityJwt__Audience'
+        value: identityJwtAudience
+      }
+      {
+        name: 'IdentityJwt__RequireHttpsMetadata'
+        value: 'true'
+      }
+    ]
+  : []
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-deja-api-${environment}-${suffix}'
@@ -90,7 +120,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       scmIpSecurityRestrictionsUseMain: false
       scmIpSecurityRestrictionsDefaultAction: 'Deny'
       scmIpSecurityRestrictions: []
-      appSettings: [
+      appSettings: concat([
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
           value: 'https://index.docker.io'
@@ -119,7 +149,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'OPENAI_KEY'
           value: openAiKey
         }
-      ]
+      ], identityJwtSettings)
     }
   }
 }

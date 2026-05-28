@@ -50,16 +50,35 @@ builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUse
 var openAiKey = builder.Configuration["OPENAI_KEY"];
 var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
 var isTesting = builder.Environment.IsEnvironment("Testing");
-var useStubPorts = !hasOpenAiKey && (builder.Environment.IsDevelopment() || isTesting);
+var isDevelopmentLike = builder.Environment.IsDevelopment() || isTesting;
 
-if (useStubPorts)
+if (isDevelopmentLike)
 {
+    // Development/testing always use local adapters for non-OpenAI scan dependencies.
+    // This keeps scan flow functional even when infra adapters are still being rolled out.
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-    builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+
+    if (hasOpenAiKey)
+    {
+        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
+        builder.Services.AddOptions<OpenAiOptions>()
+            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+            .Configure(o => o.ApiKey = openAiKey!)
+            .ValidateOnStart();
+        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+    }
+    else
+    {
+        builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
+    }
 }
 else
 {
