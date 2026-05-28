@@ -142,10 +142,6 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           value: '~3'
         }
         {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Development'
-        }
-        {
           name: 'OPENAI_KEY'
           value: openAiKey
         }

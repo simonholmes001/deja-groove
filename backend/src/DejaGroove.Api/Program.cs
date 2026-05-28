@@ -27,11 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOptions<ScanFeaturesOptions>()
     .Bind(builder.Configuration.GetSection(ScanFeaturesOptions.SectionName));
-builder.Services.PostConfigure<ScanFeaturesOptions>(o =>
-{
-    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
-        o.EnableResolveEndpoint = true;
-});
+builder.Services.PostConfigure<ScanFeaturesOptions>(o => o.EnableResolveEndpoint = true);
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
@@ -49,67 +45,30 @@ builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUse
 
 var openAiKey = builder.Configuration["OPENAI_KEY"];
 var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
-var isTesting = builder.Environment.IsEnvironment("Testing");
-var isDevelopmentLike = builder.Environment.IsDevelopment() || isTesting;
 
-if (isDevelopmentLike)
+// Use deterministic local adapters for non-OpenAI scan dependencies.
+builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
+builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
+builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
+builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
+builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+
+if (hasOpenAiKey)
 {
-    // Development/testing always use local adapters for non-OpenAI scan dependencies.
-    // This keeps scan flow functional even when infra adapters are still being rolled out.
-    builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
-    builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-    builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
-
-    if (hasOpenAiKey)
-    {
-        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
-        builder.Services.AddOptions<OpenAiOptions>()
-            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
-            .Configure(o => o.ApiKey = openAiKey!)
-            .ValidateOnStart();
-        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
-            {
-                client.Timeout = TimeSpan.FromSeconds(30);
-            })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
-    }
-    else
-    {
-        builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
-    }
+    builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
+    builder.Services.AddOptions<OpenAiOptions>()
+        .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+        .Configure(o => o.ApiKey = openAiKey!)
+        .ValidateOnStart();
+    builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 }
 else
 {
-    builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
-    builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-
-    // OpenAI is enabled in any environment when OPENAI_KEY is present.
-    if (hasOpenAiKey)
-    {
-        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
-        builder.Services.AddOptions<OpenAiOptions>()
-            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
-            .Configure(o => o.ApiKey = openAiKey!)
-            .ValidateOnStart();
-        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
-            {
-                // Defensive backstop above the Polly per-attempt timeout (≤6s) ×
-                // retries: stops a bypassed-pipeline code path hanging on the
-                // 100s HttpClient default.
-                client.Timeout = TimeSpan.FromSeconds(30);
-            })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
-    }
-    else
-    {
-        builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
-    }
-
-    builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+    builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
 }
 
 // Collection domain (issues #15, #16, #46, #79)
@@ -139,10 +98,7 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 }
 else
 {
-    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
-        builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
-    else
-        builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
 
     // Development / contract-test wiring: no database required.
     builder.Services.AddSingleton<InMemoryCollectionStore>();
