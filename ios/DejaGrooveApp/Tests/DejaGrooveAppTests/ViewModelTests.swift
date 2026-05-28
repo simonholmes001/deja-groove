@@ -169,6 +169,21 @@ actor MockApiClient: ApiClient {
 
     func fetchCollection(search: String?) async throws -> CollectionListResponse { collectionResponse }
 
+    func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
+        CollectionItemResponse(
+            id: UUID(),
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: ""
+        )
+    }
+
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
     }

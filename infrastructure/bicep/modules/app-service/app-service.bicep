@@ -29,6 +29,10 @@ param appInsightsConnectionString string
 @description('Docker Hub image reference. Format: username/image:tag')
 param dockerImageReference string = 'nginx:latest'
 
+@description('OpenAI API key used by runtime recognition adapter.')
+@secure()
+param openAiKey string = ''
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
@@ -110,6 +114,10 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'ASPNETCORE_ENVIRONMENT'
           value: 'Development'
+        }
+        {
+          name: 'OPENAI_KEY'
+          value: openAiKey
         }
       ]
     }

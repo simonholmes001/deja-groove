@@ -9,6 +9,7 @@ public enum ApiClientError: Error, Equatable {
 public protocol ApiClient: Sendable {
     func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse
     func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse
+    func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse
     func fetchCollection(search: String?) async throws -> CollectionListResponse
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
 }
@@ -87,6 +88,23 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
         return try await send(request)
     }
 
+    public func addToCollection(album: Album, notes: String?, addAnyway: Bool = false) async throws -> CollectionItemResponse {
+        var request = URLRequest(url: baseUrl.appendingPathComponent("v1/collection"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        await applyAuth(to: &request)
+        request.httpBody = try JSONEncoder().encode(AddCollectionBody(
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            notes: notes,
+            addAnyway: addAnyway
+        ))
+        return try await send(request)
+    }
+
     public func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         var request = URLRequest(url: baseUrl.appendingPathComponent("v1/collection/\(id.uuidString.lowercased())"))
         request.httpMethod = "PATCH"
@@ -129,6 +147,26 @@ private struct PatchCollectionBody: Encodable {
 
     private enum CodingKeys: String, CodingKey {
         case format, notes
+    }
+}
+
+private struct AddCollectionBody: Encodable {
+    let mbid: String?
+    let discogsReleaseId: String?
+    let title: String?
+    let artist: String?
+    let year: Int?
+    let notes: String?
+    let addAnyway: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case mbid
+        case discogsReleaseId = "discogs_release_id"
+        case title
+        case artist
+        case year
+        case notes
+        case addAnyway = "add_anyway"
     }
 }
 

@@ -22,6 +22,8 @@ on:
         required: false
       ENTRA_API_CLIENT_ID:
         required: false
+      OPENAI_KEY:
+        required: false
   push:
     branches: [main]
     paths:
@@ -179,6 +181,7 @@ jobs:
           DOCKER_IMAGE_REFERENCE: ${{ env.DOCKER_IMAGE_REFERENCE }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -202,6 +205,13 @@ jobs:
               echo "Both Entra secrets supplied — JWT validation will be enabled on the gateway."
             else
               echo "Entra secrets not set — deploying with IP-based rate limit only (JWT inactive, issue #8)."
+            fi
+
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              EXTRA_PARAMS+=(--parameters "openAiKey=${OPENAI_KEY}")
+              echo "OPENAI_KEY supplied — runtime OpenAI adapter will be enabled."
+            else
+              echo "::warning::OPENAI_KEY not set — backend scan flow will use development stubs."
             fi
             set +e
             az deployment sub create \

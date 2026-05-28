@@ -89,6 +89,17 @@ public struct ScanView: View {
                         selectedCandidateIndex = nil
                     }
                 }
+                if response.album != nil && (response.status == "safe_to_buy" || response.status == "owned") {
+                    Button("Add To My Crate") {
+                        Task { await viewModel.addResultToCollection() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                if let collectionMessage = viewModel.collectionMessage {
+                    Text(collectionMessage)
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                }
             }
 
             Spacer()

@@ -72,6 +72,10 @@ private struct DisabledApiClient: ApiClient {
         throw ApiClientError.encodingFailure
     }
 
+    func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
+        throw ApiClientError.encodingFailure
+    }
+
     func fetchCollection(search: String?) async throws -> CollectionListResponse {
         throw ApiClientError.encodingFailure
     }
