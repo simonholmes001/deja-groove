@@ -29,7 +29,56 @@ param appInsightsConnectionString string
 @description('Docker Hub image reference. Format: username/image:tag')
 param dockerImageReference string = 'nginx:latest'
 
+@description('OpenAI API key used by runtime recognition adapter.')
+@secure()
+param openAiKey string = ''
+
+@description('PostgreSQL server FQDN.')
+param postgresqlFqdn string = ''
+
+@description('PostgreSQL administrator login name.')
+@secure()
+param postgresAdministratorLogin string = ''
+
+@description('PostgreSQL administrator login password.')
+@secure()
+param postgresAdministratorLoginPassword string = ''
+
+@description('JWT authority for backend bearer validation.')
+param identityJwtAuthority string = ''
+
+@description('JWT metadata address for backend bearer validation.')
+param identityJwtMetadataAddress string = ''
+
+@description('JWT audience for backend bearer validation.')
+param identityJwtAudience string = ''
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
+var hasIdentityJwtConfig = !empty(identityJwtAuthority) && !empty(identityJwtAudience)
+var escapedPostgresAdministratorPassword = replace(postgresAdministratorLoginPassword, '"', '""')
+var postgresAdminConnectionString = !empty(postgresqlFqdn) && !empty(postgresAdministratorLogin) && !empty(postgresAdministratorLoginPassword)
+  ? 'Server=${postgresqlFqdn};Database=postgres;Port=5432;User Id=${postgresAdministratorLogin};Password="${escapedPostgresAdministratorPassword}";Ssl Mode=Require;'
+  : ''
+var identityJwtSettings = hasIdentityJwtConfig
+  ? [
+      {
+        name: 'IdentityJwt__Authority'
+        value: identityJwtAuthority
+      }
+      {
+        name: 'IdentityJwt__MetadataAddress'
+        value: identityJwtMetadataAddress
+      }
+      {
+        name: 'IdentityJwt__Audience'
+        value: identityJwtAudience
+      }
+      {
+        name: 'IdentityJwt__RequireHttpsMetadata'
+        value: 'true'
+      }
+    ]
+  : []
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-deja-api-${environment}-${suffix}'
@@ -86,7 +135,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       scmIpSecurityRestrictionsUseMain: false
       scmIpSecurityRestrictionsDefaultAction: 'Deny'
       scmIpSecurityRestrictions: []
-      appSettings: [
+      appSettings: concat([
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
           value: 'https://index.docker.io'
@@ -108,10 +157,25 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           value: '~3'
         }
         {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Development'
+          name: 'OPENAI_KEY'
+          value: openAiKey
         }
-      ]
+      ], identityJwtSettings)
+    }
+  }
+}
+
+resource appServiceConnectionStrings 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(postgresAdminConnectionString)) {
+  name: 'connectionstrings'
+  parent: webApp
+  properties: {
+    Postgres: {
+      type: 'Custom'
+      value: postgresAdminConnectionString
+    }
+    PostgresAdmin: {
+      type: 'Custom'
+      value: postgresAdminConnectionString
     }
   }
 }

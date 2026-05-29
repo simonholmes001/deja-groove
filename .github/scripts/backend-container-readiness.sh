@@ -48,7 +48,7 @@ grep -q "docker_image_reference:" .github/workflows/infrastructure-deploy-dev.ya
   echo "Infrastructure deploy reusable input docker_image_reference is missing." >&2
   exit 1
 }
-grep -q "workflow_call execution requires inputs.docker_image_reference" .github/workflows/infrastructure-deploy-dev.yaml || {
+grep -Eq "workflow_call execution requires (inputs\\.docker_image_reference|DOCKER_IMAGE_REFERENCE via input or secret)" .github/workflows/infrastructure-deploy-dev.yaml || {
   echo "Infrastructure deploy workflow is not fail-closed for workflow_call missing image reference." >&2
   exit 1
 }
@@ -80,6 +80,14 @@ grep -q "registry-1.docker.io/v2/" .github/workflows/infrastructure-deploy-dev.y
 }
 grep -q "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"token\",\"\"))'" .github/workflows/infrastructure-deploy-dev.yaml || {
   echo "Infrastructure deploy workflow missing robust JSON token parsing." >&2
+  exit 1
+}
+grep -q 'siteConfig.linuxFxVersion' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not preserve the currently deployed App Service image for manual runs." >&2
+  exit 1
+}
+grep -q 'preserving currently deployed App Service image' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is missing the current App Service image preservation notice." >&2
   exit 1
 }
 

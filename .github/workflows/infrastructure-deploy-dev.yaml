@@ -18,9 +18,13 @@ on:
         required: true
       AZURE_POSTGRES_ADMIN_PASSWORD:
         required: true
+      DOCKER_IMAGE_REFERENCE:
+        required: false
       ENTRA_OIDC_CONFIG_URL:
         required: false
       ENTRA_API_CLIENT_ID:
+        required: false
+      OPENAI_KEY:
         required: false
   push:
     branches: [main]
@@ -50,6 +54,9 @@ jobs:
 
       - name: APIM policy sanity check
         run: bash ./infrastructure/scripts/check-apim-policy.sh
+
+      - name: APIM policy sanity tests
+        run: bash ./infrastructure/scripts/check-apim-policy.test.sh
 
       - name: Login to Azure (OIDC)
         uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
@@ -82,12 +89,22 @@ jobs:
             exit 1
           fi
           if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ] && [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            echo "::error::workflow_call execution requires inputs.docker_image_reference."
+            echo "::error::workflow_call execution requires DOCKER_IMAGE_REFERENCE via input or secret."
             exit 1
           fi
           if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
-            echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
+            current_linux_fx="$(
+              az webapp list -g "rg-deja-dev-app" \
+                --query "[?starts_with(name, 'app-deja-api-dev-')].siteConfig.linuxFxVersion | [0]" \
+                -o tsv 2>/dev/null || true
+            )"
+            if printf '%s' "${current_linux_fx:-}" | grep -q '^DOCKER|'; then
+              DOCKER_IMAGE_REFERENCE="${current_linux_fx#DOCKER|}"
+              echo "::notice::No workflow input or secret for DOCKER_IMAGE_REFERENCE; preserving currently deployed App Service image: ${DOCKER_IMAGE_REFERENCE}"
+            else
+              DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
+              echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE and no existing App Service image was found; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
+            fi
           fi
           if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
             echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
@@ -114,6 +131,26 @@ jobs:
             az bicep install
             az bicep build --file infrastructure/bicep/main.bicep
 
+      - name: Remove legacy APIM wildcard operation (migration)
+        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            rg="rg-deja-dev-app"
+            apim_name="$(az apim list -g "$rg" --query "[?starts_with(name, 'apim-deja-dev-')].name | [0]" -o tsv)"
+            if [ -z "${apim_name}" ] || [ "${apim_name}" = "null" ]; then
+              echo "No APIM service found in ${rg}; skipping legacy operation cleanup."
+              exit 0
+            fi
+
+            echo "APIM service: ${apim_name}"
+            if az apim api operation show -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" >/dev/null 2>&1; then
+              echo "Deleting legacy operation deja-main/v1-wildcard..."
+              az apim api operation delete -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard"
+            else
+              echo "Legacy operation deja-main/v1-wildcard not found; no cleanup needed."
+            fi
+
       - name: Validate Docker Hub image exists
         shell: bash
         env:
@@ -121,8 +158,20 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          repo="${DOCKER_IMAGE_REFERENCE%%[@:]*}"
-          ref="${DOCKER_IMAGE_REFERENCE##*[@:]}"
+          case "${DOCKER_IMAGE_REFERENCE}" in
+            *@*)
+              repo="${DOCKER_IMAGE_REFERENCE%@*}"
+              ref="${DOCKER_IMAGE_REFERENCE#*@}"
+              ;;
+            *:*)
+              repo="${DOCKER_IMAGE_REFERENCE%:*}"
+              ref="${DOCKER_IMAGE_REFERENCE##*:}"
+              ;;
+            *)
+              repo=""
+              ref=""
+              ;;
+          esac
           if [ -z "${repo}" ] || [ -z "${ref}" ]; then
             echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo:tag or repo@sha256:digest)."
             exit 1
@@ -156,6 +205,7 @@ jobs:
           DOCKER_IMAGE_REFERENCE: ${{ env.DOCKER_IMAGE_REFERENCE }}
           ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -176,9 +226,20 @@ jobs:
             if [ "$ENTRA_OIDC_SET" -eq 1 ]; then
               EXTRA_PARAMS+=(--parameters "entraOidcConfigUrl=${ENTRA_OIDC_CONFIG_URL}")
               EXTRA_PARAMS+=(--parameters "entraApiClientId=${ENTRA_API_CLIENT_ID}")
+              jwt_authority="${ENTRA_OIDC_CONFIG_URL%/.well-known/openid-configuration}"
+              EXTRA_PARAMS+=(--parameters "identityJwtAuthority=${jwt_authority}")
+              EXTRA_PARAMS+=(--parameters "identityJwtMetadataAddress=${ENTRA_OIDC_CONFIG_URL}")
+              EXTRA_PARAMS+=(--parameters "identityJwtAudience=${ENTRA_API_CLIENT_ID}")
               echo "Both Entra secrets supplied — JWT validation will be enabled on the gateway."
             else
               echo "Entra secrets not set — deploying with IP-based rate limit only (JWT inactive, issue #8)."
+            fi
+
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              EXTRA_PARAMS+=(--parameters "openAiKey=${OPENAI_KEY}")
+              echo "OPENAI_KEY supplied — runtime OpenAI adapter will be enabled."
+            else
+              echo "::warning::OPENAI_KEY not set — backend scan requests will fail with scan_dependencies_unconfigured."
             fi
             set +e
             az deployment sub create \
@@ -210,6 +271,8 @@ jobs:
 
       - name: Verify App Service direct ingress is blocked
         uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -250,12 +313,59 @@ jobs:
 
             echo "Direct App Service ingress is not publicly reachable (expected)."
 
-            apim_status="$(curl -s -o /dev/null -w '%{http_code}' "${apim_gateway}/health" || true)"
+            health_body_file="$(mktemp)"
+            apim_status="$(curl -sS -o "$health_body_file" -w '%{http_code}' "${apim_gateway}/health" || true)"
             echo "APIM health route HTTP status: ${apim_status}"
 
             if [ "$apim_status" != "200" ]; then
               echo "::error::APIM health route failed. Expected 200 but got ${apim_status}."
+              cat "$health_body_file" || true
+              rm -f "$health_body_file"
+              exit 1
+            fi
+
+            scan_matcher="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("matcher", ""))' "$health_body_file" 2>/dev/null || true)"
+            scan_configured="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("configured", "")).lower())' "$health_body_file" 2>/dev/null || true)"
+            health_body="$(cat "$health_body_file" 2>/dev/null || true)"
+            rm -f "$health_body_file"
+
+            echo "APIM health scan matcher: ${scan_matcher:-unknown}"
+            echo "APIM health scan configured: ${scan_configured:-unknown}"
+
+            if [ -z "${scan_matcher:-}" ]; then
+              echo "::error::APIM health response does not expose scanRuntime.matcher."
+              printf '%s\n' "$health_body"
+              exit 1
+            fi
+
+            expected_matcher="UnconfiguredAlbumMatchingPort"
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              expected_matcher="OpenAiAlbumMatchingPort"
+            fi
+            if [ "${scan_matcher}" != "${expected_matcher}" ]; then
+              echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher}."
+              printf '%s\n' "$health_body"
               exit 1
             fi
 
             echo "APIM route is reachable."
+
+            # Route smoke-test for main API operation matching.
+            # We intentionally send an invalid scan request body and assert a
+            # known non-success/non-server-error response class.
+            scan_status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${apim_gateway}/v1/scan" || true)"
+            echo "APIM scan route HTTP status: ${scan_status}"
+            case "$scan_status" in
+              400|401|403|413|415|422|429)
+                ;;
+              *)
+                echo "::error::APIM scan route smoke test failed. Expected one of 400/401/403/413/415/422/429, got ${scan_status}."
+                exit 1
+                ;;
+            esac
+            if [ "${scan_status#5}" != "$scan_status" ]; then
+              echo "::error::APIM scan route smoke test received server error: ${scan_status}."
+              exit 1
+            fi
+
+            echo "APIM /v1/scan route is matched."

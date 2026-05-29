@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using DejaGroove.Api.Ports;
 using DejaGroove.Api.Health;
+using DejaGroove.Application.Ports;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +32,9 @@ public sealed class HealthEndpointTests
         Assert.Equal("Healthy", body.Status);
         Assert.Equal("Healthy", body.Dependencies["postgres"].Status);
         Assert.Equal("PostgreSQL connection succeeded.", body.Dependencies["postgres"].Description);
+        Assert.Equal("UnconfiguredAlbumMatchingPort", body.ScanRuntime.Matcher);
+        Assert.False(body.ScanRuntime.Configured);
+        Assert.Equal("UnconfiguredAlbumMatchingPort", response.Headers.GetValues("X-Scan-Matcher").Single());
     }
 
     [Fact]
@@ -64,7 +69,25 @@ public sealed class HealthEndpointTests
         Assert.Equal("Healthy", body.Status);
     }
 
-    private static HttpClient CreateClient(IPostgresReadinessProbe probe)
+    [Fact]
+    public async Task GetHealth_ReflectsOverriddenScanMatcher()
+    {
+        using var client = CreateClient(
+            new StubPostgresReadinessProbe(new PostgresReadinessResult(true, "PostgreSQL connection succeeded.")),
+            new StubAlbumMatchingPort());
+
+        var response = await client.GetAsync("/health");
+        var body = JsonSerializer.Deserialize<HealthResponse>(
+            await response.Content.ReadAsStringAsync(),
+            JsonOptions)!;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("StubAlbumMatchingPort", body.ScanRuntime.Matcher);
+        Assert.True(body.ScanRuntime.Configured);
+        Assert.Equal("StubAlbumMatchingPort", response.Headers.GetValues("X-Scan-Matcher").Single());
+    }
+
+    private static HttpClient CreateClient(IPostgresReadinessProbe probe, IAlbumMatchingPort? matcher = null)
     {
         var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -74,6 +97,11 @@ public sealed class HealthEndpointTests
                 {
                     services.RemoveAll<IPostgresReadinessProbe>();
                     services.AddSingleton(probe);
+                    if (matcher is not null)
+                    {
+                        services.RemoveAll<IAlbumMatchingPort>();
+                        services.AddSingleton(matcher);
+                    }
                 });
             });
 
@@ -91,6 +119,8 @@ public sealed class HealthEndpointTests
         public string Status { get; init; } = string.Empty;
 
         public Dictionary<string, DependencyResponse> Dependencies { get; init; } = [];
+
+        public ScanRuntimeResponse ScanRuntime { get; init; } = new();
     }
 
     private sealed class DependencyResponse
@@ -98,5 +128,12 @@ public sealed class HealthEndpointTests
         public string Status { get; init; } = string.Empty;
 
         public string Description { get; init; } = string.Empty;
+    }
+
+    private sealed class ScanRuntimeResponse
+    {
+        public string Matcher { get; init; } = string.Empty;
+
+        public bool Configured { get; init; }
     }
 }

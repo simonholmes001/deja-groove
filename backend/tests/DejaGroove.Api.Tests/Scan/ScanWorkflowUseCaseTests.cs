@@ -4,6 +4,8 @@ using DejaGroove.Application.Ports;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Scanning;
 using DejaGroove.Domain.Shared;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace DejaGroove.Api.Tests.Scan;
@@ -19,13 +21,22 @@ public sealed class ScanWorkflowUseCaseTests
         IAlbumMatchingPort matcher,
         ICollectionOwnershipPort ownership,
         IScanEventRepository events,
-        IAmbiguousScanRepository ambiguousScans)
+        IAmbiguousScanRepository ambiguousScans,
+        ILogger<ScanWorkflowUseCase>? logger = null)
     {
         imageValidation
             .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Ok());
 
-        return new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
+        return new ScanWorkflowUseCase(
+            imageValidation,
+            pHash,
+            cache,
+            matcher,
+            ownership,
+            events,
+            ambiguousScans,
+            logger ?? NullLogger<ScanWorkflowUseCase>.Instance);
     }
 
     [Fact]
@@ -189,7 +200,15 @@ public sealed class ScanWorkflowUseCaseTests
             .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Fail("invalid_image", "Image signature mismatch."));
 
-        var sut = new ScanWorkflowUseCase(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans);
+        var sut = new ScanWorkflowUseCase(
+            imageValidation,
+            pHash,
+            cache,
+            matcher,
+            ownership,
+            events,
+            ambiguousScans,
+            NullLogger<ScanWorkflowUseCase>.Instance);
 
         var ex = await Assert.ThrowsAsync<InputValidationException>(() => sut.ExecuteAsync(BuildCommand(Guid.NewGuid())));
         Assert.Equal("invalid_image", ex.Code);
@@ -348,9 +367,98 @@ public sealed class ScanWorkflowUseCaseTests
         await matcher.Received(2).IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenCacheHit_LogsCacheHit()
+    {
+        var imageValidation = Substitute.For<IImageValidationPort>();
+        var pHash = Substitute.For<IPerceptualHashPort>();
+        var cache = Substitute.For<IScanCachePort>();
+        var matcher = Substitute.For<IAlbumMatchingPort>();
+        var ownership = Substitute.For<ICollectionOwnershipPort>();
+        var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
+        var logger = new RecordingLogger<ScanWorkflowUseCase>();
+
+        var userId = Guid.NewGuid();
+        var hash = new PerceptualHash(42);
+        var cached = ScanResult.SafeToBuy(Identity, 0.88f);
+
+        pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
+        cache.TryGetAsync(userId, hash, Arg.Any<CancellationToken>()).Returns(cached);
+
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans, logger);
+        var command = BuildCommand(userId);
+
+        await sut.ExecuteAsync(command);
+
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("cache hit", StringComparison.OrdinalIgnoreCase) &&
+            entry.Message.Contains(command.RequestId.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMatcherFailsTransiently_LogsRetry()
+    {
+        var imageValidation = Substitute.For<IImageValidationPort>();
+        var pHash = Substitute.For<IPerceptualHashPort>();
+        var cache = Substitute.For<IScanCachePort>();
+        var matcher = Substitute.For<IAlbumMatchingPort>();
+        var ownership = Substitute.For<ICollectionOwnershipPort>();
+        var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
+        var logger = new RecordingLogger<ScanWorkflowUseCase>();
+
+        var userId = Guid.NewGuid();
+        var hash = new PerceptualHash(42);
+
+        pHash.ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(hash);
+        cache.TryGetAsync(userId, hash, Arg.Any<CancellationToken>()).Returns((ScanResult?)null);
+        matcher.IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(_ => throw new TimeoutException("first attempt timed out"), _ => ScanResult.SafeToBuy(Identity, 0.93f));
+        ownership.CheckAsync(userId, Identity, Arg.Any<CancellationToken>()).Returns((false, (Guid?)null));
+
+        var sut = CreateSut(imageValidation, pHash, cache, matcher, ownership, events, ambiguousScans, logger);
+        var command = BuildCommand(userId);
+
+        await sut.ExecuteAsync(command);
+
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning &&
+            entry.Message.Contains("retry", StringComparison.OrdinalIgnoreCase) &&
+            entry.Message.Contains(command.RequestId.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private static ScanCommand BuildCommand(Guid? userId)
     {
         var bytes = new byte[] { 0x01, 0x02, 0x03 };
         return new ScanCommand(userId, Guid.NewGuid(), new MemoryStream(bytes), "image/jpeg", DateTimeOffset.UtcNow, Guid.NewGuid());
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception)));
+        }
+
+        public sealed record LogEntry(LogLevel Level, string Message);
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 }

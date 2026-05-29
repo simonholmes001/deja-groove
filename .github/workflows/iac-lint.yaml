@@ -5,10 +5,14 @@ on:
     branches: [main, "feature/**", "platform/**"]
     paths:
       - "infrastructure/bicep/**"
+      - "infrastructure/scripts/check-apim-policy.sh"
+      - "infrastructure/scripts/check-apim-policy.test.sh"
   pull_request:
     branches: [main]
     paths:
       - "infrastructure/bicep/**"
+      - "infrastructure/scripts/check-apim-policy.sh"
+      - "infrastructure/scripts/check-apim-policy.test.sh"
 
 jobs:
   bicep-lint:

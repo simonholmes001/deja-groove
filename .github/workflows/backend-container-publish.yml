@@ -27,7 +27,7 @@ jobs:
     environment:
       name: dev
     outputs:
-      image_ref: ${{ steps.image_ref.outputs.value }}
+      image_digest: ${{ steps.build.outputs.digest }}
     env:
       IMAGE_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/deja-groove-api
     steps:
@@ -120,13 +120,13 @@ jobs:
     needs: publish
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}
     uses: ./.github/workflows/infrastructure-deploy-dev.yaml
-    with:
-      docker_image_reference: ${{ needs.publish.outputs.image_ref }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
       AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+      DOCKER_IMAGE_REFERENCE: ${{ format('{0}/deja-groove-api@{1}', secrets.DOCKERHUB_USERNAME, needs.publish.outputs.image_digest) }}
       ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
       ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+      OPENAI_KEY: ${{ secrets.OPENAI_KEY }}

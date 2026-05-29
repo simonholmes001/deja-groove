@@ -57,6 +57,7 @@ var apimSkuName = environment == 'prod' && !jwtEnabled
 // The header is generated if the client does not supply one, and echoed back in all responses
 // via <outbound> (normal path) and <on-error> (401/429/5xx path).
 var globalPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
+var healthApiPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header><set-backend-service base-url="{{backend-url}}" /></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
 
 // Full JWT + per-user rate-limit policy for authenticated v1 routes.
 // validate-jwt validates the Entra External ID Bearer token and populates context.Request.Claims.
@@ -155,6 +156,26 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
   }
 }
 
+resource healthApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2022-08-01' = {
+  parent: healthApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: healthApiPolicyXml
+  }
+}
+
+// Explicitly own the health operation policy so an old mocked inline response
+// cannot survive incremental deployments and keep masking backend diagnostics.
+resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
+  parent: healthOperation
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: '<policies><inbound><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
 // ── Global service policy ────────────────────────────────────────────────────
 // Applies to ALL APIs (health + main). Injects X-Correlation-Id at the gateway
 // edge and echoes it back in every response.
@@ -185,15 +206,135 @@ resource mainApi 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
   }
 }
 
-// Catch-all wildcard operation. Replaced by explicit per-route operations as
-// each endpoint is implemented. Using method '*' ensures every HTTP verb is
-// covered by the API-level JWT + rate-limit policy from day one.
-resource mainApiCatchAllOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+// Method-specific wildcard operations for v1 route forwarding.
+// APIM route matching requires valid HTTP methods per operation; using a
+// literal '*' method can result in requests not matching any operation.
+resource mainApiGetWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
   parent: mainApi
-  name: 'v1-wildcard'
+  name: 'v1-wildcard-get'
   properties: {
-    displayName: 'All v1 routes'
-    method: '*'
+    displayName: 'All v1 routes (GET)'
+    method: 'GET'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiPostWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-post'
+  properties: {
+    displayName: 'All v1 routes (POST)'
+    method: 'POST'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiPatchWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-patch'
+  properties: {
+    displayName: 'All v1 routes (PATCH)'
+    method: 'PATCH'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiDeleteWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-delete'
+  properties: {
+    displayName: 'All v1 routes (DELETE)'
+    method: 'DELETE'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiPutWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-put'
+  properties: {
+    displayName: 'All v1 routes (PUT)'
+    method: 'PUT'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiHeadWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-head'
+  properties: {
+    displayName: 'All v1 routes (HEAD)'
+    method: 'HEAD'
+    urlTemplate: '/{*path}'
+    templateParameters: [
+      {
+        name: 'path'
+        type: 'string'
+        required: true
+        description: 'Wildcard capture of the full path after /v1/'
+        values: []
+      }
+    ]
+    responses: []
+  }
+}
+
+resource mainApiOptionsWildcardOperation 'Microsoft.ApiManagement/service/apis/operations@2022-08-01' = {
+  parent: mainApi
+  name: 'v1-wildcard-options'
+  properties: {
+    displayName: 'All v1 routes (OPTIONS)'
+    method: 'OPTIONS'
     urlTemplate: '/{*path}'
     templateParameters: [
       {

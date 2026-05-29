@@ -30,6 +30,9 @@ struct AuthGateView<Content: View>: View {
                 .task { coordinator.bootstrap() }
             } else {
                 content
+                    .task {
+                        await coordinator.refreshAuthenticationState()
+                    }
             }
         }
     }

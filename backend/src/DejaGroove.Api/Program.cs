@@ -50,14 +50,13 @@ builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUse
 var openAiKey = builder.Configuration["OPENAI_KEY"];
 var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
 var isTesting = builder.Environment.IsEnvironment("Testing");
-var useStubPorts = !hasOpenAiKey && (builder.Environment.IsDevelopment() || isTesting);
+var useStubPorts = builder.Environment.IsDevelopment() || isTesting;
 
 if (useStubPorts)
 {
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-    builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
     builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
 }
@@ -66,31 +65,26 @@ else
     builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
     builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-
-    // OpenAI is enabled in any environment when OPENAI_KEY is present.
-    if (hasOpenAiKey)
-    {
-        builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
-        builder.Services.AddOptions<OpenAiOptions>()
-            .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
-            .Configure(o => o.ApiKey = openAiKey!)
-            .ValidateOnStart();
-        builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
-            {
-                // Defensive backstop above the Polly per-attempt timeout (≤6s) ×
-                // retries: stops a bypassed-pipeline code path hanging on the
-                // 100s HttpClient default.
-                client.Timeout = TimeSpan.FromSeconds(30);
-            })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
-    }
-    else
-    {
-        builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
-    }
-
     builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
     builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+}
+
+if (hasOpenAiKey)
+{
+    builder.Services.AddSingleton<IValidateOptions<OpenAiOptions>, ValidateOpenAiOptions>();
+    builder.Services.AddOptions<OpenAiOptions>()
+        .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
+        .Configure(o => o.ApiKey = openAiKey!)
+        .ValidateOnStart();
+    builder.Services.AddHttpClient<IAlbumMatchingPort, OpenAiAlbumMatchingPort>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+}
+else
+{
+    builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
 }
 
 // Collection domain (issues #15, #16, #46, #79)
@@ -120,7 +114,7 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 }
 else
 {
-    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+    if (builder.Environment.IsDevelopment() || isTesting)
         builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
     else
         builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
@@ -167,9 +161,10 @@ builder.WebHost.ConfigureKestrel(k =>
 var app = builder.Build();
 
 // Run database migrations before accepting traffic.
-// Uses ConnectionStrings:PostgresAdmin (database owner / Azure admin) so the
-// runner has DDL rights. The runtime application connection (ConnectionStrings:Postgres)
-// will be a least-privilege login granted the deja_app role by IaC provisioning.
+// Uses ConnectionStrings:PostgresAdmin so the runner has DDL rights. In the
+// current Azure deployment, ConnectionStrings:Postgres and :PostgresAdmin are
+// both wired to the same PostgreSQL login; migrations grant that login
+// membership in deja_app so runtime requests can SET LOCAL ROLE deja_app.
 // An empty admin connection string skips migration — used by HTTP-only contract
 // tests that exercise the API shape without a real database.
 var adminConnectionString = app.Configuration.GetConnectionString("PostgresAdmin");

@@ -32,6 +32,19 @@ param postgresAdministratorLoginPassword string = ''
 @description('Docker Hub image reference for the API. Format: username/image:tag')
 param dockerImageReference string
 
+@description('OpenAI API key for album recognition runtime.')
+@secure()
+param openAiKey string = ''
+
+@description('JWT authority for backend bearer validation.')
+param identityJwtAuthority string = ''
+
+@description('JWT metadata address for backend bearer validation.')
+param identityJwtMetadataAddress string = ''
+
+@description('JWT audience for backend bearer validation.')
+param identityJwtAudience string = ''
+
 @description('Dev network resource group name.')
 param rgNetworkName string = 'rg-deja-dev-network'
 
@@ -146,6 +159,13 @@ module appService 'modules/app-service/app-service.bicep' = {
     keyVaultUri: keyVault.outputs.keyVaultUri
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     dockerImageReference: dockerImageReference
+    openAiKey: openAiKey
+    postgresqlFqdn: postgresql.outputs.postgresqlFqdn
+    postgresAdministratorLogin: postgresAdministratorLogin
+    postgresAdministratorLoginPassword: postgresAdministratorLoginPassword
+    identityJwtAuthority: identityJwtAuthority
+    identityJwtMetadataAddress: identityJwtMetadataAddress
+    identityJwtAudience: identityJwtAudience
   }
 }
 
