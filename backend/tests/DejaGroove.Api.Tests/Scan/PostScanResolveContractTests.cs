@@ -11,6 +11,7 @@ using DejaGroove.Application.Exceptions;
 using DejaGroove.Application.UseCases;
 using DejaGroove.Domain.Scanning;
 using DejaGroove.Domain.Shared;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -115,13 +116,14 @@ public sealed class PostScanResolveContractTests
         var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
+                builder.UseEnvironment("Testing");
                 builder.ConfigureAppConfiguration((_, config) =>
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         ["IdentityJwt:Authority"] = Issuer,
                         ["IdentityJwt:Audience"] = Audience,
-                        ["IdentityJwt:RequireHttpsMetadata"] = "false",
+                        ["IdentityJwt:RequireHttpsMetadata"] = "true",
                         ["IdentityJwt:ClockSkewSeconds"] = "0"
                     });
                 });

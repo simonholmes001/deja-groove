@@ -82,8 +82,12 @@ grep -q "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"token\",\
   echo "Infrastructure deploy workflow missing robust JSON token parsing." >&2
   exit 1
 }
-grep -q 'ref="${DOCKER_IMAGE_REFERENCE#\*@}"' .github/workflows/infrastructure-deploy-dev.yaml || {
-  echo "Infrastructure deploy workflow does not preserve digest-prefixed manifest references." >&2
+grep -q 'siteConfig.linuxFxVersion' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not preserve the currently deployed App Service image for manual runs." >&2
+  exit 1
+}
+grep -q 'preserving currently deployed App Service image' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow is missing the current App Service image preservation notice." >&2
   exit 1
 }
 
