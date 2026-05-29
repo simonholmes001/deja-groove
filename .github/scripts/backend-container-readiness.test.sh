@@ -28,17 +28,11 @@ jobs:
 WF
 }
 
-test_passes_with_required_wiring() {
-  local repo
-  repo="$(make_repo)"
-
-  cat > "$repo/backend/src/DejaGroove.Api/Dockerfile" <<'DF'
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
-DF
-
-  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
-
-  cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
+write_deploy_workflow_stub() {
+  local path="$1"
+  local docker_param_line="$2"
+  local env_line="$3"
+  cat > "$path" <<WF
 name: Infrastructure Deploy (Dev)
 # @sha256:
 # must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
@@ -56,10 +50,32 @@ jobs:
     steps:
       - name: Deploy
         run: |
-          az deployment sub create \
-            --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"
-          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
+          current_linux_fx="\$(
+            az webapp list -g "rg-deja-dev-app" \
+              --query "[?starts_with(name, 'app-deja-api-dev-')].siteConfig.linuxFxVersion | [0]" \
+              -o tsv 2>/dev/null || true
+          )"
+          echo "::notice::No workflow input or secret for DOCKER_IMAGE_REFERENCE; preserving currently deployed App Service image: \${DOCKER_IMAGE_REFERENCE}"
+          ${docker_param_line}
+          ${env_line}
 WF
+}
+
+test_passes_with_required_wiring() {
+  local repo
+  repo="$(make_repo)"
+
+  cat > "$repo/backend/src/DejaGroove.Api/Dockerfile" <<'DF'
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+DF
+
+  write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
+
+  write_deploy_workflow_stub \
+    "$repo/.github/workflows/infrastructure-deploy-dev.yaml" \
+    "az deployment sub create \\
+            --parameters dockerImageReference=\"\${DOCKER_IMAGE_REFERENCE}\"" \
+    "echo \"DOCKER_IMAGE_REFERENCE=\${DOCKER_IMAGE_REFERENCE}\" >> \"\$GITHUB_ENV\""
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
 using '../main.bicep'
@@ -80,28 +96,11 @@ test_fails_when_dockerfile_missing() {
 
   write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
-  cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
-name: Infrastructure Deploy (Dev)
-# @sha256:
-# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
-# auth.docker.io/token
-# registry-1.docker.io/v2/
-# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
-workflow_call:
-  inputs:
-    docker_image_reference:
-      required: false
-      type: string
-# workflow_call execution requires inputs.docker_image_reference
-jobs:
-  deploy-dev:
-    steps:
-      - name: Deploy
-        run: |
-          az deployment sub create \
-            --parameters dockerImageReference="simonholmes001/deja-groove-api:dev"
-          echo "DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev" >> "$GITHUB_ENV"
-WF
+  write_deploy_workflow_stub \
+    "$repo/.github/workflows/infrastructure-deploy-dev.yaml" \
+    "az deployment sub create \\
+            --parameters dockerImageReference=\"simonholmes001/deja-groove-api:dev\"" \
+    "echo \"DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev\" >> \"\$GITHUB_ENV\""
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
 using '../main.bicep'
@@ -143,28 +142,11 @@ DF
 
   write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
-  cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
-name: Infrastructure Deploy (Dev)
-# @sha256:
-# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
-# auth.docker.io/token
-# registry-1.docker.io/v2/
-# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
-workflow_call:
-  inputs:
-    docker_image_reference:
-      required: false
-      type: string
-# workflow_call execution requires inputs.docker_image_reference
-jobs:
-  deploy-dev:
-    steps:
-      - name: Deploy
-        run: |
-          az deployment sub create \
-            --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}"
-          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
-WF
+  write_deploy_workflow_stub \
+    "$repo/.github/workflows/infrastructure-deploy-dev.yaml" \
+    "az deployment sub create \\
+            --parameters dockerImageReference=\"\${DOCKER_IMAGE_REFERENCE}\"" \
+    "echo \"DOCKER_IMAGE_REFERENCE=\${DOCKER_IMAGE_REFERENCE}\" >> \"\$GITHUB_ENV\""
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
 using '../main.bicep'
@@ -206,28 +188,11 @@ DF
 
   write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
-  cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
-name: Infrastructure Deploy (Dev)
-# @sha256:
-# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
-# auth.docker.io/token
-# registry-1.docker.io/v2/
-# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
-workflow_call:
-  inputs:
-    docker_image_reference:
-      required: false
-      type: string
-# workflow_call execution requires inputs.docker_image_reference
-jobs:
-  deploy-dev:
-    steps:
-      - name: Deploy
-        run: |
-          az deployment sub create \
-            --parameters dockerImageReference="simonholmes001/deja-groove-api:dev"
-          echo "DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev" >> "$GITHUB_ENV"
-WF
+  write_deploy_workflow_stub \
+    "$repo/.github/workflows/infrastructure-deploy-dev.yaml" \
+    "az deployment sub create \\
+            --parameters dockerImageReference=\"simonholmes001/deja-groove-api:dev\"" \
+    "echo \"DOCKER_IMAGE_REFERENCE=simonholmes001/deja-groove-api:dev\" >> \"\$GITHUB_ENV\""
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
 using '../main.bicep'
@@ -269,28 +234,10 @@ DF
 
   write_publish_workflow_stub "$repo/.github/workflows/backend-container-publish.yml"
 
-  cat > "$repo/.github/workflows/infrastructure-deploy-dev.yaml" <<'WF'
-name: Infrastructure Deploy (Dev)
-# @sha256:
-# must match <namespace>/<image>:<tag> or <namespace>/<image>:<64-hex>
-# auth.docker.io/token
-# registry-1.docker.io/v2/
-# python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
-workflow_call:
-  inputs:
-    docker_image_reference:
-      required: false
-      type: string
-# workflow_call execution requires inputs.docker_image_reference
-jobs:
-  deploy-dev:
-    steps:
-      - name: Deploy
-        env:
-          DOCKER_IMAGE_REFERENCE: value
-        run: |
-          az deployment sub create
-WF
+  write_deploy_workflow_stub \
+    "$repo/.github/workflows/infrastructure-deploy-dev.yaml" \
+    "az deployment sub create" \
+    ":"
 
   cat > "$repo/infrastructure/bicep/parameters/dev.bicepparam" <<'PARAM'
 using '../main.bicep'
