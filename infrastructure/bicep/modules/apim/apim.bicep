@@ -165,7 +165,7 @@ resource healthApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2022-08-
   }
 }
 
-// Explicitly own the health operation policy so an old mocked return-response
+// Explicitly own the health operation policy so an old mocked inline response
 // cannot survive incremental deployments and keep masking backend diagnostics.
 resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
   parent: healthOperation
