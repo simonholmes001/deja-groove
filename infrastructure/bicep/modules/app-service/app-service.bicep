@@ -160,15 +160,22 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'OPENAI_KEY'
           value: openAiKey
         }
-        {
-          name: 'ConnectionStrings__Postgres'
-          value: postgresAdminConnectionString
-        }
-        {
-          name: 'ConnectionStrings__PostgresAdmin'
-          value: postgresAdminConnectionString
-        }
       ], identityJwtSettings)
+    }
+  }
+}
+
+resource appServiceConnectionStrings 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(postgresAdminConnectionString)) {
+  name: 'connectionstrings'
+  parent: webApp
+  properties: {
+    Postgres: {
+      type: 'Custom'
+      value: postgresAdminConnectionString
+    }
+    PostgresAdmin: {
+      type: 'Custom'
+      value: postgresAdminConnectionString
     }
   }
 }
