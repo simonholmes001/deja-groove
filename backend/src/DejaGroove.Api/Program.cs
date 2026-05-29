@@ -142,9 +142,10 @@ builder.WebHost.ConfigureKestrel(k =>
 var app = builder.Build();
 
 // Run database migrations before accepting traffic.
-// Uses ConnectionStrings:PostgresAdmin (database owner / Azure admin) so the
-// runner has DDL rights. The runtime application connection (ConnectionStrings:Postgres)
-// will be a least-privilege login granted the deja_app role by IaC provisioning.
+// Uses ConnectionStrings:PostgresAdmin so the runner has DDL rights. In the
+// current Azure deployment, ConnectionStrings:Postgres and :PostgresAdmin are
+// both wired to the same PostgreSQL login; migrations grant that login
+// membership in deja_app so runtime requests can SET LOCAL ROLE deja_app.
 // An empty admin connection string skips migration — used by HTTP-only contract
 // tests that exercise the API shape without a real database.
 var adminConnectionString = app.Configuration.GetConnectionString("PostgresAdmin");

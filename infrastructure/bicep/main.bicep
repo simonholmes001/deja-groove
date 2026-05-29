@@ -160,6 +160,9 @@ module appService 'modules/app-service/app-service.bicep' = {
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     dockerImageReference: dockerImageReference
     openAiKey: openAiKey
+    postgresqlFqdn: postgresql.outputs.postgresqlFqdn
+    postgresAdministratorLogin: postgresAdministratorLogin
+    postgresAdministratorLoginPassword: postgresAdministratorLoginPassword
     identityJwtAuthority: identityJwtAuthority
     identityJwtMetadataAddress: identityJwtMetadataAddress
     identityJwtAudience: identityJwtAudience

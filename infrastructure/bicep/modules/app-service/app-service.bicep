@@ -33,6 +33,17 @@ param dockerImageReference string = 'nginx:latest'
 @secure()
 param openAiKey string = ''
 
+@description('PostgreSQL server FQDN.')
+param postgresqlFqdn string = ''
+
+@description('PostgreSQL administrator login name.')
+@secure()
+param postgresAdministratorLogin string = ''
+
+@description('PostgreSQL administrator login password.')
+@secure()
+param postgresAdministratorLoginPassword string = ''
+
 @description('JWT authority for backend bearer validation.')
 param identityJwtAuthority string = ''
 
@@ -44,6 +55,10 @@ param identityJwtAudience string = ''
 
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var hasIdentityJwtConfig = !empty(identityJwtAuthority) && !empty(identityJwtAudience)
+var escapedPostgresAdministratorPassword = replace(postgresAdministratorLoginPassword, '"', '""')
+var postgresAdminConnectionString = !empty(postgresqlFqdn) && !empty(postgresAdministratorLogin) && !empty(postgresAdministratorLoginPassword)
+  ? 'Server=${postgresqlFqdn};Database=postgres;Port=5432;User Id=${postgresAdministratorLogin};Password="${escapedPostgresAdministratorPassword}";Ssl Mode=Require;'
+  : ''
 var identityJwtSettings = hasIdentityJwtConfig
   ? [
       {
@@ -144,6 +159,14 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'OPENAI_KEY'
           value: openAiKey
+        }
+        {
+          name: 'ConnectionStrings__Postgres'
+          value: postgresAdminConnectionString
+        }
+        {
+          name: 'ConnectionStrings__PostgresAdmin'
+          value: postgresAdminConnectionString
         }
       ], identityJwtSettings)
     }
