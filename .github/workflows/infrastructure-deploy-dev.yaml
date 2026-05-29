@@ -148,8 +148,20 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          repo="${DOCKER_IMAGE_REFERENCE%%[@:]*}"
-          ref="${DOCKER_IMAGE_REFERENCE##*[@:]}"
+          case "${DOCKER_IMAGE_REFERENCE}" in
+            *@*)
+              repo="${DOCKER_IMAGE_REFERENCE%@*}"
+              ref="${DOCKER_IMAGE_REFERENCE#*@}"
+              ;;
+            *:*)
+              repo="${DOCKER_IMAGE_REFERENCE%:*}"
+              ref="${DOCKER_IMAGE_REFERENCE##*:}"
+              ;;
+            *)
+              repo=""
+              ref=""
+              ;;
+          esac
           if [ -z "${repo}" ] || [ -z "${ref}" ]; then
             echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo:tag or repo@sha256:digest)."
             exit 1

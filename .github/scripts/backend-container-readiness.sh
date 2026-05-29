@@ -82,6 +82,10 @@ grep -q "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"token\",\
   echo "Infrastructure deploy workflow missing robust JSON token parsing." >&2
   exit 1
 }
+grep -q 'ref="${DOCKER_IMAGE_REFERENCE#\*@}"' .github/workflows/infrastructure-deploy-dev.yaml || {
+  echo "Infrastructure deploy workflow does not preserve digest-prefixed manifest references." >&2
+  exit 1
+}
 
 if grep -q "param dockerImageReference = 'nginx:latest'" infrastructure/bicep/parameters/dev.bicepparam; then
   echo "Dev dockerImageReference must not be nginx:latest." >&2
