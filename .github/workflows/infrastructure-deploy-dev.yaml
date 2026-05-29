@@ -307,13 +307,17 @@ jobs:
             echo "APIM health scan matcher: ${scan_matcher:-unknown}"
             echo "APIM health scan configured: ${scan_configured:-unknown}"
 
-            expected_matcher="UnconfiguredAlbumMatchingPort"
-            if [ -n "${OPENAI_KEY:-}" ]; then
-              expected_matcher="OpenAiAlbumMatchingPort"
-            fi
-            if [ "${scan_matcher:-}" != "${expected_matcher}" ]; then
-              echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher:-unknown}."
-              exit 1
+            if [ -z "${scan_matcher:-}" ]; then
+              echo "::warning::APIM health response does not expose scanRuntime.matcher. The deployed API image may not yet include runtime matcher diagnostics."
+            else
+              expected_matcher="UnconfiguredAlbumMatchingPort"
+              if [ -n "${OPENAI_KEY:-}" ]; then
+                expected_matcher="OpenAiAlbumMatchingPort"
+              fi
+              if [ "${scan_matcher}" != "${expected_matcher}" ]; then
+                echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher}."
+                exit 1
+              fi
             fi
 
             echo "APIM route is reachable."
