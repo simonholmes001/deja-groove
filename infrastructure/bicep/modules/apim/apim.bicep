@@ -57,6 +57,7 @@ var apimSkuName = environment == 'prod' && !jwtEnabled
 // The header is generated if the client does not supply one, and echoed back in all responses
 // via <outbound> (normal path) and <on-error> (401/429/5xx path).
 var globalPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
+var healthApiPolicyXml = '<policies><inbound><set-header name="X-Correlation-Id" exists-action="skip"><value>@(Guid.NewGuid().ToString())</value></set-header><set-backend-service base-url="{{backend-url}}" /></inbound><backend><forward-request /></backend><outbound><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></outbound><on-error><set-header name="X-Correlation-Id" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("X-Correlation-Id", string.Empty))</value></set-header></on-error></policies>'
 
 // Full JWT + per-user rate-limit policy for authenticated v1 routes.
 // validate-jwt validates the Entra External ID Bearer token and populates context.Request.Claims.
@@ -152,6 +153,15 @@ resource healthOperation 'Microsoft.ApiManagement/service/apis/operations@2022-0
         description: 'OK'
       }
     ]
+  }
+}
+
+resource healthApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2022-08-01' = {
+  parent: healthApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: healthApiPolicyXml
   }
 }
 
