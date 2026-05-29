@@ -326,22 +326,26 @@ jobs:
 
             scan_matcher="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("matcher", ""))' "$health_body_file" 2>/dev/null || true)"
             scan_configured="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("configured", "")).lower())' "$health_body_file" 2>/dev/null || true)"
+            health_body="$(cat "$health_body_file" 2>/dev/null || true)"
             rm -f "$health_body_file"
 
             echo "APIM health scan matcher: ${scan_matcher:-unknown}"
             echo "APIM health scan configured: ${scan_configured:-unknown}"
 
             if [ -z "${scan_matcher:-}" ]; then
-              echo "::warning::APIM health response does not expose scanRuntime.matcher. The deployed API image may not yet include runtime matcher diagnostics."
-            else
-              expected_matcher="UnconfiguredAlbumMatchingPort"
-              if [ -n "${OPENAI_KEY:-}" ]; then
-                expected_matcher="OpenAiAlbumMatchingPort"
-              fi
-              if [ "${scan_matcher}" != "${expected_matcher}" ]; then
-                echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher}."
-                exit 1
-              fi
+              echo "::error::APIM health response does not expose scanRuntime.matcher."
+              printf '%s\n' "$health_body"
+              exit 1
+            fi
+
+            expected_matcher="UnconfiguredAlbumMatchingPort"
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              expected_matcher="OpenAiAlbumMatchingPort"
+            fi
+            if [ "${scan_matcher}" != "${expected_matcher}" ]; then
+              echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher}."
+              printf '%s\n' "$health_body"
+              exit 1
             fi
 
             echo "APIM route is reachable."

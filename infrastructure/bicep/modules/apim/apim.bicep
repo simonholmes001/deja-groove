@@ -165,6 +165,17 @@ resource healthApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2022-08-
   }
 }
 
+// Explicitly own the health operation policy so an old mocked return-response
+// cannot survive incremental deployments and keep masking backend diagnostics.
+resource healthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2022-08-01' = {
+  parent: healthOperation
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: '<policies><inbound><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
 // ── Global service policy ────────────────────────────────────────────────────
 // Applies to ALL APIs (health + main). Injects X-Correlation-Id at the gateway
 // edge and echoes it back in every response.

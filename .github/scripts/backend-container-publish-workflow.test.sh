@@ -39,6 +39,7 @@ grep -q "DOCKER_IMAGE_REFERENCE: \${{ format('{0}/deja-groove-api@{1}', secrets.
 grep -q 'OPENAI_KEY: \${{ secrets.OPENAI_KEY }}' "$WORKFLOW" || { echo "Missing OPENAI_KEY secret pass-through contract" >&2; exit 1; }
 grep -q 'preserving currently deployed App Service image' "$DEPLOY_WORKFLOW" || { echo "Missing current App Service image preservation contract" >&2; exit 1; }
 grep -q 'siteConfig.linuxFxVersion' "$DEPLOY_WORKFLOW" || { echo "Missing live App Service image lookup contract" >&2; exit 1; }
+grep -q 'APIM health response does not expose scanRuntime.matcher' "$DEPLOY_WORKFLOW" || { echo "Missing fail-closed APIM health diagnostics contract" >&2; exit 1; }
 grep -Fq "if: \${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}" "$WORKFLOW" || { echo "Missing deploy gating condition contract" >&2; exit 1; }
 grep -q 'secrets:' "$WORKFLOW" || { echo "Missing reusable workflow secret mapping" >&2; exit 1; }
 grep -q 'AZURE_CLIENT_ID: \${{ secrets.AZURE_CLIENT_ID }}' "$WORKFLOW" || { echo "Missing explicit AZURE_CLIENT_ID secret mapping" >&2; exit 1; }
