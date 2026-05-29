@@ -20,7 +20,7 @@ grep -q 'environment:' "$WORKFLOW" || { echo "Missing publish job environment co
 grep -q 'name: dev' "$WORKFLOW" || { echo "Publish job must target dev environment for secrets" >&2; exit 1; }
 grep -q 'tags: \${{ env.IMAGE_REPO }}:sha-\${{ github.sha }}' "$WORKFLOW" || { echo "Missing immutable sha publish tag contract" >&2; exit 1; }
 grep -q 'outputs:' "$WORKFLOW" || { echo "Missing publish job outputs block" >&2; exit 1; }
-grep -q 'image_ref: \${{ steps.image_ref.outputs.value }}' "$WORKFLOW" || { echo "Missing image_ref output contract" >&2; exit 1; }
+grep -q 'image_digest: \${{ steps.build.outputs.digest }}' "$WORKFLOW" || { echo "Missing image_digest output contract" >&2; exit 1; }
 grep -q 'id: build' "$WORKFLOW" || { echo "Missing build step id for digest capture" >&2; exit 1; }
 grep -q 'id: image_ref' "$WORKFLOW" || { echo "Missing image_ref capture step" >&2; exit 1; }
 grep -q 'value=\${IMAGE_REPO}@\${{ steps.build.outputs.digest }}' "$WORKFLOW" || { echo "Missing digest-based image_ref capture contract" >&2; exit 1; }
@@ -33,7 +33,8 @@ grep -q 'docker buildx imagetools create' "$WORKFLOW" || { echo "Missing post-sc
 grep -q '\${IMAGE_REPO}:\${RELEASE_CHANNEL}-latest' "$WORKFLOW" || { echo "Missing channel-latest promotion contract" >&2; exit 1; }
 grep -q 'deploy-dev:' "$WORKFLOW" || { echo "Missing deploy-dev chaining job" >&2; exit 1; }
 grep -q 'uses: ./.github/workflows/infrastructure-deploy-dev.yaml' "$WORKFLOW" || { echo "Missing reusable deploy workflow call" >&2; exit 1; }
-grep -q 'docker_image_reference: \${{ needs.publish.outputs.image_ref }}' "$WORKFLOW" || { echo "Missing deploy image_ref handoff contract" >&2; exit 1; }
+grep -q "DOCKER_IMAGE_REFERENCE: \${{ format('{0}/deja-groove-api@{1}', secrets.DOCKERHUB_USERNAME, needs.publish.outputs.image_digest) }}" "$WORKFLOW" || { echo "Missing deploy image digest handoff secret contract" >&2; exit 1; }
+grep -q 'OPENAI_KEY: \${{ secrets.OPENAI_KEY }}' "$WORKFLOW" || { echo "Missing OPENAI_KEY secret pass-through contract" >&2; exit 1; }
 grep -Fq "if: \${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}" "$WORKFLOW" || { echo "Missing deploy gating condition contract" >&2; exit 1; }
 grep -q 'secrets:' "$WORKFLOW" || { echo "Missing reusable workflow secret mapping" >&2; exit 1; }
 grep -q 'AZURE_CLIENT_ID: \${{ secrets.AZURE_CLIENT_ID }}' "$WORKFLOW" || { echo "Missing explicit AZURE_CLIENT_ID secret mapping" >&2; exit 1; }

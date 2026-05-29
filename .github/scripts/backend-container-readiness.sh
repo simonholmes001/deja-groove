@@ -48,7 +48,7 @@ grep -q "docker_image_reference:" .github/workflows/infrastructure-deploy-dev.ya
   echo "Infrastructure deploy reusable input docker_image_reference is missing." >&2
   exit 1
 }
-grep -q "workflow_call execution requires inputs.docker_image_reference" .github/workflows/infrastructure-deploy-dev.yaml || {
+grep -Eq "workflow_call execution requires (inputs\\.docker_image_reference|DOCKER_IMAGE_REFERENCE via input or secret)" .github/workflows/infrastructure-deploy-dev.yaml || {
   echo "Infrastructure deploy workflow is not fail-closed for workflow_call missing image reference." >&2
   exit 1
 }

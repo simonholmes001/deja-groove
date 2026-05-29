@@ -18,6 +18,8 @@ on:
         required: true
       AZURE_POSTGRES_ADMIN_PASSWORD:
         required: true
+      DOCKER_IMAGE_REFERENCE:
+        required: false
       ENTRA_OIDC_CONFIG_URL:
         required: false
       ENTRA_API_CLIENT_ID:
@@ -87,7 +89,7 @@ jobs:
             exit 1
           fi
           if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ] && [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            echo "::error::workflow_call execution requires inputs.docker_image_reference."
+            echo "::error::workflow_call execution requires DOCKER_IMAGE_REFERENCE via input or secret."
             exit 1
           fi
           if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
