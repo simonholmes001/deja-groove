@@ -215,7 +215,7 @@ jobs:
               EXTRA_PARAMS+=(--parameters "openAiKey=${OPENAI_KEY}")
               echo "OPENAI_KEY supplied — runtime OpenAI adapter will be enabled."
             else
-              echo "::warning::OPENAI_KEY not set — backend scan flow will use development stubs."
+              echo "::warning::OPENAI_KEY not set — backend scan requests will fail with scan_dependencies_unconfigured."
             fi
             set +e
             az deployment sub create \
@@ -247,6 +247,8 @@ jobs:
 
       - name: Verify App Service direct ingress is blocked
         uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -287,11 +289,30 @@ jobs:
 
             echo "Direct App Service ingress is not publicly reachable (expected)."
 
-            apim_status="$(curl -s -o /dev/null -w '%{http_code}' "${apim_gateway}/health" || true)"
+            health_body_file="$(mktemp)"
+            apim_status="$(curl -sS -o "$health_body_file" -w '%{http_code}' "${apim_gateway}/health" || true)"
             echo "APIM health route HTTP status: ${apim_status}"
 
             if [ "$apim_status" != "200" ]; then
               echo "::error::APIM health route failed. Expected 200 but got ${apim_status}."
+              cat "$health_body_file" || true
+              rm -f "$health_body_file"
+              exit 1
+            fi
+
+            scan_matcher="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("matcher", ""))' "$health_body_file" 2>/dev/null || true)"
+            scan_configured="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("configured", "")).lower())' "$health_body_file" 2>/dev/null || true)"
+            rm -f "$health_body_file"
+
+            echo "APIM health scan matcher: ${scan_matcher:-unknown}"
+            echo "APIM health scan configured: ${scan_configured:-unknown}"
+
+            expected_matcher="UnconfiguredAlbumMatchingPort"
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              expected_matcher="OpenAiAlbumMatchingPort"
+            fi
+            if [ "${scan_matcher:-}" != "${expected_matcher}" ]; then
+              echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher:-unknown}."
               exit 1
             fi
 
