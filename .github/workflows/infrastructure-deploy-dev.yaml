@@ -93,8 +93,18 @@ jobs:
             exit 1
           fi
           if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
-            echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
+            current_linux_fx="$(
+              az webapp list -g "rg-deja-dev-app" \
+                --query "[?starts_with(name, 'app-deja-api-dev-')].siteConfig.linuxFxVersion | [0]" \
+                -o tsv 2>/dev/null || true
+            )"
+            if printf '%s' "${current_linux_fx:-}" | grep -q '^DOCKER|'; then
+              DOCKER_IMAGE_REFERENCE="${current_linux_fx#DOCKER|}"
+              echo "::notice::No workflow input or secret for DOCKER_IMAGE_REFERENCE; preserving currently deployed App Service image: ${DOCKER_IMAGE_REFERENCE}"
+            else
+              DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
+              echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE and no existing App Service image was found; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
+            fi
           fi
           if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
             echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."

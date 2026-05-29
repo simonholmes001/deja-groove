@@ -2,8 +2,10 @@
 set -euo pipefail
 
 WORKFLOW=".github/workflows/backend-container-publish.yml"
+DEPLOY_WORKFLOW=".github/workflows/infrastructure-deploy-dev.yaml"
 
 [ -f "$WORKFLOW" ] || { echo "Missing workflow: $WORKFLOW" >&2; exit 1; }
+[ -f "$DEPLOY_WORKFLOW" ] || { echo "Missing workflow: $DEPLOY_WORKFLOW" >&2; exit 1; }
 
 grep -q '^name: Backend Container Publish' "$WORKFLOW" || { echo "Wrong workflow name" >&2; exit 1; }
 grep -q 'id-token: write' "$WORKFLOW" || { echo "Missing id-token: write permission for reusable deploy call" >&2; exit 1; }
@@ -35,6 +37,8 @@ grep -q 'deploy-dev:' "$WORKFLOW" || { echo "Missing deploy-dev chaining job" >&
 grep -q 'uses: ./.github/workflows/infrastructure-deploy-dev.yaml' "$WORKFLOW" || { echo "Missing reusable deploy workflow call" >&2; exit 1; }
 grep -q "DOCKER_IMAGE_REFERENCE: \${{ format('{0}/deja-groove-api@{1}', secrets.DOCKERHUB_USERNAME, needs.publish.outputs.image_digest) }}" "$WORKFLOW" || { echo "Missing deploy image digest handoff secret contract" >&2; exit 1; }
 grep -q 'OPENAI_KEY: \${{ secrets.OPENAI_KEY }}' "$WORKFLOW" || { echo "Missing OPENAI_KEY secret pass-through contract" >&2; exit 1; }
+grep -q 'preserving currently deployed App Service image' "$DEPLOY_WORKFLOW" || { echo "Missing current App Service image preservation contract" >&2; exit 1; }
+grep -q 'siteConfig.linuxFxVersion' "$DEPLOY_WORKFLOW" || { echo "Missing live App Service image lookup contract" >&2; exit 1; }
 grep -Fq "if: \${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'dev' }}" "$WORKFLOW" || { echo "Missing deploy gating condition contract" >&2; exit 1; }
 grep -q 'secrets:' "$WORKFLOW" || { echo "Missing reusable workflow secret mapping" >&2; exit 1; }
 grep -q 'AZURE_CLIENT_ID: \${{ secrets.AZURE_CLIENT_ID }}' "$WORKFLOW" || { echo "Missing explicit AZURE_CLIENT_ID secret mapping" >&2; exit 1; }
