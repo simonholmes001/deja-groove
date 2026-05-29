@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using DejaGroove.Api.Ports;
 using DejaGroove.Api.Responses;
+using DejaGroove.Application.Ports;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace DejaGroove.Api.Tests.Scan;
@@ -19,7 +23,14 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
 
     public PostScanContractTests(WebApplicationFactory<Program> factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAlbumMatchingPort>();
+                services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
+            });
+        }).CreateClient();
     }
 
     private static MultipartFormDataContent BuildValidRequest(
@@ -216,5 +227,44 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(correlationId, body.Error.RequestId);
+    }
+}
+
+public sealed class PostScanProviderConfigurationTests
+{
+    // Minimal 1×1 JPEG bytes (valid JPEG magic bytes FF D8 FF)
+    private static readonly byte[] ValidJpegBytes = [
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+        0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xD9
+    ];
+
+    [Fact]
+    public async Task ValidRequest_WithoutOpenAiKey_Returns503ConfigurationError()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/v1/scan", BuildValidRequest());
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var body = await DeserializeAsync<ErrorResponse>(response);
+        Assert.Equal("scan_dependencies_unconfigured", body.Error.Code);
+        Assert.True(body.Error.Retryable);
+    }
+
+    private static MultipartFormDataContent BuildValidRequest()
+    {
+        var form = new MultipartFormDataContent();
+        var imageContent = new ByteArrayContent(ValidJpegBytes);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        form.Add(imageContent, "image", "cover.jpg");
+        form.Add(new StringContent(Guid.NewGuid().ToString()), "clientScanId");
+        return form;
+    }
+
+    private static async Task<T> DeserializeAsync<T>(HttpResponseMessage response)
+    {
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<T>(json)!;
     }
 }

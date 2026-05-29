@@ -68,7 +68,7 @@ if (hasOpenAiKey)
 }
 else
 {
-    builder.Services.AddSingleton<IAlbumMatchingPort, StubAlbumMatchingPort>();
+    builder.Services.AddSingleton<IAlbumMatchingPort, UnconfiguredAlbumMatchingPort>();
 }
 
 // Collection domain (issues #15, #16, #46, #79)
