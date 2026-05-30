@@ -22,8 +22,8 @@
 		A20000000000000000000004 /* PresentationAnchorResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationAnchorResolver.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000006 /* DejaGroove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DejaGroove.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A20000000000000000000007 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
-		A20000000000000000000008 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = "<group>"; };
+		A20000000000000000000007 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
+		A20000000000000000000008 /* Config/Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,8 +55,8 @@
 				A20000000000000000000003 /* AppConfiguration.swift */,
 				A20000000000000000000004 /* PresentationAnchorResolver.swift */,
 				A20000000000000000000005 /* Info.plist */,
-				A20000000000000000000007 /* Debug.xcconfig */,
-				A20000000000000000000008 /* Release.xcconfig */,
+				A20000000000000000000007 /* Config/Debug.xcconfig */,
+				A20000000000000000000008 /* Config/Release.xcconfig */,
 			);
 			path = DejaGroove;
 			sourceTree = "<group>";
@@ -202,11 +202,11 @@
 		};
 		A60000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A20000000000000000000007 /* Debug.xcconfig */;
+			baseConfigurationReference = A20000000000000000000007 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2PA85SU4UQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DejaGroove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -226,11 +226,11 @@
 		};
 		A60000000000000000000006 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A20000000000000000000008 /* Release.xcconfig */;
+			baseConfigurationReference = A20000000000000000000008 /* Config/Release.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2PA85SU4UQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DejaGroove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

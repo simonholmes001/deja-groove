@@ -126,11 +126,20 @@ public sealed class ScanController(
 
         return new ScanResponse
         {
-            Status = result.Status.ToString().ToLowerInvariant(),
+            Status = MapStatus(result.Status),
             Confidence = result.Confidence,
             Album = albumDto,
             Candidates = candidates,
             RequestId = requestId
         };
     }
+
+    private static string MapStatus(ScanStatus status) => status switch
+    {
+        ScanStatus.Owned => "owned",
+        ScanStatus.SafeToBuy => "safe_to_buy",
+        ScanStatus.Ambiguous => "ambiguous",
+        ScanStatus.NoMatch => "no_match",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown scan status.")
+    };
 }

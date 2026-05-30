@@ -70,7 +70,7 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await DeserializeAsync<ScanResponse>(response);
         Assert.NotEqual(Guid.Empty, body.RequestId);
-        Assert.NotEmpty(body.Status);
+        Assert.Equal("safe_to_buy", body.Status);
     }
 
     [Fact]

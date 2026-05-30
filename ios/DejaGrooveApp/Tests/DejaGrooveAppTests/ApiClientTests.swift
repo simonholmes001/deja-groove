@@ -3,6 +3,16 @@ import XCTest
 @testable import DejaGrooveApp
 
 final class ApiClientTests: XCTestCase {
+#if os(iOS)
+    func testPhotoLibraryImagePreparerConvertsPngToJpeg() {
+        let pngData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7KQAAAAASUVORK5CYII=")!
+
+        let prepared = PhotoLibraryScanImagePreparer.prepareForUpload(pngData)
+
+        XCTAssertEqual([0xFF, 0xD8, 0xFF], Array(prepared?.prefix(3) ?? []))
+    }
+#endif
+
     func testScanAddsAuthorizationHeaderWhenTokenProvided() async throws {
         let transport = RecordingTransport(responseData: Self.scanResponseJson)
         let client = LiveApiClient(

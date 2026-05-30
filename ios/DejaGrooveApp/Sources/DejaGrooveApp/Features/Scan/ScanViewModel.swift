@@ -8,10 +8,15 @@ public final class ScanViewModel: ObservableObject {
     @Published public private(set) var collectionMessage: String?
 
     private let api: ApiClient
+    private let onAuthenticationRequired: @Sendable () async -> Void
     private var lastSubmittedImageData: Data?
 
-    public init(api: ApiClient) {
+    public init(
+        api: ApiClient,
+        onAuthenticationRequired: @escaping @Sendable () async -> Void = {}
+    ) {
         self.api = api
+        self.onAuthenticationRequired = onAuthenticationRequired
     }
 
     public func submitScan(imageData: Data) async {
@@ -66,6 +71,9 @@ public final class ScanViewModel: ObservableObject {
             collectionMessage = "Added to My Crate."
         } catch let error as ApiClientError {
             switch error {
+            case .httpError(let status, _) where status == 401 || status == 403:
+                collectionMessage = "Sign in to add this album to My Crate."
+                await onAuthenticationRequired()
             case .httpError(_, let apiError?):
                 collectionMessage = apiError.message
             default:
@@ -74,6 +82,12 @@ public final class ScanViewModel: ObservableObject {
         } catch {
             collectionMessage = "Failed to add to collection."
         }
+    }
+
+    public func handleSelectedImagePreparationFailure() {
+        lastSubmittedImageData = nil
+        isLastErrorRetryable = false
+        state = .error("Selected image could not be prepared for upload. Please choose another photo.")
     }
 
     private static func message(for error: ApiClientError) -> String {
