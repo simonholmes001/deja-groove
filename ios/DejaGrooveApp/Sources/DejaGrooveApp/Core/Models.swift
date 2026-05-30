@@ -25,12 +25,57 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     public let candidates: [Album]
     public let requestId: UUID
 
+    public init(status: String, confidence: Float, album: Album?, candidates: [Album], requestId: UUID) {
+        self.status = Self.normalizeStatus(status)
+        self.confidence = confidence
+        self.album = album
+        self.candidates = candidates
+        self.requestId = requestId
+    }
+
+    public var canAddToCollection: Bool {
+        album != nil && (status == "safe_to_buy" || status == "owned")
+    }
+
     enum CodingKeys: String, CodingKey {
         case status
         case confidence
         case album
         case candidates
         case requestId = "request_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            status: try container.decode(String.self, forKey: .status),
+            confidence: try container.decode(Float.self, forKey: .confidence),
+            album: try container.decodeIfPresent(Album.self, forKey: .album),
+            candidates: try container.decode([Album].self, forKey: .candidates),
+            requestId: try container.decode(UUID.self, forKey: .requestId)
+        )
+    }
+
+    private static func normalizeStatus(_ status: String) -> String {
+        let collapsed = status
+            .unicodeScalars
+            .filter(CharacterSet.alphanumerics.contains)
+            .map(String.init)
+            .joined()
+            .lowercased()
+
+        switch collapsed {
+        case "owned":
+            return "owned"
+        case "safetobuy":
+            return "safe_to_buy"
+        case "ambiguous":
+            return "ambiguous"
+        case "nomatch":
+            return "no_match"
+        default:
+            return status.lowercased()
+        }
     }
 }
 

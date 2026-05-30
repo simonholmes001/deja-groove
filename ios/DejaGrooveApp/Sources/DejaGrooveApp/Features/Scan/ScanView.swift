@@ -47,8 +47,12 @@ public struct ScanView: View {
             .onChange(of: selectedItem) { _, newItem in
                 Task {
                     guard let item = newItem,
-                          let data = try? await item.loadTransferable(type: Data.self) else { return }
-                    await viewModel.submitScan(imageData: data)
+                          let data = try? await item.loadTransferable(type: Data.self),
+                          let preparedData = PhotoLibraryScanImagePreparer.prepareForUpload(data) else {
+                        await viewModel.handleSelectedImagePreparationFailure()
+                        return
+                    }
+                    await viewModel.submitScan(imageData: preparedData)
                 }
             }
             .sheet(isPresented: $inputCoordinator.isCameraPresented) {
@@ -89,7 +93,7 @@ public struct ScanView: View {
                         selectedCandidateIndex = nil
                     }
                 }
-                if response.album != nil && (response.status == "safe_to_buy" || response.status == "owned") {
+                if response.canAddToCollection {
                     Button("Add To My Crate") {
                         Task { await viewModel.addResultToCollection() }
                     }

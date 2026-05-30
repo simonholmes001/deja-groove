@@ -45,6 +45,12 @@ param identityJwtMetadataAddress string = ''
 @description('JWT audience for backend bearer validation.')
 param identityJwtAudience string = ''
 
+@description('Whether the deployed app should use the stub/in-memory scan runtime adapters.')
+param scanFeaturesUseStubScanRuntime bool = false
+
+@description('Whether the resolve endpoint should be enabled.')
+param scanFeaturesEnableResolveEndpoint bool = false
+
 @description('Dev network resource group name.')
 param rgNetworkName string = 'rg-deja-dev-network'
 
@@ -166,6 +172,8 @@ module appService 'modules/app-service/app-service.bicep' = {
     identityJwtAuthority: identityJwtAuthority
     identityJwtMetadataAddress: identityJwtMetadataAddress
     identityJwtAudience: identityJwtAudience
+    scanFeaturesUseStubScanRuntime: scanFeaturesUseStubScanRuntime
+    scanFeaturesEnableResolveEndpoint: scanFeaturesEnableResolveEndpoint
   }
 }
 

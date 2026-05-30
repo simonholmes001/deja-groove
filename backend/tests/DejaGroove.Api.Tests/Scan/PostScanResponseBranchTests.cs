@@ -34,7 +34,7 @@ public sealed class PostScanResponseBranchTests : IClassFixture<WebApplicationFa
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await DeserializeAsync<ScanResponse>(response);
-        Assert.Equal("nomatch", body.Status);
+        Assert.Equal("no_match", body.Status);
         Assert.Null(body.Album);
         Assert.Empty(body.Candidates);
     }

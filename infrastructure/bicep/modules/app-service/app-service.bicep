@@ -53,6 +53,12 @@ param identityJwtMetadataAddress string = ''
 @description('JWT audience for backend bearer validation.')
 param identityJwtAudience string = ''
 
+@description('Whether the deployed app should use the stub/in-memory scan runtime adapters.')
+param scanFeaturesUseStubScanRuntime bool = false
+
+@description('Whether the resolve endpoint should be enabled.')
+param scanFeaturesEnableResolveEndpoint bool = false
+
 var suffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var hasIdentityJwtConfig = !empty(identityJwtAuthority) && !empty(identityJwtAudience)
 var escapedPostgresAdministratorPassword = replace(postgresAdministratorLoginPassword, '"', '""')
@@ -159,6 +165,14 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'OPENAI_KEY'
           value: openAiKey
+        }
+        {
+          name: 'ScanFeatures__UseStubScanRuntime'
+          value: scanFeaturesUseStubScanRuntime ? 'true' : 'false'
+        }
+        {
+          name: 'ScanFeatures__EnableResolveEndpoint'
+          value: scanFeaturesEnableResolveEndpoint ? 'true' : 'false'
         }
       ], identityJwtSettings)
     }

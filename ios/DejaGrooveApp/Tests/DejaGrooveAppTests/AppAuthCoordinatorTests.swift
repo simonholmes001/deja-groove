@@ -71,6 +71,27 @@ final class AppAuthCoordinatorTests: XCTestCase {
         XCTAssertEqual(1, calls)
         XCTAssertFalse(sut.isSigningIn)
     }
+
+    func testInvalidateSessionRequiresSignIn() async {
+        let now = Date(timeIntervalSince1970: 3000)
+        let session = AuthSession(
+            accessToken: "at",
+            refreshToken: "rt",
+            expiresAt: now.addingTimeInterval(3600),
+            userID: "user-3")
+        let store = CoordinatorInMemoryStore()
+        try? store.save(session)
+        let manager = AuthSessionManager(
+            tokenProvider: InteractiveStubProvider(result: .success(session)),
+            store: store,
+            dateProvider: BridgeFixedDate(now: now))
+        let sut = AppAuthCoordinator(authManager: manager)
+        sut.bootstrap()
+
+        sut.invalidateSession()
+
+        XCTAssertTrue(sut.requiresSignIn)
+    }
 }
 
 final class InteractiveStubProvider: InteractiveAuthTokenProvider, @unchecked Sendable {

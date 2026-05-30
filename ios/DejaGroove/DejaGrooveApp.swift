@@ -37,7 +37,13 @@ struct DejaGrooveMobileApp: App {
                 StartupConfigurationErrorView(message: startupError)
             } else {
                 AuthGateView(coordinator: coordinator) {
-                    DejaGrooveRootView(api: apiClient)
+                    DejaGrooveRootView(
+                        api: apiClient,
+                        onAuthenticationRequired: {
+                            await MainActor.run {
+                                coordinator.invalidateSession()
+                            }
+                        })
                 }
             }
         }

@@ -35,10 +35,27 @@ public static class HealthEndpointResponseWriter
 
     private static (string Matcher, bool Configured) ResolveScanRuntime(HttpContext context)
     {
-        var matcher = context.RequestServices.GetService<IAlbumMatchingPort>();
+        var services = context.RequestServices;
+        var matcher = services.GetService<IAlbumMatchingPort>();
+        var imageValidation = services.GetService<IImageValidationPort>();
+        var perceptualHash = services.GetService<IPerceptualHashPort>();
+        var scanCache = services.GetService<IScanCachePort>();
+        var collectionOwnership = services.GetService<ICollectionOwnershipPort>();
+        var scanEvents = services.GetService<IScanEventRepository>();
+        var ambiguousScans = services.GetService<IAmbiguousScanRepository>();
+
         if (matcher is null)
             return ("unknown", false);
 
-        return (matcher.GetType().Name, matcher is not UnconfiguredAlbumMatchingPort);
+        var configured =
+            matcher is not UnconfiguredAlbumMatchingPort &&
+            imageValidation is not UnconfiguredImageValidationPort &&
+            perceptualHash is not UnconfiguredPerceptualHashPort &&
+            scanCache is not UnconfiguredScanCachePort &&
+            collectionOwnership is not UnconfiguredCollectionOwnershipPort &&
+            scanEvents is not UnconfiguredScanEventRepository &&
+            ambiguousScans is not UnconfiguredAmbiguousScanRepository;
+
+        return (matcher.GetType().Name, configured);
     }
 }

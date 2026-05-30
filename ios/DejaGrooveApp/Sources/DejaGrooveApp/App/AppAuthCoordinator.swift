@@ -38,6 +38,12 @@ public final class AppAuthCoordinator: ObservableObject {
         syncFromAuthState()
     }
 
+    public func invalidateSession() {
+        authManager.signOut()
+        lastError = nil
+        syncFromAuthState()
+    }
+
     public func refreshAuthenticationState() async {
         _ = await authManager.currentAccessToken()
         syncFromAuthState()
