@@ -40,7 +40,7 @@ struct DejaGrooveMobileApp: App {
                     DejaGrooveRootView(
                         api: apiClient,
                         onAuthenticationRequired: {
-                            await coordinator.refreshAuthenticationState()
+                            coordinator.invalidateSession()
                         })
                 }
             }

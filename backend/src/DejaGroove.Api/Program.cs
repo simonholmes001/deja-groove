@@ -27,11 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOptions<ScanFeaturesOptions>()
     .Bind(builder.Configuration.GetSection(ScanFeaturesOptions.SectionName));
-builder.Services.PostConfigure<ScanFeaturesOptions>(o =>
-{
-    if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
-        o.EnableResolveEndpoint = true;
-});
+builder.Services.PostConfigure<ScanFeaturesOptions>(o => o.EnableResolveEndpoint = true);
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
@@ -50,24 +46,11 @@ builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUse
 var openAiKey = builder.Configuration["OPENAI_KEY"];
 var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
 var isTesting = builder.Environment.IsEnvironment("Testing");
-var useStubPorts = builder.Environment.IsDevelopment() || isTesting;
-
-if (useStubPorts)
-{
-    builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
-    builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-    builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
-}
-else
-{
-    builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
-    builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-    builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
-}
+builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
+builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
+builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
+builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
+builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
 
 if (hasOpenAiKey)
 {
@@ -114,10 +97,7 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 }
 else
 {
-    if (builder.Environment.IsDevelopment() || isTesting)
-        builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
-    else
-        builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
+    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
 
     // Development / contract-test wiring: no database required.
     builder.Services.AddSingleton<InMemoryCollectionStore>();

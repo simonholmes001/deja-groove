@@ -35,12 +35,12 @@ public sealed class AmbiguousScanRepositoryRegistrationTests
     }
 
     [Fact]
-    public void WithoutPostgresConnection_InTesting_RegistersInMemoryAmbiguousRepository()
+    public void WithoutPostgresConnection_InProduction_RegistersInMemoryAmbiguousRepository()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.UseEnvironment("Testing");
+                builder.UseEnvironment("Production");
                 builder.ConfigureAppConfiguration((_, config) =>
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>

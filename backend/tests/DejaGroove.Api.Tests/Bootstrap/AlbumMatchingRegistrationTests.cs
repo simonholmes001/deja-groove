@@ -40,7 +40,7 @@ public sealed class AlbumMatchingRegistrationTests
     }
 
     [Fact]
-    public void WithoutOpenAiKey_InProduction_RegistersUnconfiguredScanDependenciesAndLeavesResolveDisabled()
+    public void WithoutOpenAiKey_InProduction_KeepsSingleEnvironmentScanDependenciesReadyAndResolveEnabled()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -57,12 +57,12 @@ public sealed class AlbumMatchingRegistrationTests
             });
 
         using var scope = factory.Services.CreateScope();
-        Assert.IsType<UnconfiguredImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
-        Assert.IsType<UnconfiguredPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
-        Assert.IsType<UnconfiguredScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
+        Assert.IsType<StubImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
+        Assert.IsType<StubPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
+        Assert.IsType<InMemoryScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
         Assert.IsType<UnconfiguredAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
-        Assert.IsType<UnconfiguredCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
-        Assert.IsType<UnconfiguredScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
-        Assert.False(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
+        Assert.IsType<StubCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
+        Assert.IsType<InMemoryScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
+        Assert.True(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
     }
 }
