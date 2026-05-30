@@ -25,9 +25,16 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddOptions<ScanFeaturesOptions>()
-    .Bind(builder.Configuration.GetSection(ScanFeaturesOptions.SectionName));
-builder.Services.PostConfigure<ScanFeaturesOptions>(o => o.EnableResolveEndpoint = true);
+var isTesting = builder.Environment.IsEnvironment("Testing");
+var configuredScanFeatures = builder.Configuration
+    .GetSection(ScanFeaturesOptions.SectionName)
+    .Get<ScanFeaturesOptions>() ?? new ScanFeaturesOptions();
+var effectiveScanFeatures = new ScanFeaturesOptions
+{
+    UseStubScanRuntime = isTesting || configuredScanFeatures.UseStubScanRuntime,
+    EnableResolveEndpoint = isTesting || configuredScanFeatures.EnableResolveEndpoint
+};
+builder.Services.AddSingleton<IOptions<ScanFeaturesOptions>>(Options.Create(effectiveScanFeatures));
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
     .Bind(builder.Configuration.GetSection(IdentityJwtOptions.SectionName))
@@ -45,12 +52,22 @@ builder.Services.AddScoped<IResolveAmbiguousScanUseCase, ResolveAmbiguousScanUse
 
 var openAiKey = builder.Configuration["OPENAI_KEY"];
 var hasOpenAiKey = !string.IsNullOrWhiteSpace(openAiKey);
-var isTesting = builder.Environment.IsEnvironment("Testing");
-builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
-builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
-builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
-builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+if (effectiveScanFeatures.UseStubScanRuntime)
+{
+    builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
+    builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
+    builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
+    builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
+    builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
+    builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
+    builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
+    builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
+    builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+}
 
 if (hasOpenAiKey)
 {
@@ -97,7 +114,10 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 }
 else
 {
-    builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
+    if (effectiveScanFeatures.UseStubScanRuntime)
+        builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
+    else
+        builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
 
     // Development / contract-test wiring: no database required.
     builder.Services.AddSingleton<InMemoryCollectionStore>();
@@ -154,6 +174,22 @@ if (!string.IsNullOrWhiteSpace(adminConnectionString))
         .GetRequiredService<ILoggerFactory>()
         .CreateLogger<MigrationRunner>();
     await new MigrationRunner(adminConnectionString, migrationLogger).ApplyAsync();
+}
+
+if (hasOpenAiKey && !isTesting)
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    if (services.GetRequiredService<IImageValidationPort>() is UnconfiguredImageValidationPort ||
+        services.GetRequiredService<IPerceptualHashPort>() is UnconfiguredPerceptualHashPort ||
+        services.GetRequiredService<IScanCachePort>() is UnconfiguredScanCachePort ||
+        services.GetRequiredService<ICollectionOwnershipPort>() is UnconfiguredCollectionOwnershipPort ||
+        services.GetRequiredService<IScanEventRepository>() is UnconfiguredScanEventRepository ||
+        services.GetRequiredService<IAmbiguousScanRepository>() is UnconfiguredAmbiguousScanRepository)
+    {
+        throw new InvalidOperationException(
+            "OPENAI_KEY is configured but the scan runtime is not. Configure ScanFeatures__UseStubScanRuntime=true for the deployed environment or wire real scan infrastructure.");
+    }
 }
 
 app.UseMiddleware<RequestIdMiddleware>();

@@ -1,4 +1,5 @@
 using DejaGroove.Api.Ports;
+using DejaGroove.Api.Features;
 using DejaGroove.Application.Ports;
 using DejaGroove.Infrastructure.Persistence.Scanning;
 using Microsoft.AspNetCore.Hosting;
@@ -35,12 +36,35 @@ public sealed class AmbiguousScanRepositoryRegistrationTests
     }
 
     [Fact]
-    public void WithoutPostgresConnection_InProduction_RegistersInMemoryAmbiguousRepository()
+    public void WithoutPostgresConnection_InProduction_FailsClosedByDefault()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Production");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["IdentityJwt:Authority"] = "https://identity.example",
+                        ["IdentityJwt:Audience"] = "deja-groove-api"
+                    });
+                });
+            });
+
+        using var scope = factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IAmbiguousScanRepository>();
+        Assert.IsType<UnconfiguredAmbiguousScanRepository>(repo);
+    }
+
+    [Fact]
+    public void WithStubRuntimeFlag_InProduction_RegistersInMemoryAmbiguousRepository()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Production");
+                builder.UseSetting($"{ScanFeaturesOptions.SectionName}:{nameof(ScanFeaturesOptions.UseStubScanRuntime)}", "true");
                 builder.ConfigureAppConfiguration((_, config) =>
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>

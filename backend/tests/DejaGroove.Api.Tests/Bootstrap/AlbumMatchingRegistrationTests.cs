@@ -40,12 +40,41 @@ public sealed class AlbumMatchingRegistrationTests
     }
 
     [Fact]
-    public void WithoutOpenAiKey_InProduction_KeepsSingleEnvironmentScanDependenciesReadyAndResolveEnabled()
+    public void WithoutOpenAiKey_InProduction_FailsClosedByDefault()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Production");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["IdentityJwt:Authority"] = "https://identity.example",
+                        ["IdentityJwt:Audience"] = "deja-groove-api"
+                    });
+                });
+            });
+
+        using var scope = factory.Services.CreateScope();
+        Assert.IsType<UnconfiguredImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
+        Assert.IsType<UnconfiguredPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
+        Assert.IsType<UnconfiguredScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
+        Assert.IsType<UnconfiguredAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
+        Assert.IsType<UnconfiguredCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
+        Assert.IsType<UnconfiguredScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
+        Assert.False(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
+    }
+
+    [Fact]
+    public void WithExplicitScanRuntime_InProduction_RegistersStubbedDependenciesAndResolve()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Production");
+                builder.UseSetting($"{ScanFeaturesOptions.SectionName}:{nameof(ScanFeaturesOptions.UseStubScanRuntime)}", "true");
+                builder.UseSetting($"{ScanFeaturesOptions.SectionName}:{nameof(ScanFeaturesOptions.EnableResolveEndpoint)}", "true");
                 builder.ConfigureAppConfiguration((_, config) =>
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -64,5 +93,29 @@ public sealed class AlbumMatchingRegistrationTests
         Assert.IsType<StubCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
         Assert.IsType<InMemoryScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
         Assert.True(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
+    }
+
+    [Fact]
+    public void WithOpenAiKey_InProduction_WithoutExplicitScanRuntime_FailsFast()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Production");
+                builder.UseSetting("OPENAI_KEY", "test-openai-key");
+                builder.UseSetting("OpenAi:BaseUrl", "https://example.invalid");
+                builder.UseSetting("OpenAi:Model", "gpt-test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["IdentityJwt:Authority"] = "https://identity.example",
+                        ["IdentityJwt:Audience"] = "deja-groove-api"
+                    });
+                });
+            });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("ScanFeatures__UseStubScanRuntime", exception.Message);
     }
 }

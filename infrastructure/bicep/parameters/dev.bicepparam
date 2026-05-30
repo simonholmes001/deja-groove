@@ -5,6 +5,8 @@ param ownerEmail = 'simonholmes001@hotmail.com'
 param apimPublisherName = 'Deja Groove'
 param apimPublisherEmail = 'simonholmes001@hotmail.com'
 param dockerImageReference = 'simonholmes001/deja-groove-api:dev-latest'
+param scanFeaturesUseStubScanRuntime = true
+param scanFeaturesEnableResolveEndpoint = true
 
 param rgNetworkName = 'rg-deja-dev-network'
 param rgDataName = 'rg-deja-dev-data'
