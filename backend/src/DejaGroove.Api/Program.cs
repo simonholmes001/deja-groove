@@ -34,6 +34,11 @@ var effectiveScanFeatures = new ScanFeaturesOptions
     UseStubScanRuntime = isTesting || configuredScanFeatures.UseStubScanRuntime,
     EnableResolveEndpoint = isTesting || configuredScanFeatures.EnableResolveEndpoint
 };
+if (!isTesting && effectiveScanFeatures.UseStubScanRuntime)
+{
+    throw new InvalidOperationException(
+        "Stub scan runtime is only allowed in the Testing environment. Deploy real scan infrastructure instead of setting ScanFeatures__UseStubScanRuntime=true.");
+}
 builder.Services.AddSingleton<IOptions<ScanFeaturesOptions>>(Options.Create(effectiveScanFeatures));
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
@@ -188,7 +193,7 @@ if (hasOpenAiKey && !isTesting)
         services.GetRequiredService<IAmbiguousScanRepository>() is UnconfiguredAmbiguousScanRepository)
     {
         throw new InvalidOperationException(
-            "OPENAI_KEY is configured but the scan runtime is not. Configure ScanFeatures__UseStubScanRuntime=true for the deployed environment or wire real scan infrastructure.");
+            "OPENAI_KEY is configured but the scan runtime is not. Wire real scan infrastructure for the deployed environment; do not enable the stub scan runtime.");
     }
 }
 

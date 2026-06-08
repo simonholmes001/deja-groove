@@ -241,6 +241,10 @@ jobs:
             else
               echo "::warning::OPENAI_KEY not set — backend scan requests will fail with scan_dependencies_unconfigured."
             fi
+            if ! grep -Eq "^[[:space:]]*param scanFeaturesUseStubScanRuntime = false$" infrastructure/bicep/parameters/dev.bicepparam; then
+              echo "::error::Dev deployment must not enable ScanFeatures__UseStubScanRuntime."
+              exit 1
+            fi
             set +e
             az deployment sub create \
               --name "deja-dev-deploy-${{ github.run_id }}" \
@@ -295,9 +299,19 @@ jobs:
             total_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?action=='Allow'])" -o tsv)"
             apim_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?name=='allow-apim-service-tag' && action=='Allow' && tag=='ServiceTag' && ipAddress=='ApiManagement'])" -o tsv)"
             scm_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(scmIpSecurityRestrictions[?action=='Allow'])" -o tsv)"
+            stub_runtime_setting="$(az webapp config appsettings list -g "$rg" -n "$app_name" --query "[?name=='ScanFeatures__UseStubScanRuntime'].value | [0]" -o tsv)"
+            resolve_endpoint_setting="$(az webapp config appsettings list -g "$rg" -n "$app_name" --query "[?name=='ScanFeatures__EnableResolveEndpoint'].value | [0]" -o tsv)"
             if [ "$main_default_action" != "Deny" ] || [ "$scm_default_action" != "Deny" ] || [ "$apim_allow_count" != "1" ] || [ "$total_allow_count" != "1" ] || [ "$scm_allow_count" != "0" ]; then
               echo "::error::Access restriction policy assertion failed (main/scm default deny and APIM allow rule required)."
               az webapp config access-restriction show -g "$rg" -n "$app_name" --output jsonc
+              exit 1
+            fi
+            if [ "$stub_runtime_setting" != "false" ]; then
+              echo "::error::ScanFeatures__UseStubScanRuntime must be false in deployed App Service config, got '${stub_runtime_setting:-unset}'."
+              exit 1
+            fi
+            if [ "$resolve_endpoint_setting" != "true" ]; then
+              echo "::error::ScanFeatures__EnableResolveEndpoint must be true in deployed App Service config, got '${resolve_endpoint_setting:-unset}'."
               exit 1
             fi
 
@@ -334,6 +348,11 @@ jobs:
 
             if [ -z "${scan_matcher:-}" ]; then
               echo "::error::APIM health response does not expose scanRuntime.matcher."
+              printf '%s\n' "$health_body"
+              exit 1
+            fi
+            if [ "${scan_matcher}" = "StubAlbumMatchingPort" ]; then
+              echo "::error::APIM health reports stub scan runtime, which is forbidden in dev deployment."
               printf '%s\n' "$health_body"
               exit 1
             fi

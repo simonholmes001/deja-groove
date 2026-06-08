@@ -67,7 +67,7 @@ public sealed class AlbumMatchingRegistrationTests
     }
 
     [Fact]
-    public void WithExplicitScanRuntime_InProduction_RegistersStubbedDependenciesAndResolve()
+    public void WithExplicitScanRuntime_InProduction_FailsFast()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -85,14 +85,8 @@ public sealed class AlbumMatchingRegistrationTests
                 });
             });
 
-        using var scope = factory.Services.CreateScope();
-        Assert.IsType<StubImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
-        Assert.IsType<StubPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
-        Assert.IsType<InMemoryScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
-        Assert.IsType<UnconfiguredAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
-        Assert.IsType<StubCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
-        Assert.IsType<InMemoryScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
-        Assert.True(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Stub scan runtime is only allowed in the Testing environment", exception.Message);
     }
 
     [Fact]
@@ -116,6 +110,6 @@ public sealed class AlbumMatchingRegistrationTests
             });
 
         var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-        Assert.Contains("ScanFeatures__UseStubScanRuntime", exception.Message);
+        Assert.Contains("Wire real scan infrastructure", exception.Message);
     }
 }
