@@ -4,6 +4,7 @@ using System.Text.Json;
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Responses;
 using DejaGroove.Application.Ports;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +26,7 @@ public class PostScanContractTests : IClassFixture<WebApplicationFactory<Program
     {
         _client = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IAlbumMatchingPort>();

@@ -10,7 +10,7 @@ public record ValidationResult(bool IsValid, string? ErrorCode = null, string? E
 
 public interface IImageValidationPort
 {
-    Task<ValidationResult> ValidateAsync(Stream imageStream, string? contentType, CancellationToken ct = default);
+    Task<ValidationResult> ValidateAsync(ReadOnlyMemory<byte> imageBytes, string? contentType, CancellationToken ct = default);
 }
 
 public interface IPerceptualHashPort

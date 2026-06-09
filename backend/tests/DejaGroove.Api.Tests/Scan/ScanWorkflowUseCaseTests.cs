@@ -25,7 +25,7 @@ public sealed class ScanWorkflowUseCaseTests
         ILogger<ScanWorkflowUseCase>? logger = null)
     {
         imageValidation
-            .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ValidateAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Ok());
 
         return new ScanWorkflowUseCase(
@@ -197,7 +197,7 @@ public sealed class ScanWorkflowUseCaseTests
         var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
 
         imageValidation
-            .ValidateAsync(Arg.Any<Stream>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ValidateAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ValidationResult.Fail("invalid_image", "Image signature mismatch."));
 
         var sut = new ScanWorkflowUseCase(
@@ -429,10 +429,93 @@ public sealed class ScanWorkflowUseCaseTests
             entry.Message.Contains(command.RequestId.ToString(), StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WithNonSeekableInput_PassesCompleteImageBytesToValidationHashAndMatcher()
+    {
+        var imageValidation = Substitute.For<IImageValidationPort>();
+        var pHash = Substitute.For<IPerceptualHashPort>();
+        var cache = Substitute.For<IScanCachePort>();
+        var matcher = Substitute.For<IAlbumMatchingPort>();
+        var ownership = Substitute.For<ICollectionOwnershipPort>();
+        var events = Substitute.For<IScanEventRepository>();
+        var ambiguousScans = Substitute.For<IAmbiguousScanRepository>();
+        var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x10, 0x20, 0x30 };
+        byte[]? validatedBytes = null;
+        byte[]? hashedBytes = null;
+        byte[]? matchedBytes = null;
+
+        imageValidation
+            .ValidateAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                validatedBytes = call.ArgAt<ReadOnlyMemory<byte>>(0).ToArray();
+                return ValidationResult.Ok();
+            });
+        pHash
+            .ComputeAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                hashedBytes = await ReadAllAsync(call.ArgAt<Stream>(0));
+                return new PerceptualHash(42);
+            });
+        matcher
+            .IdentifyAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                matchedBytes = await ReadAllAsync(call.ArgAt<Stream>(0));
+                return ScanResult.SafeToBuy(Identity, 0.91f);
+            });
+
+        var sut = new ScanWorkflowUseCase(
+            imageValidation,
+            pHash,
+            cache,
+            matcher,
+            ownership,
+            events,
+            ambiguousScans,
+            NullLogger<ScanWorkflowUseCase>.Instance);
+        var command = new ScanCommand(
+            UserId: null,
+            ClientScanId: Guid.NewGuid(),
+            ImageStream: new NonSeekableReadStream(imageBytes),
+            ContentType: "image/jpeg",
+            CapturedAt: DateTimeOffset.UtcNow,
+            RequestId: Guid.NewGuid());
+
+        await sut.ExecuteAsync(command);
+
+        Assert.Equal(imageBytes, validatedBytes);
+        Assert.Equal(imageBytes, hashedBytes);
+        Assert.Equal(imageBytes, matchedBytes);
+    }
+
     private static ScanCommand BuildCommand(Guid? userId)
     {
         var bytes = new byte[] { 0x01, 0x02, 0x03 };
         return new ScanCommand(userId, Guid.NewGuid(), new MemoryStream(bytes), "image/jpeg", DateTimeOffset.UtcNow, Guid.NewGuid());
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        return buffer.ToArray();
+    }
+
+    private sealed class NonSeekableReadStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override bool CanSeek => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin loc) => throw new NotSupportedException();
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

@@ -1,6 +1,9 @@
 using DejaGroove.Api.Ports;
 using DejaGroove.Api.Features;
 using DejaGroove.Application.Ports;
+using DejaGroove.Infrastructure.Persistence.Caching;
+using DejaGroove.Infrastructure.Persistence.Scanning;
+using DejaGroove.Infrastructure.Recognition;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -57,8 +60,8 @@ public sealed class AlbumMatchingRegistrationTests
             });
 
         using var scope = factory.Services.CreateScope();
-        Assert.IsType<UnconfiguredImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
-        Assert.IsType<UnconfiguredPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
+        Assert.IsType<ImageHeaderValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
+        Assert.IsType<Sha256PerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
         Assert.IsType<UnconfiguredScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
         Assert.IsType<UnconfiguredAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
         Assert.IsType<UnconfiguredCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
@@ -67,7 +70,39 @@ public sealed class AlbumMatchingRegistrationTests
     }
 
     [Fact]
-    public void WithExplicitScanRuntime_InProduction_RegistersStubbedDependenciesAndResolve()
+    public void WithOpenAiKeyAndPostgres_InProduction_RegistersRealScanRuntime()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Production");
+                builder.UseSetting("OPENAI_KEY", "test-openai-key");
+                builder.UseSetting("OpenAi:BaseUrl", "https://example.invalid");
+                builder.UseSetting("OpenAi:Model", "gpt-test");
+                builder.UseSetting("ConnectionStrings:Postgres", "Host=localhost;Database=deja;Username=test;Password=test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["IdentityJwt:Authority"] = "https://identity.example",
+                        ["IdentityJwt:Audience"] = "deja-groove-api",
+                        ["ConnectionStrings:Postgres"] = "Host=localhost;Database=deja;Username=test;Password=test"
+                    });
+                });
+            });
+
+        using var scope = factory.Services.CreateScope();
+        Assert.IsType<ImageHeaderValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
+        Assert.IsType<Sha256PerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
+        Assert.IsType<PostgresScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
+        Assert.IsType<OpenAiAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
+        Assert.IsType<PostgresCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
+        Assert.IsType<PostgresScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
+        Assert.IsType<PostgresAmbiguousScanRepository>(scope.ServiceProvider.GetRequiredService<IAmbiguousScanRepository>());
+    }
+
+    [Fact]
+    public void WithExplicitScanRuntime_InProduction_FailsFast()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -85,18 +120,12 @@ public sealed class AlbumMatchingRegistrationTests
                 });
             });
 
-        using var scope = factory.Services.CreateScope();
-        Assert.IsType<StubImageValidationPort>(scope.ServiceProvider.GetRequiredService<IImageValidationPort>());
-        Assert.IsType<StubPerceptualHashPort>(scope.ServiceProvider.GetRequiredService<IPerceptualHashPort>());
-        Assert.IsType<InMemoryScanCachePort>(scope.ServiceProvider.GetRequiredService<IScanCachePort>());
-        Assert.IsType<UnconfiguredAlbumMatchingPort>(scope.ServiceProvider.GetRequiredService<IAlbumMatchingPort>());
-        Assert.IsType<StubCollectionOwnershipPort>(scope.ServiceProvider.GetRequiredService<ICollectionOwnershipPort>());
-        Assert.IsType<InMemoryScanEventRepository>(scope.ServiceProvider.GetRequiredService<IScanEventRepository>());
-        Assert.True(scope.ServiceProvider.GetRequiredService<IOptions<ScanFeaturesOptions>>().Value.EnableResolveEndpoint);
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Stub scan runtime is only allowed in the Testing environment", exception.Message);
     }
 
     [Fact]
-    public void WithOpenAiKey_InProduction_WithoutExplicitScanRuntime_FailsFast()
+    public void WithOpenAiKey_InProduction_WithoutPostgresScanPersistence_FailsFast()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -116,6 +145,6 @@ public sealed class AlbumMatchingRegistrationTests
             });
 
         var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-        Assert.Contains("ScanFeatures__UseStubScanRuntime", exception.Message);
+        Assert.Contains("PostgreSQL-backed scan cache", exception.Message);
     }
 }

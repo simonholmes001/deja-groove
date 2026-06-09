@@ -70,12 +70,35 @@ public sealed class ScanPortsTests
         var events = new UnconfiguredScanEventRepository();
         var identity = AlbumIdentity.Create("m1", null, null, null, null);
 
-        await Assert.ThrowsAsync<ServiceUnavailableException>(() => validation.ValidateAsync(Stream.Null, "image/jpeg"));
+        await Assert.ThrowsAsync<ServiceUnavailableException>(() => validation.ValidateAsync(ReadOnlyMemory<byte>.Empty, "image/jpeg"));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => hash.ComputeAsync(Stream.Null));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => cache.TryGetAsync(Guid.NewGuid(), new PerceptualHash(1)));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => cache.StoreAsync(Guid.NewGuid(), new PerceptualHash(1), ScanResult.NoMatch(), TimeSpan.FromSeconds(1)));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => matcher.IdentifyAsync(Stream.Null));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => ownership.CheckAsync(Guid.NewGuid(), identity));
         await Assert.ThrowsAsync<ServiceUnavailableException>(() => events.AppendAsync(new ScanEvent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), ScanStatus.NoMatch, 0, null, null, DateTimeOffset.UtcNow)));
+    }
+
+    [Fact]
+    public async Task ImageHeaderValidationPort_AcceptsJpegAndPngHeaders()
+    {
+        var validation = new ImageHeaderValidationPort();
+
+        var jpeg = await validation.ValidateAsync(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, "image/jpeg");
+        var png = await validation.ValidateAsync(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, "image/png");
+
+        Assert.True(jpeg.IsValid);
+        Assert.True(png.IsValid);
+    }
+
+    [Fact]
+    public async Task ImageHeaderValidationPort_RejectsUnsupportedHeader()
+    {
+        var validation = new ImageHeaderValidationPort();
+
+        var result = await validation.ValidateAsync(new byte[] { 0x47, 0x49, 0x46 }, "image/gif");
+
+        Assert.False(result.IsValid);
+        Assert.Equal("unsupported_image", result.ErrorCode);
     }
 }

@@ -34,6 +34,11 @@ var effectiveScanFeatures = new ScanFeaturesOptions
     UseStubScanRuntime = isTesting || configuredScanFeatures.UseStubScanRuntime,
     EnableResolveEndpoint = isTesting || configuredScanFeatures.EnableResolveEndpoint
 };
+if (!isTesting && effectiveScanFeatures.UseStubScanRuntime)
+{
+    throw new InvalidOperationException(
+        "Stub scan runtime is only allowed in the Testing environment. Deploy real scan infrastructure instead of setting ScanFeatures__UseStubScanRuntime=true.");
+}
 builder.Services.AddSingleton<IOptions<ScanFeaturesOptions>>(Options.Create(effectiveScanFeatures));
 builder.Services.AddSingleton<IValidateOptions<IdentityJwtOptions>, ValidateIdentityJwtOptions>();
 builder.Services.AddOptions<IdentityJwtOptions>()
@@ -56,17 +61,11 @@ if (effectiveScanFeatures.UseStubScanRuntime)
 {
     builder.Services.AddSingleton<IImageValidationPort, StubImageValidationPort>();
     builder.Services.AddSingleton<IPerceptualHashPort, StubPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
-    builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
 }
 else
 {
-    builder.Services.AddSingleton<IImageValidationPort, UnconfiguredImageValidationPort>();
-    builder.Services.AddSingleton<IPerceptualHashPort, UnconfiguredPerceptualHashPort>();
-    builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
-    builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
-    builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+    builder.Services.AddSingleton<IImageValidationPort, ImageHeaderValidationPort>();
+    builder.Services.AddSingleton<IPerceptualHashPort, Sha256PerceptualHashPort>();
 }
 
 if (hasOpenAiKey)
@@ -101,8 +100,11 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
     builder.Services.AddSingleton(new PostgresConnectionFactory(runtimeConnectionString));
     builder.Services.AddScoped<ICollectionRepository, PostgresCollectionRepository>();
     builder.Services.AddScoped<IIdempotencyStore, PostgresIdempotencyStore>();
+    builder.Services.AddScoped<IScanCachePort, PostgresScanCachePort>();
     builder.Services.AddScoped<IScanCacheInvalidationPort, PostgresScanCachePort>();
     builder.Services.AddScoped<IAmbiguousScanRepository, PostgresAmbiguousScanRepository>();
+    builder.Services.AddScoped<ICollectionOwnershipPort, PostgresCollectionOwnershipPort>();
+    builder.Services.AddScoped<IScanEventRepository, PostgresScanEventRepository>();
 
     var maintenanceConnectionString = builder.Configuration.GetConnectionString("PostgresAdmin");
     if (!string.IsNullOrWhiteSpace(maintenanceConnectionString))
@@ -115,9 +117,19 @@ if (!string.IsNullOrWhiteSpace(runtimeConnectionString))
 else
 {
     if (effectiveScanFeatures.UseStubScanRuntime)
+    {
+        builder.Services.AddSingleton<IScanCachePort, InMemoryScanCachePort>();
         builder.Services.AddSingleton<IAmbiguousScanRepository, InMemoryAmbiguousScanRepository>();
+        builder.Services.AddSingleton<ICollectionOwnershipPort, StubCollectionOwnershipPort>();
+        builder.Services.AddSingleton<IScanEventRepository, InMemoryScanEventRepository>();
+    }
     else
+    {
+        builder.Services.AddSingleton<IScanCachePort, UnconfiguredScanCachePort>();
         builder.Services.AddSingleton<IAmbiguousScanRepository, UnconfiguredAmbiguousScanRepository>();
+        builder.Services.AddSingleton<ICollectionOwnershipPort, UnconfiguredCollectionOwnershipPort>();
+        builder.Services.AddSingleton<IScanEventRepository, UnconfiguredScanEventRepository>();
+    }
 
     // Development / contract-test wiring: no database required.
     builder.Services.AddSingleton<InMemoryCollectionStore>();
@@ -180,15 +192,13 @@ if (hasOpenAiKey && !isTesting)
 {
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
-    if (services.GetRequiredService<IImageValidationPort>() is UnconfiguredImageValidationPort ||
-        services.GetRequiredService<IPerceptualHashPort>() is UnconfiguredPerceptualHashPort ||
-        services.GetRequiredService<IScanCachePort>() is UnconfiguredScanCachePort ||
+    if (services.GetRequiredService<IScanCachePort>() is UnconfiguredScanCachePort ||
         services.GetRequiredService<ICollectionOwnershipPort>() is UnconfiguredCollectionOwnershipPort ||
         services.GetRequiredService<IScanEventRepository>() is UnconfiguredScanEventRepository ||
         services.GetRequiredService<IAmbiguousScanRepository>() is UnconfiguredAmbiguousScanRepository)
     {
         throw new InvalidOperationException(
-            "OPENAI_KEY is configured but the scan runtime is not. Configure ScanFeatures__UseStubScanRuntime=true for the deployed environment or wire real scan infrastructure.");
+            "OPENAI_KEY is configured but PostgreSQL-backed scan cache, scan events, ownership, or ambiguity persistence is not wired for the deployed environment.");
     }
 }
 

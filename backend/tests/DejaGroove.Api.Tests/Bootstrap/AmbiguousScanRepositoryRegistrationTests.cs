@@ -58,7 +58,7 @@ public sealed class AmbiguousScanRepositoryRegistrationTests
     }
 
     [Fact]
-    public void WithStubRuntimeFlag_InProduction_RegistersInMemoryAmbiguousRepository()
+    public void WithStubRuntimeFlag_InProduction_FailsFast()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -75,8 +75,7 @@ public sealed class AmbiguousScanRepositoryRegistrationTests
                 });
             });
 
-        using var scope = factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<IAmbiguousScanRepository>();
-        Assert.IsType<InMemoryAmbiguousScanRepository>(repo);
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Stub scan runtime is only allowed in the Testing environment", exception.Message);
     }
 }
