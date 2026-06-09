@@ -6,23 +6,21 @@ namespace DejaGroove.Api.Ports;
 
 public sealed class ImageHeaderValidationPort : IImageValidationPort
 {
-    public async Task<ValidationResult> ValidateAsync(Stream imageStream, string? contentType, CancellationToken ct = default)
+    public Task<ValidationResult> ValidateAsync(ReadOnlyMemory<byte> imageBytes, string? contentType, CancellationToken ct = default)
     {
-        var header = new byte[12];
-        var read = await imageStream.ReadAsync(header.AsMemory(), ct);
-        if (imageStream.CanSeek)
-            imageStream.Position = 0;
+        var header = imageBytes.Span;
+        var read = header.Length;
 
         if (IsJpeg(header, read) || IsPng(header, read))
-            return ValidationResult.Ok();
+            return Task.FromResult(ValidationResult.Ok());
 
-        return ValidationResult.Fail("unsupported_image", "Image must be a JPEG or PNG file.");
+        return Task.FromResult(ValidationResult.Fail("unsupported_image", "Image must be a JPEG or PNG file."));
     }
 
-    private static bool IsJpeg(byte[] header, int read) =>
+    private static bool IsJpeg(ReadOnlySpan<byte> header, int read) =>
         read >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF;
 
-    private static bool IsPng(byte[] header, int read) =>
+    private static bool IsPng(ReadOnlySpan<byte> header, int read) =>
         read >= 8 &&
         header[0] == 0x89 &&
         header[1] == 0x50 &&

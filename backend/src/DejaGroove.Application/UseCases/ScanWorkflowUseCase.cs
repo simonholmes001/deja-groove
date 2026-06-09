@@ -28,7 +28,7 @@ public sealed class ScanWorkflowUseCase(
 
         var imageBytes = await ReadImageAsync(command.ImageStream, ct);
 
-        var validation = await imageValidation.ValidateAsync(CreateImageStream(imageBytes), command.ContentType, ct);
+        var validation = await imageValidation.ValidateAsync(imageBytes, command.ContentType, ct);
         if (!validation.IsValid)
             throw new InputValidationException(
                 validation.ErrorCode ?? "validation_error",

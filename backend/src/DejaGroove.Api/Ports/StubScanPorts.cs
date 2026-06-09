@@ -9,7 +9,7 @@ namespace DejaGroove.Api.Ports;
 
 public sealed class StubImageValidationPort : IImageValidationPort
 {
-    public Task<ValidationResult> ValidateAsync(Stream imageStream, string? contentType, CancellationToken ct = default)
+    public Task<ValidationResult> ValidateAsync(ReadOnlyMemory<byte> imageBytes, string? contentType, CancellationToken ct = default)
         => Task.FromResult(ValidationResult.Ok());
 }
 
@@ -126,7 +126,7 @@ public sealed class InMemoryAmbiguousScanRepository : IAmbiguousScanRepository
 
 public sealed class UnconfiguredImageValidationPort : IImageValidationPort
 {
-    public Task<ValidationResult> ValidateAsync(Stream imageStream, string? contentType, CancellationToken ct = default) =>
+    public Task<ValidationResult> ValidateAsync(ReadOnlyMemory<byte> imageBytes, string? contentType, CancellationToken ct = default) =>
         throw ScanPortErrors.Unconfigured();
 }
 
