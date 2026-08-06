@@ -3,10 +3,10 @@
 ## Context
 
 The current Azure-hosted runtime is too expensive for the product's current
-stage. The revised target is not a fully hosted backend and not a pure BYOK
-client. The app should keep user data and workflow state on the iPhone, while
-Azure is reduced to the smallest viable secret-holding runtime for OpenAI API
-calls.
+stage. The revised target is not a hosted application backend and not a pure
+BYOK client. The app should keep user data and workflow state on the iPhone,
+while Azure is reduced to the smallest viable secret-holding runtime for OpenAI
+API calls.
 
 ## Target Architecture
 
@@ -29,26 +29,21 @@ Minimal Azure runtime
 The intended Azure footprint is one Function App on a consumption-style plan,
 one required storage account, application settings for secrets, and optional
 Application Insights if diagnostics are worth the small extra cost. Key Vault,
-APIM, PostgreSQL, container registry, managed database networking, and the
-current backend container pipeline are out of scope for the minimum runtime.
+APIM, PostgreSQL, container registry, managed database networking, and
+containerized API deployment are out of scope for the minimum runtime.
 
 ## Current Main Branch Starting Point
 
 - The iOS app already depends on the `ApiClient` protocol for scan, resolve,
   collection add/list, and collection patch operations.
-- `LiveApiClient` currently calls the hosted `/v1/scan` and `/v1/collection`
-  backend endpoints.
-- The backend already contains useful recognition behavior that can be reused
-  or ported into a minimal function:
-  - `RecognitionPromptRegistry`
-  - `OpenAiAlbumMatchingPort`
-  - `RecognitionResultMapper`
-  - selected request/response DTOs
-- The current backend also contains behavior that should move onto the phone:
-  - collection persistence
-  - ownership checks
-  - scan cache
-  - ambiguity resolution state
+- `LiveApiClient` still supports hosted `/v1/scan` and `/v1/collection`
+  endpoints for comparison against existing deployed environments.
+- The legacy .NET backend has been removed from the active repository. Any
+  remaining behavior needed for the new runtime should be reimplemented in the
+  iOS app or the minimal Function, not carried forward as .NET backend code.
+- The old hosted runtime behavior that now belongs on the phone includes
+  collection persistence, ownership checks, scan cache, and ambiguity
+  resolution state.
 
 The migration should keep the iOS UI stable by introducing a local/proxy-backed
 implementation behind the existing `ApiClient` protocol before deleting the old
@@ -64,7 +59,7 @@ new runtime proves scan and collection parity.
 
 ### 2. Minimal Azure Function Recognition Proxy
 
-Create the smallest backend that can safely hold the OpenAI API key:
+Create the smallest proxy that can safely hold the OpenAI API key:
 
 - `POST /api/recognize-album`
 - accepts one prepared image payload
@@ -138,12 +133,11 @@ deployment:
 
 ### 10. Legacy Runtime Decommission Plan
 
-After local/proxy scan and collection parity is proven, document and execute the
-shutdown of the old Azure runtime:
+Document and execute shutdown of the old Azure runtime:
 
 - stop or delete App Service/APIM/PostgreSQL/Key Vault resources no longer used
-- disable backend container publish and large infrastructure deploy workflows
-- retain archived backend/infra code only if it is still useful as reference
+- keep backend container publish and large infrastructure deploy workflows removed
+- keep legacy .NET backend source out of the active repository
 
 ## Product And Privacy Notes
 
@@ -157,11 +151,9 @@ shutdown of the old Azure runtime:
 ## Open Decisions
 
 - Use SwiftData, Core Data, or SQLite for local persistence.
-- Implement the Azure Function in .NET isolated or TypeScript.
+- Implement the Azure Function in TypeScript.
 - Use Azure Functions Flex Consumption or the lowest acceptable consumption
   option for the final subscription/region constraints.
-- Keep backend code as reference during migration or remove it immediately after
-  local/proxy parity.
 - Add iCloud/CloudKit sync now or defer until after local-only storage works.
 
 ## Proposed GitHub Issue Set

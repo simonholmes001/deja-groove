@@ -54,9 +54,9 @@ Release notes are only as good as PR hygiene. Every PR must:
 
 The first release is `v0.0.0`, tagged at the current tip of `main`, marking
 the ground-zero point from which all subsequent release notes are diffed.
-Its notes describe the state of the platform at that point (collection
-schema, APIM baseline, auth/identity validation, scan workflow, IaC
-bootstrap) rather than a delta.
+Its notes describe the state of the iOS app, local-first runtime direction,
+minimal Azure Function proxy path, and release automation baseline rather than
+a delta.
 
 ## Out of scope
 

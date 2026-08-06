@@ -30,12 +30,16 @@ Enable the following:
 After CI has run at least once, select these checks:
 
 - `Node Tests (., cli, frontend)` or the matrix-generated equivalents under `Node Tests`
-- `.NET Tests (backend, .)` or the matrix-generated equivalents under `.NET Tests`
-- `Infrastructure Validate (PR) / Bicep Build Validation`
-- `Infrastructure Validate (PR) / Dev ARM Validate`
-- `Infrastructure Validate (PR) / Dev What-If`
+- `Swift Tests`
+- `Changeset Check`
+- `Codex Review`
+- `Codex Review Script Tests`
+- `PR Title (Conventional Commits)`
+- `Branch Name`
+- `Validate Dev Function Proxy`
+- `Minimal Function Bicep Lint`
 
-Note: GitHub may display matrix checks as separate entries. Mark all visible entries from both jobs as required.
+Note: the retired .NET backend is no longer part of the active repository. Do not require legacy `.NET Tests` checks.
 
 ## 4. Optional Hardening
 

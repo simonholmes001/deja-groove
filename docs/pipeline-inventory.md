@@ -9,9 +9,11 @@ Repository: `simonholmes001/deja-groove`
 - Purpose: baseline quality gates for PRs and pushes.
 - Triggers: push to `main` and `feature/**`, pull requests to `main`.
 - Jobs:
+  - `Changeset Check`: requires a changeset for releasable PR changes.
   - `Codex Review Script Tests`: runs tests for `.github/scripts/*.test.mjs`.
+  - `Repository Script Tests`: runs shell-script tests for release, changeset,
+    iOS, and repository hygiene scripts.
   - `Node Tests`: detects Node projects in `.`, `cli`, `frontend` and runs tests when present.
-  - `.NET Tests`: detects .NET projects in `backend` and `.` and runs tests when present.
 - Required secrets: none beyond default GitHub token.
 
 ### `Codex PR Review`
@@ -44,32 +46,28 @@ Repository: `simonholmes001/deja-groove`
 ### `Infrastructure Validate (PR)`
 - File: `.github/workflows/infrastructure-validate.yaml`
 - Purpose: validates infra changes before merge.
-- Triggers: pull requests to `main` with changes under `infrastructure/**` or infra workflow files.
+- Triggers: pull requests to `main` with changes under `infrastructure/**`,
+  `functions/**`, or minimal infra workflow files.
 - Jobs:
-  - `Bicep Build Validation`
-  - `Dev ARM Validate`
-  - `Dev What-If`
+  - `Validate Dev Function Proxy`
 - Required secrets:
   - `AZURE_CLIENT_ID`
   - `AZURE_TENANT_ID`
   - `AZURE_SUBSCRIPTION_ID`
-  - `AZURE_POSTGRES_ADMIN_LOGIN`
-  - `AZURE_POSTGRES_ADMIN_PASSWORD`
+  - `OPENAI_KEY` when full validation/deploy is enabled
 
-### `Infrastructure Deploy (Dev)`
+### `Minimal Azure Function Deploy (Dev)`
 - File: `.github/workflows/infrastructure-deploy-dev.yaml`
-- Purpose: deploys infra changes to dev on merge to `main` and verifies backend and gateway health routes.
-- Triggers: push to `main` for infra changes and manual dispatch.
+- Purpose: deploys the minimal Azure Function recognition proxy to dev.
+- Triggers: push to `main` for minimal infra/function changes and manual dispatch.
 - Key checks:
-  - Deploy subscription-scope Bicep
-  - Verify the App Service health endpoint responds on `/health`
-  - Verify the APIM health route responds on `/health`
+  - Validate `OPENAI_KEY`
+  - Run `infrastructure/scripts/deploy.sh dev`
 - Required secrets:
   - `AZURE_CLIENT_ID`
   - `AZURE_TENANT_ID`
   - `AZURE_SUBSCRIPTION_ID`
-  - `AZURE_POSTGRES_ADMIN_LOGIN`
-  - `AZURE_POSTGRES_ADMIN_PASSWORD`
+  - `OPENAI_KEY`
 
 ## Local Hook
 
@@ -78,13 +76,12 @@ Repository: `simonholmes001/deja-groove`
 - Purpose: local commit guardrails.
 - Behavior:
   - Runs Node tests for staged changes in `cli`/`frontend` if projects exist.
-  - Runs .NET tests for staged changes in `backend`/root if projects exist.
-  - Auto-detects `*.sln` instead of hardcoded solution name.
+  - Runs Swift tests for `ios/DejaGrooveAuth` and `ios/DejaGrooveApp`.
 - Setup helper: `scripts/setup-hooks.sh`
 
 ## Consolidation Decisions
 
 - Kept one CI workflow: `ci.yaml`.
 - Removed duplicate/overlapping CI file (`ci.yml`).
-- Excluded Agon-specific deploy/release/infrastructure workflows because this repository currently does not contain their required project structure and environment contract.
+- Removed the retired .NET backend source, tests, Docker, APIM/App Service, and PostgreSQL guardrails.
 - Preserved reusable, repo-agnostic automation: PR review, ruleset enforcement, project auto-sort, and local pre-commit guardrails.

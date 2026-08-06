@@ -1,60 +1,36 @@
-# Deja Groove Infrastructure (Dev Bootstrap)
+# Deja Groove Minimal Infrastructure
 
-This repository currently implements infrastructure in Azure using Bicep, with dev validation and deploy workflows wired today.
+The legacy .NET backend, APIM, App Service container, PostgreSQL, Key Vault,
+and VNet infrastructure has been retired from the active repository.
+
+The active target is a minimum-cost Azure Function recognition proxy. The
+Function holds the project OpenAI API key and performs only OpenAI album
+recognition. The iOS app owns collection state, scan state, duplicate
+detection, and local persistence.
 
 ## Scope
 
 - Dev region: `swedencentral`
-- Deployment scope: **subscription** (creates resource groups + deploys resources)
-
-## Dev Resource Group Layout
-
-The subscription-scope template creates and manages these RGs:
-
-- `rg-deja-dev-network` (VNet, subnets, NSGs, private DNS zones)
-- `rg-deja-dev-data` (PostgreSQL Flexible Server)
-- `rg-deja-dev-security` (Key Vault + private endpoint)
-- `rg-deja-dev-app` (App Service + APIM)
-- `rg-deja-dev-observability` (Log Analytics + Application Insights)
-
-## Ingress Posture
-
-- APIM is the intended public ingress tier.
-- App Service remains the runtime platform behind APIM.
-- App Service uses inbound access restrictions with default deny.
-- App Service allows `ApiManagement` service-tag ingress and denies all other direct internet ingress.
-- SCM/Kudu restrictions are managed separately and default to deny.
-- `GET /health` is the shared backend and platform probe endpoint.
-- PostgreSQL and Key Vault are private-only (`publicNetworkAccess: Disabled`) and reachable through private networking.
+- Deployment scope: subscription
+- Active runtime target: Azure Function App
+- Required secret: `OPENAI_KEY`
+- Out of scope: hosted collection API, PostgreSQL, APIM, App Service
+  containers, container registry, Entra-backed API auth, and private network
+  topology.
 
 ## Directory
 
 ```
 infrastructure/
-├── bicep/
-│   ├── main.bicep                  # Subscription-scope orchestrator
-│   ├── modules/
-│   │   ├── monitoring/
-│   │   ├── networking/
-│   │   ├── key-vault/
-│   │   ├── postgresql/
-│   │   ├── app-service/
-│   │   └── apim/
-│   └── parameters/
-│       └── dev.bicepparam
 └── scripts/
-    ├── check-apim-policy.sh        # static APIM policy sanity checks
-    ├── validate.sh                 # dev validate + optional what-if
-    └── deploy.sh                   # dev deploy
+    ├── validate.sh                 # minimal Function lint/validate/what-if
+    └── deploy.sh                   # minimal Function dev deploy
 ```
 
+`infrastructure/bicep/minimal-function.bicep` will be added under issue #169.
+Until that file exists, validation skips cleanly and deployment fails fast.
+
 ## Required Secrets/Vars
-
-For CI/CD and local script execution:
-
-- `AZURE_POSTGRES_ADMIN_LOGIN`
-- `AZURE_POSTGRES_ADMIN_PASSWORD`
-- `AZURE_POSTGRES_APP_PASSWORD`
 
 For GitHub OIDC login:
 
@@ -62,10 +38,16 @@ For GitHub OIDC login:
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
+For Function App configuration:
+
+- `OPENAI_KEY`
+
 ## Pipeline Behavior
 
-- `infrastructure-validate.yaml`: PR-time APIM policy sanity check + Bicep build + `az deployment sub validate` + `what-if`
-- `infrastructure-deploy-dev.yaml`: push-to-main APIM policy sanity check + deploy for dev using `az deployment sub create`
+- `infrastructure-validate.yaml`: PR-time minimal Function lint/validate/what-if,
+  skipped until `minimal-function.bicep` exists.
+- `infrastructure-deploy-dev.yaml`: push-to-main and manual dev deployment
+  using `infrastructure/scripts/deploy.sh dev`.
 
 ## Local Usage
 
