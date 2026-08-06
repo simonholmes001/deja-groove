@@ -29,7 +29,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Detect minimal Function template
+        id: detect
+        shell: bash
+        run: |
+          if [ -f infrastructure/bicep/minimal-function.bicep ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "minimal-function.bicep is not present yet; deployment is skipped until issue #169 adds it."
+          fi
+
       - name: Login to Azure (OIDC)
+        if: steps.detect.outputs.exists == 'true'
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -37,6 +49,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Validate minimal Function secrets
+        if: steps.detect.outputs.exists == 'true'
         shell: bash
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
@@ -48,6 +61,7 @@ jobs:
           fi
 
       - name: Deploy minimal Function infrastructure
+        if: steps.detect.outputs.exists == 'true'
         shell: bash
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}

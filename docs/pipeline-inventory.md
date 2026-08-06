@@ -61,6 +61,8 @@ Repository: `simonholmes001/deja-groove`
 - Purpose: deploys the minimal Azure Function recognition proxy to dev.
 - Triggers: push to `main` for minimal infra/function changes and manual dispatch.
 - Key checks:
+  - Detect `infrastructure/bicep/minimal-function.bicep`
+  - Skip cleanly until issue #169 adds the template
   - Validate `OPENAI_KEY`
   - Run `infrastructure/scripts/deploy.sh dev`
 - Required secrets:
