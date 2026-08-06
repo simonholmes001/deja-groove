@@ -1,10 +1,11 @@
-name: Infrastructure Validate (PR)
+name: Minimal Azure Function Validate (PR)
 
 on:
   pull_request:
     branches: [main]
     paths:
       - "infrastructure/**"
+      - "functions/**"
       - ".github/workflows/infrastructure-validate.yaml"
       - ".github/workflows/infrastructure-deploy-dev.yaml"
 
@@ -13,108 +14,41 @@ permissions:
   id-token: write
 
 jobs:
-  bicep-build:
-    name: Bicep Build Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: APIM policy sanity check
-        run: bash ./infrastructure/scripts/check-apim-policy.sh
-
-      - name: Build main Bicep template
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            set -euo pipefail
-            az bicep install
-            az bicep build --file infrastructure/bicep/main.bicep
-
   validate-dev:
-    name: Dev ARM Validate
+    name: Validate Dev Function Proxy
     runs-on: ubuntu-latest
-    needs: bicep-build
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: APIM policy sanity check
-        run: bash ./infrastructure/scripts/check-apim-policy.sh
-
-      - name: Login to Azure (OIDC)
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Validate required deployment secrets
+      - name: Detect minimal Function template
+        id: detect
         shell: bash
-        env:
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
         run: |
-          set -euo pipefail
-          if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_LOGIN secret."
-            exit 1
-          fi
-          if [ -z "${AZURE_POSTGRES_ADMIN_PASSWORD:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
-            exit 1
+          if [ -f infrastructure/bicep/minimal-function.bicep ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "minimal-function.bicep is not present yet; Azure validation is skipped until issue #169 adds it."
           fi
 
-      - name: ARM validate dev deployment (subscription scope)
-        uses: azure/cli@v2
-        env:
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-        with:
-          inlineScript: |
-            set -euo pipefail
-            az account show --query "{name:name, subscriptionId:id}" -o table
-            az deployment sub validate \
-              --location "swedencentral" \
-              --template-file infrastructure/bicep/main.bicep \
-              --parameters infrastructure/bicep/parameters/dev.bicepparam \
-              --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
-              --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
-              --output none
-
-  what-if-dev:
-    name: Dev What-If
-    runs-on: ubuntu-latest
-    needs: validate-dev
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: APIM policy sanity check
-        run: bash ./infrastructure/scripts/check-apim-policy.sh
+      - name: Lint minimal Function infrastructure
+        if: steps.detect.outputs.exists == 'true'
+        run: bash ./infrastructure/scripts/validate.sh dev --lint-only
 
       - name: Login to Azure (OIDC)
-        uses: azure/login@v3
+        if: steps.detect.outputs.exists == 'true'
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Run what-if for dev deployment (subscription scope)
-        uses: azure/cli@v2
-        env:
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-        with:
-          inlineScript: |
-            set -euo pipefail
-            az account show --query "{name:name, subscriptionId:id}" -o table
-            az deployment sub what-if \
-              --name "deja-dev-whatif-${{ github.run_id }}" \
-              --location "swedencentral" \
-              --template-file infrastructure/bicep/main.bicep \
-              --parameters infrastructure/bicep/parameters/dev.bicepparam \
-              --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
-              --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}"
+      - name: Validate minimal Function infrastructure
+        if: steps.detect.outputs.exists == 'true'
+        run: bash ./infrastructure/scripts/validate.sh dev
+
+      - name: Run minimal Function what-if
+        if: steps.detect.outputs.exists == 'true'
+        run: bash ./infrastructure/scripts/validate.sh dev --what-if

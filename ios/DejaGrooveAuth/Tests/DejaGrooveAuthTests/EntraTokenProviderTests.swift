@@ -12,7 +12,7 @@ struct EntraTokenProviderTests {
     )
 
     // Minimal unsigned JWT with sub=user-xyz (client only reads the subject;
-    // the backend performs signature/issuer/audience validation).
+    // server-side validation performs signature/issuer/audience checks).
     private static func idToken(sub: String) -> String {
         func b64(_ s: String) -> String {
             Data(s.utf8).base64URLEncodedString()

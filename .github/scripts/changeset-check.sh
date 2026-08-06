@@ -26,7 +26,7 @@ echo "Changed files:"
 echo "${CHANGED_FILES}"
 
 RELEASABLE_CHANGED="$(
-  echo "${CHANGED_FILES}" | grep -E '^(backend/|ios/|infrastructure/|frontend/|cli/|scripts/)' || true
+  echo "${CHANGED_FILES}" | grep -E '^(ios/|infrastructure/|functions/|frontend/|cli/|scripts/)' || true
 )"
 
 if [[ -z "${RELEASABLE_CHANGED}" ]]; then

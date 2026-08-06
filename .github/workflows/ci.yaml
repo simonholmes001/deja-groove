@@ -13,7 +13,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
 
@@ -37,13 +37,13 @@ jobs:
         run: node --test .github/scripts/*.test.mjs
 
   release-script-tests:
-    name: Release Script Tests
+    name: Repository Script Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Run release script tests
+      - name: Run repository script tests
         shell: bash
         run: |
           bash .github/scripts/compute-next-release.test.sh
@@ -51,9 +51,6 @@ jobs:
           bash .github/scripts/ios-distribution-readiness.test.sh
           bash .github/scripts/validate-ios-project.test.sh
           bash .github/scripts/ios-testflight-workflow.test.sh
-          bash .github/scripts/backend-container-readiness.test.sh
-          bash .github/scripts/backend-container-publish-workflow.test.sh
-          bash .github/scripts/backend-dockerfile-contract.test.sh
           bash .github/scripts/gitignore-ios-artifacts.test.sh
 
   node-tests:
@@ -65,7 +62,7 @@ jobs:
         dir: [".", "cli", "frontend"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Detect Node project
         id: detect
@@ -78,7 +75,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.detect.outputs.exists == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -103,34 +100,3 @@ jobs:
             echo "No test script found; skipping."
           fi
         working-directory: ${{ matrix.dir }}
-
-  dotnet-tests:
-    name: .NET Tests
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: ["backend", "."]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Detect .NET project
-        id: detect
-        run: |
-          if find "${{ matrix.dir }}" -maxdepth 1 \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No .NET project found in ${{ matrix.dir }}; skipping."
-          fi
-
-      - name: Setup .NET
-        if: steps.detect.outputs.exists == 'true'
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 9.0.x
-
-      - name: Run tests
-        if: steps.detect.outputs.exists == 'true'
-        run: dotnet test "${{ matrix.dir }}" --verbosity normal

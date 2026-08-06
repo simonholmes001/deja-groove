@@ -16,11 +16,11 @@ new_repo_with_main() {
   git -C "$dir" config user.name "test"
   git -C "$dir" config user.email "test@example.com"
   git -C "$dir" branch -m main
-  mkdir -p "$dir/.changeset" "$dir/backend"
+  mkdir -p "$dir/.changeset" "$dir/ios"
   cat > "$dir/.changeset/README.md" <<'EOF'
 # readme
 EOF
-  echo "init" > "$dir/backend/a.txt"
+  echo "init" > "$dir/ios/a.txt"
   git -C "$dir" add .
   git -C "$dir" commit -q -m "init"
   git -C "$dir" checkout -q -b feature/test
@@ -51,9 +51,9 @@ test_non_releasable_change_passes() {
 test_releasable_without_changeset_fails() {
   local repo
   repo="$(new_repo_with_main)"
-  echo "code" >> "$repo/backend/a.txt"
-  git -C "$repo" add backend/a.txt
-  git -C "$repo" commit -q -m "backend change"
+  echo "code" >> "$repo/ios/a.txt"
+  git -C "$repo" add ios/a.txt
+  git -C "$repo" commit -q -m "ios change"
   if run_check "$repo"; then
     fail "releasable changes without changeset should fail"
   fi
@@ -62,15 +62,15 @@ test_releasable_without_changeset_fails() {
 test_releasable_with_changeset_passes() {
   local repo
   repo="$(new_repo_with_main)"
-  echo "code" >> "$repo/backend/a.txt"
+  echo "code" >> "$repo/ios/a.txt"
   cat > "$repo/.changeset/test.md" <<'EOF'
 ---
 "deja-groove": patch
 ---
-backend fix
+ios fix
 EOF
-  git -C "$repo" add backend/a.txt .changeset/test.md
-  git -C "$repo" commit -q -m "backend change with changeset"
+  git -C "$repo" add ios/a.txt .changeset/test.md
+  git -C "$repo" commit -q -m "ios change with changeset"
   run_check "$repo" || fail "releasable changes with changeset should pass"
 }
 

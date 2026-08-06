@@ -12,9 +12,6 @@
 scripts/                        @simonholmes001
 infra/                          @simonholmes001
 
-# Backend
-backend/                        @simonholmes001
-
 # iOS
 ios/                            @simonholmes001
 

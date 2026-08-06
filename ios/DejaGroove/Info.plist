@@ -36,6 +36,10 @@
     </array>
     <key>DEJA_GROOVE_API_BASE_URL</key>
     <string>$(DEJA_GROOVE_API_BASE_URL)</string>
+    <key>DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL</key>
+    <string>$(DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL)</string>
+    <key>DEJA_GROOVE_RUNTIME_MODE</key>
+    <string>$(DEJA_GROOVE_RUNTIME_MODE)</string>
     <key>DEJA_GROOVE_ENTRA_AUTHORITY</key>
     <string>$(DEJA_GROOVE_ENTRA_AUTHORITY)</string>
     <key>DEJA_GROOVE_ENTRA_CLIENT_ID</key>

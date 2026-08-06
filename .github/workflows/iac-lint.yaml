@@ -1,38 +1,26 @@
-name: IaC Lint
+name: Minimal Azure IaC Lint
 
 on:
   push:
     branches: [main, "feature/**", "platform/**"]
     paths:
-      - "infrastructure/bicep/**"
-      - "infrastructure/scripts/check-apim-policy.sh"
-      - "infrastructure/scripts/check-apim-policy.test.sh"
+      - "infrastructure/**"
+      - "functions/**"
+      - ".github/workflows/iac-lint.yaml"
   pull_request:
     branches: [main]
     paths:
-      - "infrastructure/bicep/**"
-      - "infrastructure/scripts/check-apim-policy.sh"
-      - "infrastructure/scripts/check-apim-policy.test.sh"
+      - "infrastructure/**"
+      - "functions/**"
+      - ".github/workflows/iac-lint.yaml"
 
 jobs:
   bicep-lint:
-    name: Bicep Lint
+    name: Minimal Function Bicep Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: APIM policy sanity check
-        run: bash ./infrastructure/scripts/check-apim-policy.sh
-
-      - name: APIM policy sanity tests
-        run: bash ./infrastructure/scripts/check-apim-policy.test.sh
-
-      - name: Install Bicep CLI
-        run: az bicep install
-
-      - name: Lint
-        run: az bicep lint --file infrastructure/bicep/main.bicep
-
-      - name: Build (compile all modules)
-        run: az bicep build --file infrastructure/bicep/main.bicep --outfile /dev/null
+      - name: Validate minimal Function IaC
+        run: bash ./infrastructure/scripts/validate.sh dev --lint-only

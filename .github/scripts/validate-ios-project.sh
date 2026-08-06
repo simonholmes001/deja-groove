@@ -23,10 +23,10 @@ if [ -z "$PROJECT_PATH" ] && [ -z "$WORKSPACE_PATH" ]; then
 fi
 
 if [ -n "$PROJECT_PATH" ]; then
-  [ -f "$PROJECT_PATH" ] || { echo "Xcode project not found: $PROJECT_PATH" >&2; exit 1; }
+  [ -d "$PROJECT_PATH" ] || { echo "Xcode project not found: $PROJECT_PATH" >&2; exit 1; }
   LIST_JSON="$(xcodebuild -project "$PROJECT_PATH" -list -json)"
 else
-  [ -f "$WORKSPACE_PATH" ] || { echo "Xcode workspace not found: $WORKSPACE_PATH" >&2; exit 1; }
+  [ -d "$WORKSPACE_PATH" ] || { echo "Xcode workspace not found: $WORKSPACE_PATH" >&2; exit 1; }
   LIST_JSON="$(xcodebuild -workspace "$WORKSPACE_PATH" -list -json)"
 fi
 

@@ -20,9 +20,6 @@ changelog:
     - title: "🐛 Bug Fixes"
       labels:
         - "bug"
-    - title: "🖥️ Backend"
-      labels:
-        - "type:backend"
     - title: "📱 iOS / Mobile"
       labels:
         - "type:ios"

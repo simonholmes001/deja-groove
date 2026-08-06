@@ -1,37 +1,14 @@
-name: Infrastructure Deploy (Dev)
+name: Minimal Azure Function Deploy (Dev)
 
 on:
-  workflow_call:
-    inputs:
-      docker_image_reference:
-        description: "Exact backend image reference to deploy (for chained publish->deploy runs)."
-        required: false
-        type: string
-    secrets:
-      AZURE_CLIENT_ID:
-        required: true
-      AZURE_TENANT_ID:
-        required: true
-      AZURE_SUBSCRIPTION_ID:
-        required: true
-      AZURE_POSTGRES_ADMIN_LOGIN:
-        required: true
-      AZURE_POSTGRES_ADMIN_PASSWORD:
-        required: true
-      DOCKER_IMAGE_REFERENCE:
-        required: false
-      ENTRA_OIDC_CONFIG_URL:
-        required: false
-      ENTRA_API_CLIENT_ID:
-        required: false
-      OPENAI_KEY:
-        required: false
   push:
     branches: [main]
     paths:
       - "infrastructure/**"
+      - "functions/**"
       - ".github/workflows/infrastructure-deploy-dev.yaml"
       - ".github/workflows/infrastructure-validate.yaml"
+      - ".github/workflows/iac-lint.yaml"
   workflow_dispatch:
 
 permissions:
@@ -39,352 +16,39 @@ permissions:
   id-token: write
 
 concurrency:
-  group: infra-dev-deploy
+  group: minimal-function-dev-deploy
   cancel-in-progress: false
 
 jobs:
   deploy-dev:
-    name: Deploy Dev Infrastructure
+    name: Deploy Dev Function Proxy
     runs-on: ubuntu-latest
     environment:
       name: dev
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: APIM policy sanity check
-        run: bash ./infrastructure/scripts/check-apim-policy.sh
-
-      - name: APIM policy sanity tests
-        run: bash ./infrastructure/scripts/check-apim-policy.test.sh
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Login to Azure (OIDC)
-        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Validate required deployment secrets
+      - name: Validate minimal Function secrets
         shell: bash
         env:
-          WORKFLOW_EVENT_NAME: ${{ github.event_name }}
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          DOCKER_IMAGE_REFERENCE: ${{ inputs.docker_image_reference || secrets.DOCKER_IMAGE_REFERENCE }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         run: |
           set -euo pipefail
-          is_digest_ref() {
-            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*@sha256:[a-f0-9]{64}$'
-          }
-          is_tag_ref() {
-            echo "$1" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
-          }
-          if [ -z "${AZURE_POSTGRES_ADMIN_LOGIN:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_LOGIN secret."
+          if [ -z "${OPENAI_KEY:-}" ]; then
+            echo "::error::Missing OPENAI_KEY secret for the minimal Azure Function proxy."
             exit 1
           fi
-          if [ -z "${AZURE_POSTGRES_ADMIN_PASSWORD:-}" ]; then
-            echo "::error::Missing AZURE_POSTGRES_ADMIN_PASSWORD secret."
-            exit 1
-          fi
-          if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ] && [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            echo "::error::workflow_call execution requires DOCKER_IMAGE_REFERENCE via input or secret."
-            exit 1
-          fi
-          if [ -z "${DOCKER_IMAGE_REFERENCE:-}" ]; then
-            current_linux_fx="$(
-              az webapp list -g "rg-deja-dev-app" \
-                --query "[?starts_with(name, 'app-deja-api-dev-')].siteConfig.linuxFxVersion | [0]" \
-                -o tsv 2>/dev/null || true
-            )"
-            if printf '%s' "${current_linux_fx:-}" | grep -q '^DOCKER|'; then
-              DOCKER_IMAGE_REFERENCE="${current_linux_fx#DOCKER|}"
-              echo "::notice::No workflow input or secret for DOCKER_IMAGE_REFERENCE; preserving currently deployed App Service image: ${DOCKER_IMAGE_REFERENCE}"
-            else
-              DOCKER_IMAGE_REFERENCE="$(awk -F"'" '/param dockerImageReference =/{print $2}' infrastructure/bicep/parameters/dev.bicepparam)"
-              echo "::warning::No workflow input or secret for DOCKER_IMAGE_REFERENCE and no existing App Service image was found; using dev.bicepparam value: ${DOCKER_IMAGE_REFERENCE}"
-            fi
-          fi
-          if [ "${DOCKER_IMAGE_REFERENCE}" = "nginx:latest" ]; then
-            echo "::error::DOCKER_IMAGE_REFERENCE must not be nginx:latest."
-            exit 1
-          fi
-          if [ "${WORKFLOW_EVENT_NAME}" = "workflow_call" ]; then
-            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}"; then
-              echo "::error::workflow_call requires digest-pinned DOCKER_IMAGE_REFERENCE (<namespace>/<image>@sha256:<64-hex>)."
-              exit 1
-            fi
-          else
-            if ! is_digest_ref "${DOCKER_IMAGE_REFERENCE}" && ! is_tag_ref "${DOCKER_IMAGE_REFERENCE}"; then
-              echo "::error::DOCKER_IMAGE_REFERENCE must match <namespace>/<image>:<tag> or <namespace>/<image>@sha256:<64-hex>."
-              exit 1
-            fi
-          fi
-          echo "DOCKER_IMAGE_REFERENCE=${DOCKER_IMAGE_REFERENCE}" >> "$GITHUB_ENV"
 
-      - name: Build Bicep template
-        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
-        with:
-          inlineScript: |
-            set -euo pipefail
-            az bicep install
-            az bicep build --file infrastructure/bicep/main.bicep
-
-      - name: Remove legacy APIM wildcard operation (migration)
-        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
-        with:
-          inlineScript: |
-            set -euo pipefail
-            rg="rg-deja-dev-app"
-            apim_name="$(az apim list -g "$rg" --query "[?starts_with(name, 'apim-deja-dev-')].name | [0]" -o tsv)"
-            if [ -z "${apim_name}" ] || [ "${apim_name}" = "null" ]; then
-              echo "No APIM service found in ${rg}; skipping legacy operation cleanup."
-              exit 0
-            fi
-
-            echo "APIM service: ${apim_name}"
-            if az apim api operation show -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard" >/dev/null 2>&1; then
-              echo "Deleting legacy operation deja-main/v1-wildcard..."
-              az apim api operation delete -g "$rg" --service-name "$apim_name" --api-id "deja-main" --operation-id "v1-wildcard"
-            else
-              echo "Legacy operation deja-main/v1-wildcard not found; no cleanup needed."
-            fi
-
-      - name: Validate Docker Hub image exists
+      - name: Deploy minimal Function infrastructure
         shell: bash
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          case "${DOCKER_IMAGE_REFERENCE}" in
-            *@*)
-              repo="${DOCKER_IMAGE_REFERENCE%@*}"
-              ref="${DOCKER_IMAGE_REFERENCE#*@}"
-              ;;
-            *:*)
-              repo="${DOCKER_IMAGE_REFERENCE%:*}"
-              ref="${DOCKER_IMAGE_REFERENCE##*:}"
-              ;;
-            *)
-              repo=""
-              ref=""
-              ;;
-          esac
-          if [ -z "${repo}" ] || [ -z "${ref}" ]; then
-            echo "::error::DOCKER_IMAGE_REFERENCE parsing failed (expected repo:tag or repo@sha256:digest)."
-            exit 1
-          fi
-          token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull"
-          curl_args=(--silent --show-error --fail)
-          if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
-            curl_args+=(--user "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}")
-          fi
-          token="$(
-            curl "${curl_args[@]}" "$token_url" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))'
-          )"
-          if [ -z "${token}" ]; then
-            echo "::error::Unable to acquire Docker registry token for ${repo}."
-            exit 1
-          fi
-          manifest_url="https://registry-1.docker.io/v2/${repo}/manifests/${ref}"
-          if ! curl --silent --show-error --fail \
-            -H "Authorization: Bearer ${token}" \
-            -H "Accept: application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.index.v1+json" \
-            "$manifest_url" >/dev/null; then
-            echo "::error::DOCKER_IMAGE_REFERENCE does not exist on Docker Hub: ${DOCKER_IMAGE_REFERENCE}"
-            exit 1
-          fi
-
-      - name: Deploy dev infrastructure (subscription scope)
-        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
-        env:
-          AZURE_POSTGRES_ADMIN_LOGIN: ${{ secrets.AZURE_POSTGRES_ADMIN_LOGIN }}
-          AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
-          DOCKER_IMAGE_REFERENCE: ${{ env.DOCKER_IMAGE_REFERENCE }}
-          ENTRA_OIDC_CONFIG_URL: ${{ secrets.ENTRA_OIDC_CONFIG_URL }}
-          ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
-        with:
-          inlineScript: |
-            set -euo pipefail
-            az account show --query "{name:name, subscriptionId:id}" -o table
-            # Build optional Entra params — omitted until Entra tenant is provisioned (issue #8).
-            # Both secrets must be set together or both must be absent.
-            # A partial configuration (only one secret set) is a misconfiguration: the gateway
-            # would silently fall back to unauthenticated IP-rate-limit mode even though the
-            # operator believes JWT was enabled. Fail fast to prevent this.
-            ENTRA_OIDC_SET=0; ENTRA_CLIENT_SET=0
-            [ -n "${ENTRA_OIDC_CONFIG_URL:-}" ]   && ENTRA_OIDC_SET=1
-            [ -n "${ENTRA_API_CLIENT_ID:-}" ]      && ENTRA_CLIENT_SET=1
-            if [ "$ENTRA_OIDC_SET" -ne "$ENTRA_CLIENT_SET" ]; then
-              echo "::error::Partial Entra configuration detected. Either set both ENTRA_OIDC_CONFIG_URL and ENTRA_API_CLIENT_ID, or neither. A partial configuration would deploy the gateway in unauthenticated passthrough mode despite operator intent."
-              exit 1
-            fi
-            EXTRA_PARAMS=()
-            if [ "$ENTRA_OIDC_SET" -eq 1 ]; then
-              EXTRA_PARAMS+=(--parameters "entraOidcConfigUrl=${ENTRA_OIDC_CONFIG_URL}")
-              EXTRA_PARAMS+=(--parameters "entraApiClientId=${ENTRA_API_CLIENT_ID}")
-              jwt_authority="${ENTRA_OIDC_CONFIG_URL%/.well-known/openid-configuration}"
-              EXTRA_PARAMS+=(--parameters "identityJwtAuthority=${jwt_authority}")
-              EXTRA_PARAMS+=(--parameters "identityJwtMetadataAddress=${ENTRA_OIDC_CONFIG_URL}")
-              EXTRA_PARAMS+=(--parameters "identityJwtAudience=${ENTRA_API_CLIENT_ID}")
-              echo "Both Entra secrets supplied — JWT validation will be enabled on the gateway."
-            else
-              echo "Entra secrets not set — deploying with IP-based rate limit only (JWT inactive, issue #8)."
-            fi
-
-            if [ -n "${OPENAI_KEY:-}" ]; then
-              EXTRA_PARAMS+=(--parameters "openAiKey=${OPENAI_KEY}")
-              echo "OPENAI_KEY supplied — runtime OpenAI adapter will be enabled."
-            else
-              echo "::warning::OPENAI_KEY not set — backend scan requests will fail with scan_dependencies_unconfigured."
-            fi
-            if ! grep -Eq "^[[:space:]]*param scanFeaturesUseStubScanRuntime = false$" infrastructure/bicep/parameters/dev.bicepparam; then
-              echo "::error::Dev deployment must not enable ScanFeatures__UseStubScanRuntime."
-              exit 1
-            fi
-            set +e
-            az deployment sub create \
-              --name "deja-dev-deploy-${{ github.run_id }}" \
-              --location "swedencentral" \
-              --template-file infrastructure/bicep/main.bicep \
-              --parameters infrastructure/bicep/parameters/dev.bicepparam \
-              --parameters postgresAdministratorLogin="${AZURE_POSTGRES_ADMIN_LOGIN}" \
-              --parameters postgresAdministratorLoginPassword="${AZURE_POSTGRES_ADMIN_PASSWORD}" \
-              --parameters dockerImageReference="${DOCKER_IMAGE_REFERENCE}" \
-              "${EXTRA_PARAMS[@]+"${EXTRA_PARAMS[@]}"}" \
-              --output table
-            deploy_rc=$?
-            set -e
-            if [ "$deploy_rc" -ne 0 ]; then
-              echo "----- SUB DEPLOYMENT FAILED OPERATIONS -----"
-              az deployment operation sub list \
-                --name "deja-dev-deploy-${{ github.run_id }}" \
-                --query "[?properties.provisioningState=='Failed'].properties.statusMessage" \
-                -o jsonc || true
-              echo "----- DATA RG NESTED DEPLOYMENT FAILED OPERATIONS -----"
-              az deployment operation group list \
-                --resource-group "rg-deja-dev-data" \
-                --name "deja-postgresql-dev" \
-                --query "[?properties.provisioningState=='Failed'].properties.statusMessage" \
-                -o jsonc || true
-              exit "$deploy_rc"
-            fi
-
-      - name: Verify App Service direct ingress is blocked
-        uses: azure/cli@d4515bc8e518874d3c814bf5c307a1cb08ec9b35 # v2
-        env:
-          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
-        with:
-          inlineScript: |
-            set -euo pipefail
-            deployment_name="deja-dev-deploy-${{ github.run_id }}"
-            app_host="$(az deployment sub show --name "$deployment_name" --query "properties.outputs.webAppHostname.value" -o tsv)"
-            apim_gateway="$(az deployment sub show --name "$deployment_name" --query "properties.outputs.apimGatewayUrl.value" -o tsv)"
-            if [ -z "$app_host" ]; then
-              echo "::error::Unable to resolve webAppHostname output from deployment."
-              exit 1
-            fi
-            if [ -z "$apim_gateway" ]; then
-              echo "::error::Unable to resolve apimGatewayUrl output from deployment."
-              exit 1
-            fi
-            rg="rg-deja-dev-app"
-            app_name="${app_host%%.*}"
-
-            main_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "ipSecurityRestrictionsDefaultAction" -o tsv)"
-            scm_default_action="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "scmIpSecurityRestrictionsDefaultAction" -o tsv)"
-            total_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?action=='Allow'])" -o tsv)"
-            apim_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(ipSecurityRestrictions[?name=='allow-apim-service-tag' && action=='Allow' && tag=='ServiceTag' && ipAddress=='ApiManagement'])" -o tsv)"
-            scm_allow_count="$(az webapp config access-restriction show -g "$rg" -n "$app_name" --query "length(scmIpSecurityRestrictions[?action=='Allow'])" -o tsv)"
-            stub_runtime_setting="$(az webapp config appsettings list -g "$rg" -n "$app_name" --query "[?name=='ScanFeatures__UseStubScanRuntime'].value | [0]" -o tsv)"
-            resolve_endpoint_setting="$(az webapp config appsettings list -g "$rg" -n "$app_name" --query "[?name=='ScanFeatures__EnableResolveEndpoint'].value | [0]" -o tsv)"
-            if [ "$main_default_action" != "Deny" ] || [ "$scm_default_action" != "Deny" ] || [ "$apim_allow_count" != "1" ] || [ "$total_allow_count" != "1" ] || [ "$scm_allow_count" != "0" ]; then
-              echo "::error::Access restriction policy assertion failed (main/scm default deny and APIM allow rule required)."
-              az webapp config access-restriction show -g "$rg" -n "$app_name" --output jsonc
-              exit 1
-            fi
-            if [ "$stub_runtime_setting" != "false" ]; then
-              echo "::error::ScanFeatures__UseStubScanRuntime must be false in deployed App Service config, got '${stub_runtime_setting:-unset}'."
-              exit 1
-            fi
-            if [ "$resolve_endpoint_setting" != "true" ]; then
-              echo "::error::ScanFeatures__EnableResolveEndpoint must be true in deployed App Service config, got '${resolve_endpoint_setting:-unset}'."
-              exit 1
-            fi
-
-            status_code="$(curl -s -o /dev/null -w '%{http_code}' "https://${app_host}/health" || true)"
-            echo "Direct app health HTTP status: ${status_code}"
-
-            # With private-only ingress, direct public requests should never return a healthy backend response.
-            # Depending on network path and edge behavior this can be 000/403/404/etc, so assert on non-200.
-            if [ "$status_code" = "200" ]; then
-              echo "::error::Direct App Service ingress check failed. Expected non-200 for private-only ingress but got ${status_code}."
-              exit 1
-            fi
-
-            echo "Direct App Service ingress is not publicly reachable (expected)."
-
-            health_body_file="$(mktemp)"
-            apim_status="$(curl -sS -o "$health_body_file" -w '%{http_code}' "${apim_gateway}/health" || true)"
-            echo "APIM health route HTTP status: ${apim_status}"
-
-            if [ "$apim_status" != "200" ]; then
-              echo "::error::APIM health route failed. Expected 200 but got ${apim_status}."
-              cat "$health_body_file" || true
-              rm -f "$health_body_file"
-              exit 1
-            fi
-
-            scan_matcher="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("matcher", ""))' "$health_body_file" 2>/dev/null || true)"
-            scan_configured="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8")).get("scanRuntime", {}).get("configured", "")).lower())' "$health_body_file" 2>/dev/null || true)"
-            health_body="$(cat "$health_body_file" 2>/dev/null || true)"
-            rm -f "$health_body_file"
-
-            echo "APIM health scan matcher: ${scan_matcher:-unknown}"
-            echo "APIM health scan configured: ${scan_configured:-unknown}"
-
-            if [ -z "${scan_matcher:-}" ]; then
-              echo "::error::APIM health response does not expose scanRuntime.matcher."
-              printf '%s\n' "$health_body"
-              exit 1
-            fi
-            if [ "${scan_matcher}" = "StubAlbumMatchingPort" ]; then
-              echo "::error::APIM health reports stub scan runtime, which is forbidden in dev deployment."
-              printf '%s\n' "$health_body"
-              exit 1
-            fi
-
-            expected_matcher="UnconfiguredAlbumMatchingPort"
-            if [ -n "${OPENAI_KEY:-}" ]; then
-              expected_matcher="OpenAiAlbumMatchingPort"
-            fi
-            if [ "${scan_matcher}" != "${expected_matcher}" ]; then
-              echo "::error::Expected ${expected_matcher} from APIM health check, got ${scan_matcher}."
-              printf '%s\n' "$health_body"
-              exit 1
-            fi
-
-            echo "APIM route is reachable."
-
-            # Route smoke-test for main API operation matching.
-            # We intentionally send an invalid scan request body and assert a
-            # known non-success/non-server-error response class.
-            scan_status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${apim_gateway}/v1/scan" || true)"
-            echo "APIM scan route HTTP status: ${scan_status}"
-            case "$scan_status" in
-              400|401|403|413|415|422|429)
-                ;;
-              *)
-                echo "::error::APIM scan route smoke test failed. Expected one of 400/401/403/413/415/422/429, got ${scan_status}."
-                exit 1
-                ;;
-            esac
-            if [ "${scan_status#5}" != "$scan_status" ]; then
-              echo "::error::APIM scan route smoke test received server error: ${scan_status}."
-              exit 1
-            fi
-
-            echo "APIM /v1/scan route is matched."
+        run: bash ./infrastructure/scripts/deploy.sh dev

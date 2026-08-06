@@ -2,58 +2,67 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:-}"
-WHAT_IF="${2:-}"
+MODE="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BICEP_DIR="${SCRIPT_DIR}/../bicep"
-PARAMS_FILE="${BICEP_DIR}/parameters/dev.bicepparam"
-DEPLOY_LOCATION="swedencentral"
+MINIMAL_TEMPLATE="${BICEP_DIR}/minimal-function.bicep"
+PARAMS_FILE="${BICEP_DIR}/parameters/${ENVIRONMENT}.bicepparam"
+DEPLOY_LOCATION="${AZURE_LOCATION:-swedencentral}"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
-  echo "Usage: $0 <dev> [--what-if]" >&2
+  echo "Usage: $0 <dev> [--lint-only|--what-if]" >&2
   exit 1
 fi
+
 if [[ "${ENVIRONMENT}" != "dev" ]]; then
-  echo "Error: only dev is supported in this bootstrap stage." >&2
+  echo "Error: only dev is supported for the minimal Function bootstrap stage." >&2
   exit 1
 fi
+
+case "${MODE}" in
+  ""|"--lint-only"|"--what-if") ;;
+  *)
+    echo "Error: unsupported mode '${MODE}'. Expected --lint-only or --what-if." >&2
+    exit 1
+    ;;
+esac
+
+if [[ ! -f "${MINIMAL_TEMPLATE}" ]]; then
+  echo "Minimal Function template is not present yet: ${MINIMAL_TEMPLATE}"
+  echo "Skipping Azure validation until issue #169 adds the minimum-cost Function infrastructure."
+  exit 0
+fi
+
 if [[ ! -f "${PARAMS_FILE}" ]]; then
   echo "Error: parameter file not found: ${PARAMS_FILE}" >&2
   exit 1
 fi
 
-POSTGRES_ADMIN_LOGIN="${AZURE_POSTGRES_ADMIN_LOGIN:-}"
-POSTGRES_ADMIN_PASSWORD="${AZURE_POSTGRES_ADMIN_PASSWORD:-}"
-if [[ -z "${POSTGRES_ADMIN_LOGIN}" || -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
-  echo "Error: AZURE_POSTGRES_ADMIN_LOGIN and AZURE_POSTGRES_ADMIN_PASSWORD must be set." >&2
-  exit 1
+echo "==> Linting minimal Function Bicep..."
+az bicep lint --file "${MINIMAL_TEMPLATE}"
+
+echo "==> Building minimal Function Bicep..."
+az bicep build --file "${MINIMAL_TEMPLATE}" --outfile /dev/null
+
+if [[ "${MODE}" == "--lint-only" ]]; then
+  echo "Lint/build complete for environment: ${ENVIRONMENT}"
+  exit 0
 fi
 
-echo "==> [1/4] Linting Bicep files..."
-az bicep lint --file "${BICEP_DIR}/main.bicep"
-
-echo "==> [2/4] Sanity-checking APIM policies..."
-bash "${SCRIPT_DIR}/check-apim-policy.sh"
-
-echo "==> [3/4] Subscription-scope validate..."
+echo "==> Subscription-scope validate..."
 az deployment sub validate \
   --location "${DEPLOY_LOCATION}" \
-  --template-file "${BICEP_DIR}/main.bicep" \
+  --template-file "${MINIMAL_TEMPLATE}" \
   --parameters "${PARAMS_FILE}" \
-  --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
-  --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}" \
   --output none
 
-if [[ "${WHAT_IF}" == "--what-if" ]]; then
-  echo "==> [4/4] Subscription-scope what-if..."
+if [[ "${MODE}" == "--what-if" ]]; then
+  echo "==> Subscription-scope what-if..."
   az deployment sub what-if \
-    --name "deja-dev-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
+    --name "deja-minimal-function-${ENVIRONMENT}-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
     --location "${DEPLOY_LOCATION}" \
-    --template-file "${BICEP_DIR}/main.bicep" \
-    --parameters "${PARAMS_FILE}" \
-    --parameters postgresAdministratorLogin="${POSTGRES_ADMIN_LOGIN}" \
-    --parameters postgresAdministratorLoginPassword="${POSTGRES_ADMIN_PASSWORD}"
-else
-  echo "==> [4/4] Skipping what-if (pass --what-if to enable)."
+    --template-file "${MINIMAL_TEMPLATE}" \
+    --parameters "${PARAMS_FILE}"
 fi
 
 echo "Validation complete for environment: ${ENVIRONMENT}"
