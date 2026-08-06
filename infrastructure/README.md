@@ -47,7 +47,8 @@ For Function App configuration:
 - `infrastructure-validate.yaml`: PR-time minimal Function lint/validate/what-if,
   skipped until `minimal-function.bicep` exists.
 - `infrastructure-deploy-dev.yaml`: push-to-main and manual dev deployment
-  using `infrastructure/scripts/deploy.sh dev`.
+  using `infrastructure/scripts/deploy.sh dev`; skips cleanly until
+  `minimal-function.bicep` exists.
 
 ## Local Usage
 
