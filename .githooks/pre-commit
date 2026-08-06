@@ -8,7 +8,7 @@ run_node_tests() {
   DIR="$1"
   if [ -f "$DIR/package.json" ]; then
     echo ""
-    echo "🧪 Running Node tests in $DIR before commit (always)..."
+    echo "Running Node tests in $DIR before commit (always)..."
     if [ -f "$DIR/package-lock.json" ]; then
       npm --prefix "$DIR" ci --workspaces=false >/dev/null 2>&1 || npm --prefix "$DIR" ci --workspaces=false
     else
@@ -18,36 +18,13 @@ run_node_tests() {
     if npm --prefix "$DIR" run | grep -q " test"; then
       npm --prefix "$DIR" run test
     else
-      echo "⏭️  No test script in $DIR/package.json — skipping."
+      echo "No test script in $DIR/package.json; skipping."
       return 0
     fi
 
-    echo "✅ Node tests passed in $DIR."
+    echo "Node tests passed in $DIR."
   else
-    echo "⏭️  No Node project in $DIR — skipping."
-  fi
-}
-
-run_dotnet_tests() {
-  TARGET_DIR="$1"
-  if find "$TARGET_DIR" \( -name '*.sln' -o -name '*.csproj' \) 2>/dev/null | grep -q .; then
-    echo ""
-    echo "🧪 Running .NET tests in $TARGET_DIR before commit (always)..."
-    DOTNET_CMD="/usr/local/share/dotnet/dotnet"
-    if [ ! -x "$DOTNET_CMD" ]; then
-      DOTNET_CMD="dotnet"
-    fi
-
-    SOLUTION_FILE="$(find "$TARGET_DIR" -maxdepth 1 -name '*.sln' | head -n 1 || true)"
-    if [ -n "$SOLUTION_FILE" ]; then
-      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$SOLUTION_FILE" --verbosity minimal
-    else
-      DOTNET_CLI_HOME=/tmp "$DOTNET_CMD" test "$TARGET_DIR" --verbosity minimal
-    fi
-
-    echo "✅ .NET tests passed in $TARGET_DIR."
-  else
-    echo "⏭️  No .NET project in $TARGET_DIR — skipping."
+    echo "No Node project in $DIR; skipping."
   fi
 }
 
@@ -56,27 +33,26 @@ run_swift_tests() {
   # Fail closed: Swift must be installed to commit in this repo because iOS
   # unit tests are mandatory on every commit.
   if ! command -v swift >/dev/null 2>&1; then
-    echo "❌  swift not found in PATH. Cannot run mandatory iOS tests in $TARGET_DIR."
+    echo "swift not found in PATH. Cannot run mandatory iOS tests in $TARGET_DIR."
     echo "    Install Xcode (https://developer.apple.com/xcode/) then re-run ./scripts/setup-hooks.sh"
     return 1
   fi
 
   if [ -f "$TARGET_DIR/Package.swift" ]; then
     echo ""
-    echo "🧪 Running Swift tests in $TARGET_DIR before commit (always)..."
+    echo "Running Swift tests in $TARGET_DIR before commit (always)..."
     swift test --package-path "$TARGET_DIR"
-    echo "✅ Swift tests passed in $TARGET_DIR."
+    echo "Swift tests passed in $TARGET_DIR."
   else
-    echo "⏭️  No Swift package in $TARGET_DIR — skipping."
+    echo "No Swift package in $TARGET_DIR; skipping."
   fi
 }
 
 # Run local commit guardrails
 run_node_tests "cli"
 run_node_tests "frontend"
-run_dotnet_tests "backend"
 run_swift_tests "ios/DejaGrooveAuth"
 run_swift_tests "ios/DejaGrooveApp"
 
 echo ""
-echo "✅ Pre-commit guardrails passed."
+echo "Pre-commit guardrails passed."

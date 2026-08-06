@@ -6,27 +6,45 @@ import DejaGrooveAuth
 struct DejaGrooveMobileApp: App {
     @StateObject private var coordinator: AppAuthCoordinator
     private let apiClient: ApiClient
+    private let runtimeMode: DejaGrooveRuntimeMode
     private let startupError: String?
 
     init() {
         switch AppConfiguration.load() {
         case .success(let config):
-            let tokenProvider = EntraTokenProvider(
-                config: config.entra,
-                transport: URLSessionTokenTransport(),
-                authorizer: DeferredWebAuthenticationAuthorizer())
-            let authManager = AuthSessionManager(
-                tokenProvider: tokenProvider,
-                store: KeychainSessionStore())
-            _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
-            apiClient = AuthenticatedApiClientFactory.make(baseUrl: config.apiBaseURL, authManager: authManager)
+            let authManager: AuthSessionManager
+            switch config.runtimeMode {
+            case .hosted:
+                guard let entra = config.entra, let apiBaseURL = config.apiBaseURL else {
+                    authManager = Self.disabledAuthManager()
+                    _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
+                    apiClient = DisabledApiClient()
+                    runtimeMode = .hosted
+                    startupError = AppConfigurationError.missingRequiredKeys.errorDescription
+                    return
+                }
+                let tokenProvider = EntraTokenProvider(
+                    config: entra,
+                    transport: URLSessionTokenTransport(),
+                    authorizer: DeferredWebAuthenticationAuthorizer())
+                authManager = AuthSessionManager(
+                    tokenProvider: tokenProvider,
+                    store: KeychainSessionStore())
+                _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
+                apiClient = AuthenticatedApiClientFactory.make(baseUrl: apiBaseURL, authManager: authManager)
+            case .localProxy:
+                authManager = Self.disabledAuthManager()
+                _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
+                apiClient = LocalProxyApiClientFactory.makeUnconfigured(
+                    recognitionProxyBaseURL: config.recognitionProxyBaseURL)
+            }
+            runtimeMode = config.runtimeMode
             startupError = nil
         case .failure(let error):
-            let authManager = AuthSessionManager(
-                tokenProvider: DisabledInteractiveTokenProvider(),
-                store: KeychainSessionStore())
+            let authManager = Self.disabledAuthManager()
             _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
             apiClient = DisabledApiClient()
+            runtimeMode = .hosted
             startupError = error.errorDescription
         }
     }
@@ -35,7 +53,7 @@ struct DejaGrooveMobileApp: App {
         WindowGroup {
             if let startupError {
                 StartupConfigurationErrorView(message: startupError)
-            } else {
+            } else if runtimeMode == .hosted {
                 AuthGateView(coordinator: coordinator) {
                     DejaGrooveRootView(
                         api: apiClient,
@@ -45,8 +63,16 @@ struct DejaGrooveMobileApp: App {
                             }
                         })
                 }
+            } else {
+                DejaGrooveRootView(api: apiClient)
             }
         }
+    }
+
+    private static func disabledAuthManager() -> AuthSessionManager {
+        AuthSessionManager(
+            tokenProvider: DisabledInteractiveTokenProvider(),
+            store: KeychainSessionStore())
     }
 }
 

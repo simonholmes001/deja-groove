@@ -3,6 +3,59 @@ import XCTest
 @testable import DejaGrooveApp
 
 final class ApiClientTests: XCTestCase {
+    func testLocalProxyApiClientDelegatesScanAndCollectionCalls() async throws {
+        let scanRuntime = LocalScanRuntimeSpy()
+        let collectionStore = LocalCollectionStoreSpy()
+        let client = LocalProxyApiClient(scanRuntime: scanRuntime, collectionStore: collectionStore)
+        let album = Album(mbid: "m", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+
+        _ = try await client.scan(imageData: Data([0xFF, 0xD8]), clientScanId: UUID(), capturedAtIso: nil)
+        _ = try await client.addToCollection(album: album, notes: "owned", addAnyway: false)
+        _ = try await client.fetchCollection(search: "joni")
+
+        let scanCallCount = await scanRuntime.scanCalls()
+        let collectionSnapshot = await collectionStore.snapshot()
+        XCTAssertEqual(1, scanCallCount)
+        XCTAssertEqual(1, collectionSnapshot.addCallCount)
+        XCTAssertEqual("joni", collectionSnapshot.lastSearch)
+    }
+
+    @MainActor
+    func testViewModelsCanUseLocalProxyApiClient() async {
+        let scanRuntime = LocalScanRuntimeSpy(response: ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil),
+            candidates: [],
+            requestId: UUID()))
+        let collectionStore = LocalCollectionStoreSpy(collectionResponse: CollectionListResponse(items: [
+            CollectionRecord(
+                id: UUID(),
+                album: Album(mbid: "m", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z")
+        ], nextCursor: nil))
+        let client = LocalProxyApiClient(scanRuntime: scanRuntime, collectionStore: collectionStore)
+        let scanViewModel = ScanViewModel(api: client)
+        let collectionViewModel = CollectionViewModel(api: client)
+
+        await scanViewModel.submitScan(imageData: Data([0xFF, 0xD8]))
+        await collectionViewModel.load()
+
+        if case .result(let response) = scanViewModel.state {
+            XCTAssertEqual("safe_to_buy", response.status)
+        } else {
+            XCTFail("Expected local proxy scan result")
+        }
+        XCTAssertEqual(1, collectionViewModel.records.count)
+        let scanCallCount = await scanRuntime.scanCalls()
+        let collectionSnapshot = await collectionStore.snapshot()
+        XCTAssertEqual(1, scanCallCount)
+        XCTAssertEqual(1, collectionSnapshot.fetchCallCount)
+    }
+
 #if os(iOS)
     func testPhotoLibraryImagePreparerConvertsPngToJpeg() {
         let pngData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7KQAAAAASUVORK5CYII=")!
@@ -124,4 +177,91 @@ actor RecordingTransport: HttpTransport {
             headerFields: ["Content-Type": "application/json"])!
         return (responseData, response)
     }
+}
+
+actor LocalScanRuntimeSpy: LocalScanRuntime {
+    private(set) var scanCallCount = 0
+    private(set) var resolveCallCount = 0
+    private let response: ScanResponse
+
+    init(response: ScanResponse = ScanResponse(status: "no_match", confidence: 0, album: nil, candidates: [], requestId: UUID())) {
+        self.response = response
+    }
+
+    func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse {
+        scanCallCount += 1
+        return response
+    }
+
+    func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
+        resolveCallCount += 1
+        return response
+    }
+
+    func scanCalls() -> Int {
+        scanCallCount
+    }
+}
+
+actor LocalCollectionStoreSpy: LocalCollectionStore {
+    private(set) var addCallCount = 0
+    private(set) var fetchCallCount = 0
+    private(set) var patchCallCount = 0
+    private(set) var lastSearch: String?
+    private let collectionResponse: CollectionListResponse
+
+    init(collectionResponse: CollectionListResponse = CollectionListResponse(items: [], nextCursor: nil)) {
+        self.collectionResponse = collectionResponse
+    }
+
+    func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
+        addCallCount += 1
+        return CollectionItemResponse(
+            id: UUID(),
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func fetchCollection(search: String?) async throws -> CollectionListResponse {
+        fetchCallCount += 1
+        lastSearch = search
+        return collectionResponse
+    }
+
+    func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
+        patchCallCount += 1
+        return CollectionItemResponse(
+            id: id,
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "",
+            artist: "",
+            year: nil,
+            format: format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func snapshot() -> LocalCollectionStoreSnapshot {
+        LocalCollectionStoreSnapshot(
+            addCallCount: addCallCount,
+            fetchCallCount: fetchCallCount,
+            patchCallCount: patchCallCount,
+            lastSearch: lastSearch)
+    }
+}
+
+struct LocalCollectionStoreSnapshot {
+    let addCallCount: Int
+    let fetchCallCount: Int
+    let patchCallCount: Int
+    let lastSearch: String?
 }

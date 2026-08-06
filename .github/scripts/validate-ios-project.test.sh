@@ -12,9 +12,7 @@ fail() {
 new_repo() {
   local dir
   dir="$(mktemp -d)"
-  mkdir -p "$dir/ios/DejaGrooveApp" "$dir/ios/DejaGroove" "$dir/bin"
-  touch "$dir/ios/DejaGroove.xcodeproj"
-  touch "$dir/ios/DejaGroove.xcworkspace"
+  mkdir -p "$dir/ios/DejaGrooveApp" "$dir/ios/DejaGroove" "$dir/ios/DejaGroove.xcodeproj" "$dir/ios/DejaGroove.xcworkspace" "$dir/bin"
   cat > "$dir/ios/DejaGroove/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -95,7 +93,6 @@ test_fails_when_manifest_missing() {
 test_fails_when_project_and_workspace_set() {
   local repo
   repo="$(new_repo)"
-  touch "$repo/ios/DejaGroove.xcworkspace"
   if (
     cd "$repo" &&
     PATH="$repo/bin:$PATH" \
