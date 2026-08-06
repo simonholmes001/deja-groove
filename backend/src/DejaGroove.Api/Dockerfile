@@ -6,10 +6,6 @@ COPY backend/src/DejaGroove.Api/DejaGroove.Api.csproj ./backend/src/DejaGroove.A
 COPY backend/src/DejaGroove.Application/DejaGroove.Application.csproj ./backend/src/DejaGroove.Application/
 COPY backend/src/DejaGroove.Domain/DejaGroove.Domain.csproj ./backend/src/DejaGroove.Domain/
 COPY backend/src/DejaGroove.Infrastructure/DejaGroove.Infrastructure.csproj ./backend/src/DejaGroove.Infrastructure/
-COPY backend/tests/DejaGroove.Api.Tests/DejaGroove.Api.Tests.csproj ./backend/tests/DejaGroove.Api.Tests/
-COPY backend/tests/DejaGroove.Application.Tests/DejaGroove.Application.Tests.csproj ./backend/tests/DejaGroove.Application.Tests/
-COPY backend/tests/DejaGroove.Domain.Tests/DejaGroove.Domain.Tests.csproj ./backend/tests/DejaGroove.Domain.Tests/
-COPY backend/tests/DejaGroove.Infrastructure.Tests/DejaGroove.Infrastructure.Tests.csproj ./backend/tests/DejaGroove.Infrastructure.Tests/
 
 RUN dotnet restore ./backend/DejaGroove.sln
 
