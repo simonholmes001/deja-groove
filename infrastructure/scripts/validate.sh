@@ -39,6 +39,11 @@ if [[ ! -f "${PARAMS_FILE}" ]]; then
   exit 1
 fi
 
+if grep -q "name: 'FUNCTIONS_WORKER_RUNTIME'" "${MINIMAL_TEMPLATE}" "${BICEP_DIR}"/*.bicep; then
+  echo "Error: Flex Consumption runtime is configured through functionAppConfig.runtime; do not set FUNCTIONS_WORKER_RUNTIME as an app setting." >&2
+  exit 1
+fi
+
 echo "==> Linting minimal Function Bicep..."
 az bicep lint --file "${MINIMAL_TEMPLATE}"
 
