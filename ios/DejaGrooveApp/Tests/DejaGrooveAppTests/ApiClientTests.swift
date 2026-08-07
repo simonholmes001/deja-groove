@@ -20,6 +20,25 @@ final class ApiClientTests: XCTestCase {
         XCTAssertEqual("joni", collectionSnapshot.lastSearch)
     }
 
+    func testLocalProxyScanMarksExistingAlbumAsOwned() async throws {
+        let album = Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: album,
+            candidates: [],
+            requestId: UUID())
+        let client = LocalProxyApiClient(
+            scanRuntime: LocalScanRuntimeSpy(response: response),
+            collectionStore: LocalCollectionStoreSpy(existingAlbums: [album]))
+
+        let result = try await client.scan(imageData: Data([0xFF, 0xD8]), clientScanId: UUID(), capturedAtIso: nil)
+
+        XCTAssertEqual("owned", result.status)
+        XCTAssertFalse(result.canAddToCollection)
+        XCTAssertEqual(album, result.album)
+    }
+
     @MainActor
     func testViewModelsCanUseLocalProxyApiClient() async {
         let scanRuntime = LocalScanRuntimeSpy(response: ScanResponse(
@@ -207,11 +226,22 @@ actor LocalCollectionStoreSpy: LocalCollectionStore {
     private(set) var addCallCount = 0
     private(set) var fetchCallCount = 0
     private(set) var patchCallCount = 0
+    private(set) var containsCallCount = 0
     private(set) var lastSearch: String?
     private let collectionResponse: CollectionListResponse
+    private let existingAlbums: [Album]
 
-    init(collectionResponse: CollectionListResponse = CollectionListResponse(items: [], nextCursor: nil)) {
+    init(
+        collectionResponse: CollectionListResponse = CollectionListResponse(items: [], nextCursor: nil),
+        existingAlbums: [Album] = []
+    ) {
         self.collectionResponse = collectionResponse
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        containsCallCount += 1
+        return existingAlbums.contains(album)
     }
 
     func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {

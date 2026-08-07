@@ -51,6 +51,11 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         self.decoder = JSONDecoder()
     }
 
+    public func contains(album: Album) async throws -> Bool {
+        let records = try loadRecords()
+        return records.contains(where: { Self.isDuplicate($0.album, album) })
+    }
+
     public func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
         var records = try loadRecords()
         if !addAnyway, records.contains(where: { Self.isDuplicate($0.album, album) }) {

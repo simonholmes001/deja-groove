@@ -15,6 +15,19 @@ final class ViewModelTests: XCTestCase {
         XCTAssertTrue(response.canAddToCollection)
     }
 
+    func testOwnedScanResponseCannotBeAddedAgain() {
+        let response = ScanResponse(
+            status: "owned",
+            confidence: 0.91,
+            album: Album(mbid: "a", discogsReleaseId: nil, title: "T", artist: "AR", year: 2000, format: nil),
+            candidates: [],
+            requestId: UUID()
+        )
+
+        XCTAssertEqual("owned", response.status)
+        XCTAssertFalse(response.canAddToCollection)
+    }
+
     func testScanViewModelHandlesAmbiguousResult() async {
         let response = ScanResponse(
             status: "ambiguous",

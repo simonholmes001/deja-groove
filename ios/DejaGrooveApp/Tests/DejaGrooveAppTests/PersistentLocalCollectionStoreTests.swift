@@ -90,6 +90,19 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         }
     }
 
+    func testContainsUsesSameDuplicateRulesAsAdd() async throws {
+        let store = try makeStore(
+            ids: [UUID(uuidString: "00000000-0000-0000-0000-000000000221")!],
+            instants: ["2026-01-01T00:00:00Z"])
+        let stored = Album(mbid: nil, discogsReleaseId: nil, title: "Kind   of Blue", artist: "Miles Davis", year: 1959, format: nil)
+        let scanned = Album(mbid: nil, discogsReleaseId: nil, title: "kind of blue", artist: "miles davis", year: 1959, format: nil)
+
+        _ = try await store.addToCollection(album: stored, notes: nil, addAnyway: false)
+        let containsScannedAlbum = try await store.contains(album: scanned)
+
+        XCTAssertTrue(containsScannedAlbum)
+    }
+
     func testPatchCollectionPreservesUnspecifiedFieldsAndPersistsToDisk() async throws {
         let fileURL = temporaryStoreURL()
         let id = UUID(uuidString: "00000000-0000-0000-0000-000000000301")!
