@@ -90,10 +90,7 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         let records = try loadDocument().records
             .filter { Self.matchesSearch($0, search: search) }
             .sorted { lhs, rhs in
-                if lhs.createdAt == rhs.createdAt {
-                    return lhs.id.uuidString < rhs.id.uuidString
-                }
-                return lhs.createdAt > rhs.createdAt
+                Self.compareByArtistFamilyName(lhs, rhs)
             }
         return CollectionListResponse(items: records, nextCursor: nil)
     }
@@ -150,6 +147,23 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         document.records[index] = patched
         try save(document: document)
         return Self.itemResponse(from: patched)
+    }
+
+    public func deleteCollectionRecord(id: UUID) async throws {
+        var document = try loadDocument()
+        guard document.records.contains(where: { $0.id == id }) else {
+            throw await recordNotFoundError()
+        }
+        document.records.removeAll { $0.id == id }
+        document.collections = document.collections.map { collection in
+            CrateCollection(
+                id: collection.id,
+                name: collection.name,
+                recordIds: collection.recordIds.filter { $0 != id },
+                createdAt: collection.createdAt,
+                updatedAt: collection.updatedAt)
+        }
+        try save(document: document)
     }
 
     public func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
@@ -304,6 +318,44 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         }
         return normalized(lhs.title) == normalized(rhs.title)
             && normalized(lhs.artist) == normalized(rhs.artist)
+    }
+
+    private static func compareByArtistFamilyName(_ lhs: CollectionRecord, _ rhs: CollectionRecord) -> Bool {
+        let lhsKey = artistSortKey(lhs.album.artist)
+        let rhsKey = artistSortKey(rhs.album.artist)
+        if lhsKey != rhsKey {
+            return lhsKey < rhsKey
+        }
+        let lhsTitle = titleSortKey(lhs.album.title)
+        let rhsTitle = titleSortKey(rhs.album.title)
+        if lhsTitle != rhsTitle {
+            return lhsTitle < rhsTitle
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func artistSortKey(_ artist: String) -> String {
+        let cleanArtist = normalized(artist)
+        if cleanArtist.contains(",")
+            || cleanArtist.contains("&")
+            || cleanArtist.hasPrefix("the ")
+            || cleanArtist.hasSuffix(" band")
+            || cleanArtist.hasSuffix(" quartet")
+            || cleanArtist.hasSuffix(" quintet")
+            || cleanArtist.hasSuffix(" trio") {
+            return cleanArtist
+        }
+        let parts = cleanArtist.split(separator: " ").map(String.init)
+        guard parts.count >= 2 else { return cleanArtist }
+        return "\(parts.last!) \(parts.dropLast().joined(separator: " "))"
+    }
+
+    private static func titleSortKey(_ title: String) -> String {
+        let cleanTitle = normalized(title)
+        for article in ["the ", "a ", "an "] where cleanTitle.hasPrefix(article) {
+            return String(cleanTitle.dropFirst(article.count))
+        }
+        return cleanTitle
     }
 
     private static func matchesSearch(_ record: CollectionRecord, search: String?) -> Bool {

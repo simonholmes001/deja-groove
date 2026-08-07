@@ -117,6 +117,10 @@ private struct DisabledApiClient: ApiClient {
         throw ApiClientError.encodingFailure
     }
 
+    func deleteCollectionRecord(id: UUID) async throws {
+        throw ApiClientError.encodingFailure
+    }
+
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
         throw ApiClientError.encodingFailure
     }

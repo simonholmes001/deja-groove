@@ -21,6 +21,13 @@ public struct CollectionView: View {
                         } label: {
                             AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                Task { await viewModel.deleteRecord(id: record.id) }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
 
                     if !viewModel.isLoading && viewModel.visibleRecords.isEmpty {
@@ -157,6 +164,7 @@ private struct AlbumArtwork: View {
 }
 
 private struct AlbumDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let record: CollectionRecord
     @ObservedObject var viewModel: CollectionViewModel
 
@@ -296,6 +304,18 @@ private struct AlbumDetailView: View {
         }
         .navigationTitle(record.album.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) {
+                    Task {
+                        await viewModel.deleteRecord(id: record.id)
+                        dismiss()
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
     }
 
     @ViewBuilder

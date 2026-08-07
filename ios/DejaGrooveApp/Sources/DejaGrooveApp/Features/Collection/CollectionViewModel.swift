@@ -30,6 +30,9 @@ public final class CollectionViewModel: ObservableObject {
                 && matchesFormat(record)
                 && matchesCollection(record)
         }
+        .sorted {
+            Self.compareByArtistFamilyName($0, $1)
+        }
     }
 
     public var availableArtists: [String] {
@@ -127,6 +130,19 @@ public final class CollectionViewModel: ObservableObject {
         }
     }
 
+    public func deleteRecord(id: UUID) async {
+        do {
+            try await api.deleteCollectionRecord(id: id)
+            records.removeAll { $0.id == id }
+            crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
+    }
+
     private static func message(for error: ApiClientError) -> String {
         switch error {
         case .httpError(_, let apiError?):
@@ -185,6 +201,44 @@ public final class CollectionViewModel: ObservableObject {
     private func uniqueSorted(_ values: [String]) -> [String] {
         Array(Set(values.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
             .sorted { Self.normalized($0) < Self.normalized($1) }
+    }
+
+    private static func compareByArtistFamilyName(_ lhs: CollectionRecord, _ rhs: CollectionRecord) -> Bool {
+        let lhsArtist = artistSortKey(lhs.album.artist)
+        let rhsArtist = artistSortKey(rhs.album.artist)
+        if lhsArtist != rhsArtist {
+            return lhsArtist < rhsArtist
+        }
+        let lhsTitle = titleSortKey(lhs.album.title)
+        let rhsTitle = titleSortKey(rhs.album.title)
+        if lhsTitle != rhsTitle {
+            return lhsTitle < rhsTitle
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func artistSortKey(_ artist: String) -> String {
+        let cleanArtist = normalized(artist)
+        if cleanArtist.contains(",")
+            || cleanArtist.contains("&")
+            || cleanArtist.hasPrefix("the ")
+            || cleanArtist.hasSuffix(" band")
+            || cleanArtist.hasSuffix(" quartet")
+            || cleanArtist.hasSuffix(" quintet")
+            || cleanArtist.hasSuffix(" trio") {
+            return cleanArtist
+        }
+        let parts = cleanArtist.split(separator: " ").map(String.init)
+        guard parts.count >= 2 else { return cleanArtist }
+        return "\(parts.last!) \(parts.dropLast().joined(separator: " "))"
+    }
+
+    private static func titleSortKey(_ title: String) -> String {
+        let cleanTitle = normalized(title)
+        for article in ["the ", "a ", "an "] where cleanTitle.hasPrefix(article) {
+            return String(cleanTitle.dropFirst(article.count))
+        }
+        return cleanTitle
     }
 
     private static func normalized(_ value: String) -> String {

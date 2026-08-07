@@ -96,6 +96,66 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual("Jazz", collections.first?.name)
     }
 
+    func testCollectionViewModelSortsVisibleRecordsByArtistFamilyNameThenTitle() async {
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000531")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Saxophone Colossus", artist: "Sonny Rollins", year: 1956, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "2026-01-03T00:00:00Z",
+                updatedAt: "2026-01-03T00:00:00Z"),
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000532")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "2026-01-02T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z"),
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000533")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Mingus Ah Um", artist: "Charles Mingus", year: 1959, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z")
+        ], nextCursor: nil)
+        let sut = await CollectionViewModel(api: MockApiClient(collectionResponse: response))
+
+        await sut.load()
+
+        let titles = await sut.visibleRecords.map(\.album.title)
+        XCTAssertEqual(["Blue Train", "Mingus Ah Um", "Saxophone Colossus"], titles)
+    }
+
+    func testCollectionViewModelDeletesRecordAndRefreshesCollections() async {
+        let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000541")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000542")!
+        let api = MockApiClient(
+            collectionResponse: CollectionListResponse(items: [
+                CollectionRecord(
+                    id: recordId,
+                    album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: nil),
+                    notes: nil,
+                    version: 1,
+                    createdAt: "",
+                    updatedAt: "")
+            ], nextCursor: nil),
+            crateCollections: [
+                CrateCollection(id: collectionId, name: "Jazz", recordIds: [recordId], createdAt: "", updatedAt: "")
+            ])
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        await sut.deleteRecord(id: recordId)
+
+        let records = await sut.records
+        let deletedIds = await api.deletedRecordIds
+        XCTAssertTrue(records.isEmpty)
+        XCTAssertEqual([recordId], deletedIds)
+    }
+
+
     func testCollectionViewModelFiltersBySearchArtistFormatAndCollection() async {
         let blueId = UUID(uuidString: "00000000-0000-0000-0000-000000000511")!
         let kindId = UUID(uuidString: "00000000-0000-0000-0000-000000000512")!
@@ -301,6 +361,7 @@ actor MockApiClient: ApiClient {
     private var resolveErrorSequence: [ApiClientError]
     private var collectionErrorSequence: [ApiClientError]
     private var addToCollectionErrorSequence: [ApiClientError]
+    private(set) var deletedRecordIds: [UUID] = []
 
     init(
         scanResponse: ScanResponse? = nil,
@@ -368,6 +429,18 @@ actor MockApiClient: ApiClient {
 
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         return CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func deleteCollectionRecord(id: UUID) async throws {
+        deletedRecordIds.append(id)
+        crateCollections = crateCollections.map { collection in
+            CrateCollection(
+                id: collection.id,
+                name: collection.name,
+                recordIds: collection.recordIds.filter { $0 != id },
+                createdAt: collection.createdAt,
+                updatedAt: collection.updatedAt)
+        }
     }
 
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {

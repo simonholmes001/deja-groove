@@ -280,6 +280,9 @@ actor LocalCollectionStoreSpy: LocalCollectionStore {
             updatedAt: "")
     }
 
+    func deleteCollectionRecord(id: UUID) async throws {
+    }
+
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
         []
     }

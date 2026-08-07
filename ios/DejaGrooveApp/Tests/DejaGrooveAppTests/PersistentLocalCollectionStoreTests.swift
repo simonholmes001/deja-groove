@@ -220,6 +220,34 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
+    func testDeleteCollectionRecordRemovesAlbumAndCollectionMembership() async throws {
+        let albumId = UUID(uuidString: "00000000-0000-0000-0000-000000000431")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000432")!
+        let store = try makeStore(
+            ids: [albumId, collectionId],
+            instants: [
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "2026-01-03T00:00:00Z",
+                "2026-01-04T00:00:00Z"
+            ])
+
+        _ = try await store.addToCollection(
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: "LP"),
+            notes: nil,
+            addAnyway: false)
+        _ = try await store.createCrateCollection(name: "Jazz")
+        _ = try await store.addRecord(albumId, toCrateCollection: collectionId)
+
+        try await store.deleteCollectionRecord(id: albumId)
+
+        let records = try await store.fetchCollection(search: nil)
+        let collections = try await store.fetchCrateCollections(search: nil)
+        XCTAssertTrue(records.items.isEmpty)
+        XCTAssertEqual(1, collections.count)
+        XCTAssertTrue(collections.first?.recordIds.isEmpty ?? false)
+    }
+
     func testCollectionNameValidationRejectsEmptyAndDuplicateNames() async throws {
         let store = try makeStore(
             ids: [UUID(uuidString: "00000000-0000-0000-0000-000000000411")!],
