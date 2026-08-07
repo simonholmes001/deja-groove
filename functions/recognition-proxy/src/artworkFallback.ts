@@ -1,0 +1,220 @@
+import type { Album } from "./contracts.js";
+import type { AlbumEnrichmentPort } from "./discogs.js";
+
+type ArtworkFallbackConfig = {
+  primary: AlbumEnrichmentPort;
+  fetchImpl?: typeof fetch;
+  coverArtArchiveBaseURL?: string;
+  itunesBaseURL?: string;
+};
+
+type CoverArtArchiveResponse = {
+  images?: CoverArtArchiveImage[];
+};
+
+type CoverArtArchiveImage = {
+  image?: string;
+  thumbnails?: Record<string, string | undefined>;
+  front?: boolean;
+  back?: boolean;
+  types?: string[];
+  approved?: boolean;
+};
+
+type ITunesSearchResponse = {
+  results?: ITunesAlbumResult[];
+};
+
+type ITunesAlbumResult = {
+  artistName?: string;
+  collectionName?: string;
+  artworkUrl100?: string;
+  releaseDate?: string;
+};
+
+type ArtworkCandidate = {
+  front: string | null;
+  thumbnail: string | null;
+  back: string | null;
+};
+
+export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
+  private readonly primary: AlbumEnrichmentPort;
+  private readonly fetchImpl: typeof fetch;
+  private readonly coverArtArchiveBaseURL: string;
+  private readonly itunesBaseURL: string;
+
+  constructor(config: ArtworkFallbackConfig) {
+    this.primary = config.primary;
+    this.fetchImpl = config.fetchImpl || fetch;
+    this.coverArtArchiveBaseURL = config.coverArtArchiveBaseURL || "https://coverartarchive.org";
+    this.itunesBaseURL = config.itunesBaseURL || "https://itunes.apple.com";
+  }
+
+  async enrich(album: Album): Promise<Album> {
+    const enriched = await this.primary.enrich(album);
+    if (hasCompleteArtwork(enriched)) return enriched;
+
+    const withCoverArtArchive = await this.tryApplyCoverArtArchive(enriched);
+    if (hasFrontArtwork(withCoverArtArchive) && hasBackArtwork(withCoverArtArchive)) {
+      return withCoverArtArchive;
+    }
+
+    return await this.tryApplyITunes(withCoverArtArchive);
+  }
+
+  private async tryApplyCoverArtArchive(album: Album): Promise<Album> {
+    try {
+      return await this.applyCoverArtArchive(album);
+    } catch {
+      return album;
+    }
+  }
+
+  private async tryApplyITunes(album: Album): Promise<Album> {
+    try {
+      return await this.applyITunes(album);
+    } catch {
+      return album;
+    }
+  }
+
+  private async applyCoverArtArchive(album: Album): Promise<Album> {
+    if (!album.mbid || hasCompleteArtwork(album)) return album;
+
+    const artwork = await this.fetchCoverArtArchiveArtwork(album.mbid);
+    if (!artwork) return album;
+
+    return {
+      ...album,
+      cover_image_url: album.cover_image_url || artwork.front,
+      thumbnail_url: album.thumbnail_url || artwork.thumbnail || artwork.front,
+      back_cover_image_url: album.back_cover_image_url || artwork.back
+    };
+  }
+
+  private async fetchCoverArtArchiveArtwork(mbid: string): Promise<ArtworkCandidate | null> {
+    const releaseArtwork = await this.fetchCoverArtArchivePath(`/release/${encodeURIComponent(mbid)}`);
+    if (releaseArtwork) return releaseArtwork;
+    return await this.fetchCoverArtArchivePath(`/release-group/${encodeURIComponent(mbid)}`);
+  }
+
+  private async fetchCoverArtArchivePath(path: string): Promise<ArtworkCandidate | null> {
+    const response = await this.fetchImpl(`${this.coverArtArchiveBaseURL}${path}`, {
+      headers: { "Accept": "application/json" }
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+
+    const body = await response.json() as CoverArtArchiveResponse;
+    const images = body.images || [];
+    const front = selectImage(images, "front");
+    const back = selectImage(images, "back");
+    if (!front && !back) return null;
+    return {
+      front: bestOriginal(front),
+      thumbnail: bestThumbnail(front),
+      back: bestOriginal(back)
+    };
+  }
+
+  private async applyITunes(album: Album): Promise<Album> {
+    if (hasFrontArtwork(album)) return album;
+
+    const result = await this.fetchITunesAlbum(album);
+    const artwork = clean(result?.artworkUrl100);
+    if (!artwork) return album;
+
+    const highResolutionArtwork = resizeITunesArtwork(artwork, 600);
+    return {
+      ...album,
+      cover_image_url: highResolutionArtwork,
+      thumbnail_url: album.thumbnail_url || resizeITunesArtwork(artwork, 100)
+    };
+  }
+
+  private async fetchITunesAlbum(album: Album): Promise<ITunesAlbumResult | null> {
+    const term = [album.artist, album.title].filter(Boolean).join(" ");
+    const params = new URLSearchParams({
+      term,
+      media: "music",
+      entity: "album",
+      limit: "10"
+    });
+    const response = await this.fetchImpl(`${this.itunesBaseURL}/search?${params.toString()}`, {
+      headers: { "Accept": "application/json" }
+    });
+    if (!response.ok) return null;
+
+    const body = await response.json() as ITunesSearchResponse;
+    const results = body.results || [];
+    return bestITunesMatch(album, results);
+  }
+}
+
+function hasCompleteArtwork(album: Album): boolean {
+  return hasFrontArtwork(album) && hasBackArtwork(album);
+}
+
+function hasFrontArtwork(album: Album): boolean {
+  return Boolean(clean(album.cover_image_url) || clean(album.thumbnail_url));
+}
+
+function hasBackArtwork(album: Album): boolean {
+  return Boolean(clean(album.back_cover_image_url));
+}
+
+function selectImage(images: CoverArtArchiveImage[], kind: "front" | "back"): CoverArtArchiveImage | null {
+  return images.find((image) => isKind(image, kind) && image.approved !== false)
+    ?? images.find((image) => isKind(image, kind))
+    ?? null;
+}
+
+function isKind(image: CoverArtArchiveImage, kind: "front" | "back"): boolean {
+  if (kind === "front" && image.front) return true;
+  if (kind === "back" && image.back) return true;
+  return image.types?.some((type) => type.toLowerCase() === kind) ?? false;
+}
+
+function bestOriginal(image: CoverArtArchiveImage | null): string | null {
+  if (!image) return null;
+  return clean(image.image) || bestThumbnail(image);
+}
+
+function bestThumbnail(image: CoverArtArchiveImage | null): string | null {
+  if (!image) return null;
+  return clean(image.thumbnails?.["500"])
+    || clean(image.thumbnails?.large)
+    || clean(image.thumbnails?.["250"])
+    || clean(image.thumbnails?.small)
+    || clean(image.image);
+}
+
+function bestITunesMatch(album: Album, results: ITunesAlbumResult[]): ITunesAlbumResult | null {
+  const normalizedTitle = normalize(album.title);
+  const normalizedArtist = normalize(album.artist);
+  return results.find((result) =>
+    normalize(result.collectionName) === normalizedTitle
+      && normalize(result.artistName) === normalizedArtist)
+    ?? results.find((result) => normalize(result.collectionName) === normalizedTitle)
+    ?? results[0]
+    ?? null;
+}
+
+function resizeITunesArtwork(url: string, size: number): string {
+  return url.replace(/\/\d+x\d+[^/]*\.(jpg|jpeg|png)$/i, `/${size}x${size}bb.$1`);
+}
+
+function normalize(value: string | undefined | null): string {
+  return (value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function clean(value: string | undefined | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}

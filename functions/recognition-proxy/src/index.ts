@@ -1,4 +1,5 @@
 import { app } from "@azure/functions";
+import { ArtworkFallbackAlbumEnrichment } from "./artworkFallback.js";
 import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
@@ -15,8 +16,12 @@ const recognition = new OpenAIAlbumRecognition({
 });
 
 const enrichment = process.env.DISCOGS_TOKEN
-  ? new DiscogsAlbumEnrichment({ token: process.env.DISCOGS_TOKEN })
-  : new NoopAlbumEnrichment();
+  ? new ArtworkFallbackAlbumEnrichment({
+      primary: new DiscogsAlbumEnrichment({ token: process.env.DISCOGS_TOKEN })
+    })
+  : new ArtworkFallbackAlbumEnrichment({
+      primary: new NoopAlbumEnrichment()
+    });
 
 app.http("health", {
   methods: ["GET"],
