@@ -4,6 +4,7 @@ targetScope = 'resourceGroup'
 param functionAppName string
 
 @description('Blob URL for released-package.zip.')
+@secure()
 param packageUri string
 
 resource functionCodeDeployment 'Microsoft.Web/sites/extensions@2022-09-01' = {
