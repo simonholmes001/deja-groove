@@ -75,7 +75,7 @@ az functionapp deployment source config-zip \
   --resource-group "${RESOURCE_GROUP_NAME}" \
   --name "${FUNCTION_APP_NAME}" \
   --src "${PACKAGE_FILE}" \
-  --build-remote true \
+  --build-remote false \
   --output table
 
 echo "Deployment complete: ${DEPLOYMENT_NAME}"
