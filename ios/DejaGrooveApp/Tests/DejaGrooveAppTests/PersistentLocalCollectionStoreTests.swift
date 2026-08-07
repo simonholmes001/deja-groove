@@ -170,6 +170,60 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertEqual(2, records.first?.version)
     }
 
+    func testUpdateCollectionRecordPersistsEditedAlbumMetadata() async throws {
+        let fileURL = temporaryStoreURL()
+        let id = UUID(uuidString: "00000000-0000-0000-0000-000000000311")!
+        let store = PersistentLocalCollectionStore(
+            fileURL: fileURL,
+            idProvider: FixedUUIDProvider(ids: [id]),
+            clock: FixedISO8601Clock(instants: [
+                "2026-01-01T00:00:00Z",
+                "2026-01-05T00:00:00Z"
+            ]),
+            duplicateRequestIdProvider: FixedUUIDProvider(ids: []))
+        _ = try await store.addToCollection(
+            album: Album(mbid: nil, discogsReleaseId: "123", title: "Blu Train", artist: "John Coltrain", year: 1957, format: "LP"),
+            notes: "rough",
+            addAnyway: false)
+
+        _ = try await store.updateCollectionRecord(
+            id: id,
+            album: Album(
+                mbid: nil,
+                discogsReleaseId: "123",
+                title: "Blue Train",
+                artist: "John Coltrane",
+                year: 1957,
+                format: "Vinyl LP",
+                firstReleaseYear: 1957,
+                releaseYear: 1957,
+                firstReleaseDate: "1957",
+                releaseDate: "1957",
+                label: "Blue Note",
+                catalogNumber: "BLP 1577",
+                country: "US",
+                releaseNotes: "Corrected local metadata.",
+                genres: ["Jazz"],
+                styles: ["Hard Bop"]),
+            notes: "clean copy")
+
+        let reloaded = PersistentLocalCollectionStore(
+            fileURL: fileURL,
+            idProvider: FixedUUIDProvider(ids: []),
+            clock: FixedISO8601Clock(instants: []),
+            duplicateRequestIdProvider: FixedUUIDProvider(ids: []))
+        let records = try await reloaded.fetchCollection(search: "coltrane")
+        let record = try XCTUnwrap(records.items.first)
+        XCTAssertEqual("John Coltrane", record.album.artist)
+        XCTAssertEqual("Blue Train", record.album.title)
+        XCTAssertEqual("Blue Note", record.album.label)
+        XCTAssertEqual(["Jazz"], record.album.genres)
+        XCTAssertEqual("clean copy", record.notes)
+        XCTAssertEqual(2, record.version)
+        XCTAssertEqual("2026-01-01T00:00:00Z", record.createdAt)
+        XCTAssertEqual("2026-01-05T00:00:00Z", record.updatedAt)
+    }
+
     func testPatchUnknownRecordReturnsNotFound() async throws {
         let store = try makeStore(ids: [], instants: [])
 

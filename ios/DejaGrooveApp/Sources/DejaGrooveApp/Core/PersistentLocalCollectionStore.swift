@@ -149,6 +149,25 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         return Self.itemResponse(from: patched)
     }
 
+    public func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        var document = try loadDocument()
+        guard let index = document.records.firstIndex(where: { $0.id == id }) else {
+            throw await recordNotFoundError()
+        }
+
+        let current = document.records[index]
+        let updated = CollectionRecord(
+            id: current.id,
+            album: album,
+            notes: notes,
+            version: current.version + 1,
+            createdAt: current.createdAt,
+            updatedAt: await clock.now())
+        document.records[index] = updated
+        try save(document: document)
+        return Self.itemResponse(from: updated)
+    }
+
     public func deleteCollectionRecord(id: UUID) async throws {
         var document = try loadDocument()
         guard document.records.contains(where: { $0.id == id }) else {

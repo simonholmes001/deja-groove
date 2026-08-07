@@ -47,6 +47,10 @@ public final class CollectionViewModel: ObservableObject {
         crateCollections.filter { $0.recordIds.contains(recordId) }
     }
 
+    public func record(id: UUID) -> CollectionRecord? {
+        records.first { $0.id == id }
+    }
+
     public func isRecord(_ recordId: UUID, in collectionId: UUID) -> Bool {
         crateCollections.first(where: { $0.id == collectionId })?.recordIds.contains(recordId) ?? false
     }
@@ -135,6 +139,27 @@ public final class CollectionViewModel: ObservableObject {
             try await api.deleteCollectionRecord(id: id)
             records.removeAll { $0.id == id }
             crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
+    }
+
+    public func updateRecord(id: UUID, album: Album, notes: String?) async {
+        do {
+            _ = try await api.updateCollectionRecord(id: id, album: album, notes: notes)
+            if let index = records.firstIndex(where: { $0.id == id }) {
+                let current = records[index]
+                records[index] = CollectionRecord(
+                    id: current.id,
+                    album: album,
+                    notes: notes,
+                    version: current.version + 1,
+                    createdAt: current.createdAt,
+                    updatedAt: current.updatedAt)
+            }
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)

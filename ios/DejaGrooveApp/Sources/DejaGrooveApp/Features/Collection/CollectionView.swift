@@ -167,14 +167,15 @@ private struct AlbumDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let record: CollectionRecord
     @ObservedObject var viewModel: CollectionViewModel
+    @State private var isEditing = false
 
     var body: some View {
         List {
-            if record.album.coverImageUrl != nil || record.album.thumbnailUrl != nil {
+            if currentRecord.album.coverImageUrl != nil || currentRecord.album.thumbnailUrl != nil {
                 Section {
                     HStack {
                         Spacer()
-                        AlbumArtwork(urlString: record.album.coverImageUrl ?? record.album.thumbnailUrl, size: 220)
+                        AlbumArtwork(urlString: currentRecord.album.coverImageUrl ?? currentRecord.album.thumbnailUrl, size: 220)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
@@ -182,55 +183,55 @@ private struct AlbumDetailView: View {
             }
 
             Section("Album") {
-                detail("Artist", record.album.artist)
-                detail("Title", record.album.title)
-                detail("First Release Date", record.album.firstReleaseDate ?? record.album.firstReleaseYear.map(String.init) ?? record.album.releaseDate ?? record.album.releaseYear.map(String.init) ?? record.album.year.map(String.init))
-                detail("Discogs Release Date", record.album.releaseDate ?? record.album.releaseYear.map(String.init))
-                detail("Format", record.album.format)
-                detail("Label", record.album.label)
-                detail("Catalog Number", record.album.catalogNumber)
-                detail("Country", record.album.country)
-                detail("Barcode", record.album.barcode)
-                detail("MusicBrainz ID", record.album.mbid)
-                detail("Discogs Release", record.album.discogsReleaseId)
-                detail("Discogs Master", record.album.discogsMasterId)
-                detail("Discogs Quality", record.album.discogsDataQuality)
-                detail("Discogs API Resource", record.album.discogsResourceUrl)
-                if let discogsUrl = record.album.discogsUrl, let url = URL(string: discogsUrl) {
+                detail("Artist", currentRecord.album.artist)
+                detail("Title", currentRecord.album.title)
+                detail("First Release Date", currentRecord.album.firstReleaseDate ?? currentRecord.album.firstReleaseYear.map(String.init) ?? currentRecord.album.releaseDate ?? currentRecord.album.releaseYear.map(String.init) ?? currentRecord.album.year.map(String.init))
+                detail("Discogs Release Date", currentRecord.album.releaseDate ?? currentRecord.album.releaseYear.map(String.init))
+                detail("Format", currentRecord.album.format)
+                detail("Label", currentRecord.album.label)
+                detail("Catalog Number", currentRecord.album.catalogNumber)
+                detail("Country", currentRecord.album.country)
+                detail("Barcode", currentRecord.album.barcode)
+                detail("MusicBrainz ID", currentRecord.album.mbid)
+                detail("Discogs Release", currentRecord.album.discogsReleaseId)
+                detail("Discogs Master", currentRecord.album.discogsMasterId)
+                detail("Discogs Quality", currentRecord.album.discogsDataQuality)
+                detail("Discogs API Resource", currentRecord.album.discogsResourceUrl)
+                if let discogsUrl = currentRecord.album.discogsUrl, let url = URL(string: discogsUrl) {
                     Link("Open In Discogs", destination: url)
                 }
             }
 
-            if let notes = record.notes, !notes.isEmpty {
+            if let notes = currentRecord.notes, !notes.isEmpty {
                 Section("My Notes") {
                     Text(notes)
                 }
             }
 
-            if let releaseNotes = record.album.releaseNotes, !releaseNotes.isEmpty {
+            if let releaseNotes = currentRecord.album.releaseNotes, !releaseNotes.isEmpty {
                 Section("Release Notes") {
                     Text(releaseNotes)
                 }
             }
 
-            if !record.album.genres.isEmpty || !record.album.styles.isEmpty {
+            if !currentRecord.album.genres.isEmpty || !currentRecord.album.styles.isEmpty {
                 Section("Genre & Style") {
-                    detail("Genres", record.album.genres.joined(separator: ", "))
-                    detail("Styles", record.album.styles.joined(separator: ", "))
+                    detail("Genres", currentRecord.album.genres.joined(separator: ", "))
+                    detail("Styles", currentRecord.album.styles.joined(separator: ", "))
                 }
             }
 
-            if !record.album.companies.isEmpty {
+            if !currentRecord.album.companies.isEmpty {
                 Section("Companies") {
-                    ForEach(record.album.companies, id: \.self) { company in
+                    ForEach(currentRecord.album.companies, id: \.self) { company in
                         Text(company)
                     }
                 }
             }
 
-            if !record.album.tracklist.isEmpty {
+            if !currentRecord.album.tracklist.isEmpty {
                 Section("Tracklist") {
-                    ForEach(Array(record.album.tracklist.enumerated()), id: \.offset) { _, track in
+                    ForEach(Array(currentRecord.album.tracklist.enumerated()), id: \.offset) { _, track in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(track.title)
                             HStack(spacing: 8) {
@@ -248,9 +249,9 @@ private struct AlbumDetailView: View {
                 }
             }
 
-            if !record.album.identifiers.isEmpty {
+            if !currentRecord.album.identifiers.isEmpty {
                 Section("Identifiers") {
-                    ForEach(Array(record.album.identifiers.enumerated()), id: \.offset) { _, identifier in
+                    ForEach(Array(currentRecord.album.identifiers.enumerated()), id: \.offset) { _, identifier in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(identifier.type)
                             Text([identifier.value, identifier.description]
@@ -263,17 +264,17 @@ private struct AlbumDetailView: View {
                 }
             }
 
-            if let backCoverText = record.album.backCoverText, !backCoverText.isEmpty {
+            if let backCoverText = currentRecord.album.backCoverText, !backCoverText.isEmpty {
                 Section("Back Cover") {
                     Text(backCoverText)
                 }
             }
 
-            if record.album.backCoverImageUrl != nil {
+            if currentRecord.album.backCoverImageUrl != nil {
                 Section("Back Cover Image") {
                     HStack {
                         Spacer()
-                        AlbumArtwork(urlString: record.album.backCoverImageUrl, size: 220)
+                        AlbumArtwork(urlString: currentRecord.album.backCoverImageUrl, size: 220)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
@@ -302,9 +303,16 @@ private struct AlbumDetailView: View {
                 }
             }
         }
-        .navigationTitle(record.album.title)
+        .navigationTitle(currentRecord.album.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isEditing = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     Task {
@@ -316,6 +324,18 @@ private struct AlbumDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $isEditing) {
+            AlbumEditView(record: currentRecord) { album, notes in
+                Task {
+                    await viewModel.updateRecord(id: record.id, album: album, notes: notes)
+                    isEditing = false
+                }
+            }
+        }
+    }
+
+    private var currentRecord: CollectionRecord {
+        viewModel.record(id: record.id) ?? record
     }
 
     @ViewBuilder
@@ -323,6 +343,171 @@ private struct AlbumDetailView: View {
         if let value, !value.isEmpty {
             LabeledContent(label, value: value)
         }
+    }
+}
+
+private struct AlbumEditView: View {
+    @Environment(\.dismiss) private var dismiss
+    let record: CollectionRecord
+    let onSave: (Album, String?) -> Void
+
+    @State private var artist: String
+    @State private var title: String
+    @State private var firstReleaseDate: String
+    @State private var firstReleaseYear: String
+    @State private var releaseDate: String
+    @State private var releaseYear: String
+    @State private var format: String
+    @State private var label: String
+    @State private var catalogNumber: String
+    @State private var country: String
+    @State private var barcode: String
+    @State private var coverImageUrl: String
+    @State private var thumbnailUrl: String
+    @State private var backCoverImageUrl: String
+    @State private var notes: String
+    @State private var releaseNotes: String
+    @State private var backCoverText: String
+    @State private var genres: String
+    @State private var styles: String
+
+    init(record: CollectionRecord, onSave: @escaping (Album, String?) -> Void) {
+        self.record = record
+        self.onSave = onSave
+        _artist = State(initialValue: record.album.artist)
+        _title = State(initialValue: record.album.title)
+        _firstReleaseDate = State(initialValue: record.album.firstReleaseDate ?? "")
+        _firstReleaseYear = State(initialValue: record.album.firstReleaseYear.map(String.init) ?? "")
+        _releaseDate = State(initialValue: record.album.releaseDate ?? "")
+        _releaseYear = State(initialValue: record.album.releaseYear.map(String.init) ?? "")
+        _format = State(initialValue: record.album.format ?? "")
+        _label = State(initialValue: record.album.label ?? "")
+        _catalogNumber = State(initialValue: record.album.catalogNumber ?? "")
+        _country = State(initialValue: record.album.country ?? "")
+        _barcode = State(initialValue: record.album.barcode ?? "")
+        _coverImageUrl = State(initialValue: record.album.coverImageUrl ?? "")
+        _thumbnailUrl = State(initialValue: record.album.thumbnailUrl ?? "")
+        _backCoverImageUrl = State(initialValue: record.album.backCoverImageUrl ?? "")
+        _notes = State(initialValue: record.notes ?? "")
+        _releaseNotes = State(initialValue: record.album.releaseNotes ?? "")
+        _backCoverText = State(initialValue: record.album.backCoverText ?? "")
+        _genres = State(initialValue: record.album.genres.joined(separator: ", "))
+        _styles = State(initialValue: record.album.styles.joined(separator: ", "))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Required") {
+                    TextField("Artist", text: $artist)
+                        .textInputAutocapitalization(.words)
+                    TextField("Title", text: $title)
+                        .textInputAutocapitalization(.words)
+                }
+
+                Section("Release") {
+                    TextField("First Release Date", text: $firstReleaseDate)
+                    TextField("First Release Year", text: $firstReleaseYear)
+                        .keyboardType(.numberPad)
+                    TextField("Discogs Release Date", text: $releaseDate)
+                    TextField("Discogs Release Year", text: $releaseYear)
+                        .keyboardType(.numberPad)
+                    TextField("Format", text: $format)
+                    TextField("Label", text: $label)
+                    TextField("Catalog Number", text: $catalogNumber)
+                    TextField("Country", text: $country)
+                    TextField("Barcode", text: $barcode)
+                }
+
+                Section("Classification") {
+                    TextField("Genres", text: $genres)
+                    TextField("Styles", text: $styles)
+                }
+
+                Section("Images") {
+                    TextField("Front Cover URL", text: $coverImageUrl)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    TextField("Thumbnail URL", text: $thumbnailUrl)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    TextField("Back Cover URL", text: $backCoverImageUrl)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                }
+
+                Section("Notes") {
+                    TextField("My Notes", text: $notes, axis: .vertical)
+                        .lineLimit(3...6)
+                    TextField("Release Notes", text: $releaseNotes, axis: .vertical)
+                        .lineLimit(3...8)
+                    TextField("Back Cover Text", text: $backCoverText, axis: .vertical)
+                        .lineLimit(3...8)
+                }
+            }
+            .navigationTitle("Edit Album")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(updatedAlbum, clean(notes))
+                    }
+                    .disabled(clean(artist) == nil || clean(title) == nil)
+                }
+            }
+        }
+    }
+
+    private var updatedAlbum: Album {
+        Album(
+            mbid: record.album.mbid,
+            discogsReleaseId: record.album.discogsReleaseId,
+            discogsMasterId: record.album.discogsMasterId,
+            discogsUrl: record.album.discogsUrl,
+            discogsResourceUrl: record.album.discogsResourceUrl,
+            title: clean(title) ?? record.album.title,
+            artist: clean(artist) ?? record.album.artist,
+            year: parseYear(firstReleaseYear) ?? parseYear(releaseYear) ?? record.album.year,
+            format: clean(format),
+            firstReleaseYear: parseYear(firstReleaseYear),
+            releaseYear: parseYear(releaseYear),
+            firstReleaseDate: clean(firstReleaseDate),
+            releaseDate: clean(releaseDate),
+            label: clean(label),
+            catalogNumber: clean(catalogNumber),
+            country: clean(country),
+            barcode: clean(barcode),
+            coverImageUrl: clean(coverImageUrl),
+            thumbnailUrl: clean(thumbnailUrl),
+            backCoverImageUrl: clean(backCoverImageUrl),
+            backCoverText: clean(backCoverText),
+            releaseNotes: clean(releaseNotes),
+            genres: cleanList(genres),
+            styles: cleanList(styles),
+            companies: record.album.companies,
+            tracklist: record.album.tracklist,
+            identifiers: record.album.identifiers,
+            discogsDataQuality: record.album.discogsDataQuality)
+    }
+
+    private func clean(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func cleanList(_ value: String) -> [String] {
+        value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func parseYear(_ value: String) -> Int? {
+        guard let cleanValue = clean(value), cleanValue.count == 4 else { return nil }
+        return Int(cleanValue)
     }
 }
 

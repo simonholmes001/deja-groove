@@ -117,6 +117,10 @@ private struct DisabledApiClient: ApiClient {
         throw ApiClientError.encodingFailure
     }
 
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        throw ApiClientError.encodingFailure
+    }
+
     func deleteCollectionRecord(id: UUID) async throws {
         throw ApiClientError.encodingFailure
     }

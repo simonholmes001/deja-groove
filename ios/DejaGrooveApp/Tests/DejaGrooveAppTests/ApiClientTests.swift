@@ -280,6 +280,20 @@ actor LocalCollectionStoreSpy: LocalCollectionStore {
             updatedAt: "")
     }
 
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        CollectionItemResponse(
+            id: id,
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: "")
+    }
+
     func deleteCollectionRecord(id: UUID) async throws {
     }
 

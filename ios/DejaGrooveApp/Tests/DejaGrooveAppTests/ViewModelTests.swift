@@ -155,6 +155,34 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual([recordId], deletedIds)
     }
 
+    func testCollectionViewModelUpdatesRecordMetadata() async {
+        let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000551")!
+        let api = MockApiClient(
+            collectionResponse: CollectionListResponse(items: [
+                CollectionRecord(
+                    id: recordId,
+                    album: Album(mbid: nil, discogsReleaseId: nil, title: "Blu Train", artist: "John Coltrain", year: 1957, format: "LP"),
+                    notes: "rough",
+                    version: 1,
+                    createdAt: "",
+                    updatedAt: "")
+            ], nextCursor: nil))
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        await sut.updateRecord(
+            id: recordId,
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: "Vinyl LP"),
+            notes: "clean copy")
+
+        let record = await sut.record(id: recordId)
+        XCTAssertEqual("John Coltrane", record?.album.artist)
+        XCTAssertEqual("Blue Train", record?.album.title)
+        XCTAssertEqual("Vinyl LP", record?.album.format)
+        XCTAssertEqual("clean copy", record?.notes)
+        XCTAssertEqual(2, record?.version)
+    }
+
 
     func testCollectionViewModelFiltersBySearchArtistFormatAndCollection() async {
         let blueId = UUID(uuidString: "00000000-0000-0000-0000-000000000511")!
@@ -429,6 +457,20 @@ actor MockApiClient: ApiClient {
 
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         return CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        return CollectionItemResponse(
+            id: id,
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: "")
     }
 
     func deleteCollectionRecord(id: UUID) async throws {

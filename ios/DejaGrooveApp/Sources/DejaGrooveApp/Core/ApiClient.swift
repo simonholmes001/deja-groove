@@ -12,6 +12,7 @@ public protocol ApiClient: Sendable {
     func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse
     func fetchCollection(search: String?) async throws -> CollectionListResponse
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse
     func deleteCollectionRecord(id: UUID) async throws
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection]
     func createCrateCollection(name: String) async throws -> CrateCollection
@@ -119,6 +120,10 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
         await applyAuth(to: &request)
         request.httpBody = try JSONEncoder().encode(PatchCollectionBody(format: format, notes: notes))
         return try await send(request)
+    }
+
+    public func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        throw unsupportedLocalCollectionManagementError()
     }
 
     public func deleteCollectionRecord(id: UUID) async throws {
