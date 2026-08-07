@@ -45,6 +45,12 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
 }
 
 public enum LocalProxyApiClientFactory {
+    public static func make(recognitionProxyBaseURL: URL? = nil) -> LocalProxyApiClient {
+        LocalProxyApiClient(
+            scanRuntime: UnconfiguredLocalScanRuntime(recognitionProxyBaseURL: recognitionProxyBaseURL),
+            collectionStore: PersistentLocalCollectionStore())
+    }
+
     public static func makeUnconfigured(recognitionProxyBaseURL: URL? = nil) -> LocalProxyApiClient {
         LocalProxyApiClient(
             scanRuntime: UnconfiguredLocalScanRuntime(recognitionProxyBaseURL: recognitionProxyBaseURL),
