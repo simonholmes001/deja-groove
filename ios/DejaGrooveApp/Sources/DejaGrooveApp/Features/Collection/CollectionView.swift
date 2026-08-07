@@ -173,10 +173,22 @@ private struct AlbumDetailView: View {
         List {
             if currentRecord.album.coverImageUrl != nil || currentRecord.album.thumbnailUrl != nil {
                 Section {
-                    HStack {
-                        Spacer()
-                        AlbumArtwork(urlString: currentRecord.album.coverImageUrl ?? currentRecord.album.thumbnailUrl, size: 220)
-                        Spacer()
+                    VStack(spacing: 12) {
+                        HStack {
+                            Spacer()
+                            AlbumArtwork(urlString: currentRecord.album.coverImageUrl ?? currentRecord.album.thumbnailUrl, size: 220)
+                            Spacer()
+                        }
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.updateRecord(
+                                    id: record.id,
+                                    album: albumRemovingFrontArtwork(currentRecord.album),
+                                    notes: currentRecord.notes)
+                            }
+                        } label: {
+                            Label("Remove Front Cover Image", systemImage: "trash")
+                        }
                     }
                     .listRowBackground(Color.clear)
                 }
@@ -272,10 +284,22 @@ private struct AlbumDetailView: View {
 
             if currentRecord.album.backCoverImageUrl != nil {
                 Section("Back Cover Image") {
-                    HStack {
-                        Spacer()
-                        AlbumArtwork(urlString: currentRecord.album.backCoverImageUrl, size: 220)
-                        Spacer()
+                    VStack(spacing: 12) {
+                        HStack {
+                            Spacer()
+                            AlbumArtwork(urlString: currentRecord.album.backCoverImageUrl, size: 220)
+                            Spacer()
+                        }
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.updateRecord(
+                                    id: record.id,
+                                    album: albumRemovingBackArtwork(currentRecord.album),
+                                    notes: currentRecord.notes)
+                            }
+                        } label: {
+                            Label("Remove Back Cover Image", systemImage: "trash")
+                        }
                     }
                     .listRowBackground(Color.clear)
                 }
@@ -336,6 +360,51 @@ private struct AlbumDetailView: View {
 
     private var currentRecord: CollectionRecord {
         viewModel.record(id: record.id) ?? record
+    }
+
+    private func albumRemovingFrontArtwork(_ album: Album) -> Album {
+        albumReplacingArtwork(album, coverImageUrl: nil, thumbnailUrl: nil, backCoverImageUrl: album.backCoverImageUrl)
+    }
+
+    private func albumRemovingBackArtwork(_ album: Album) -> Album {
+        albumReplacingArtwork(album, coverImageUrl: album.coverImageUrl, thumbnailUrl: album.thumbnailUrl, backCoverImageUrl: nil)
+    }
+
+    private func albumReplacingArtwork(
+        _ album: Album,
+        coverImageUrl: String?,
+        thumbnailUrl: String?,
+        backCoverImageUrl: String?
+    ) -> Album {
+        Album(
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            discogsMasterId: album.discogsMasterId,
+            discogsUrl: album.discogsUrl,
+            discogsResourceUrl: album.discogsResourceUrl,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            firstReleaseYear: album.firstReleaseYear,
+            releaseYear: album.releaseYear,
+            firstReleaseDate: album.firstReleaseDate,
+            releaseDate: album.releaseDate,
+            label: album.label,
+            catalogNumber: album.catalogNumber,
+            country: album.country,
+            barcode: album.barcode,
+            coverImageUrl: coverImageUrl,
+            thumbnailUrl: thumbnailUrl,
+            backCoverImageUrl: backCoverImageUrl,
+            backCoverText: album.backCoverText,
+            releaseNotes: album.releaseNotes,
+            genres: album.genres,
+            styles: album.styles,
+            companies: album.companies,
+            tracklist: album.tracklist,
+            identifiers: album.identifiers,
+            discogsDataQuality: album.discogsDataQuality)
     }
 
     @ViewBuilder
