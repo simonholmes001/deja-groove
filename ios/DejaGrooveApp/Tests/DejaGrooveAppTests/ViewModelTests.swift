@@ -15,6 +15,19 @@ final class ViewModelTests: XCTestCase {
         XCTAssertTrue(response.canAddToCollection)
     }
 
+    func testOwnedScanResponseCannotBeAddedAgain() {
+        let response = ScanResponse(
+            status: "owned",
+            confidence: 0.91,
+            album: Album(mbid: "a", discogsReleaseId: nil, title: "T", artist: "AR", year: 2000, format: nil),
+            candidates: [],
+            requestId: UUID()
+        )
+
+        XCTAssertEqual("owned", response.status)
+        XCTAssertFalse(response.canAddToCollection)
+    }
+
     func testScanViewModelHandlesAmbiguousResult() async {
         let response = ScanResponse(
             status: "ambiguous",
@@ -119,6 +132,25 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual("Sign in to add this album to My Crate.", message)
         let callbackCount = await tracker.callCount
         XCTAssertEqual(1, callbackCount)
+    }
+
+    func testScanViewModelClearsResultAfterSuccessfulAddToCollection() async {
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: nil, title: "T", artist: "A", year: 2001, format: nil),
+            candidates: [],
+            requestId: UUID())
+        let api = MockApiClient(scanResponse: response)
+        let sut = await ScanViewModel(api: api)
+
+        await sut.submitScan(imageData: Data([0xFF, 0xD8]))
+        await sut.addResultToCollection()
+
+        let state = await sut.state
+        let message = await sut.collectionMessage
+        XCTAssertEqual(.idle, state)
+        XCTAssertEqual("Added to My Crate.", message)
     }
 
     func testScanViewModelRetryableHttpErrorExposesRetryFlagAndCanRetryLastScan() async {

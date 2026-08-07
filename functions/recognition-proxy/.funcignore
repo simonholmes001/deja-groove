@@ -1,0 +1,8 @@
+*.ts
+test/
+node_modules/
+local.settings.json
+local.settings.json.sample
+tsconfig.json
+*.zip
+.git*

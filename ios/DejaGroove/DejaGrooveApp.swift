@@ -35,8 +35,9 @@ struct DejaGrooveMobileApp: App {
             case .localProxy:
                 authManager = Self.disabledAuthManager()
                 _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
-                apiClient = LocalProxyApiClientFactory.makeUnconfigured(
-                    recognitionProxyBaseURL: config.recognitionProxyBaseURL)
+                apiClient = LocalProxyApiClientFactory.make(
+                    recognitionProxyBaseURL: config.recognitionProxyBaseURL,
+                    recognitionProxyKey: config.recognitionProxyKey)
             }
             runtimeMode = config.runtimeMode
             startupError = nil

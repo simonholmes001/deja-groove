@@ -51,6 +51,7 @@ run_swift_tests() {
 # Run local commit guardrails
 run_node_tests "cli"
 run_node_tests "frontend"
+run_node_tests "functions/recognition-proxy"
 run_swift_tests "ios/DejaGrooveAuth"
 run_swift_tests "ios/DejaGrooveApp"
 

@@ -37,8 +37,23 @@ jobs:
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "minimal-function.bicep is not present yet; deployment is skipped until issue #169 adds it."
+            echo "minimal-function.bicep is not present yet; deployment is skipped."
           fi
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.exists == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/recognition-proxy/package-lock.json
+
+      - name: Test recognition Function
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: functions/recognition-proxy
+        run: |
+          npm ci --workspaces=false
+          npm run test
 
       - name: Login to Azure (OIDC)
         if: steps.detect.outputs.exists == 'true'
@@ -65,4 +80,5 @@ jobs:
         shell: bash
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         run: bash ./infrastructure/scripts/deploy.sh dev

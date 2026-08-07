@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "OPENAI_KEY": "replace-with-local-openai-key",
+    "OPENAI_MODEL": "gpt-5-mini"
+  }
+}

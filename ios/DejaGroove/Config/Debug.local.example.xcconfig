@@ -1,0 +1,6 @@
+// Copy this file to Debug.local.xcconfig for local Xcode testing on a physical iPhone.
+// Debug.local.xcconfig is ignored by git and may contain the Function host key.
+
+DEJA_GROOVE_RUNTIME_MODE = local_proxy
+DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL = https:$(URL_SLASH)$(URL_SLASH)func-deja-recognition-dev-yzoqh3gf.azurewebsites.net
+DEJA_GROOVE_RECOGNITION_PROXY_KEY = REPLACE_WITH_AZURE_FUNCTION_DEFAULT_KEY

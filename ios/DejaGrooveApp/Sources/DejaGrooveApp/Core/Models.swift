@@ -34,7 +34,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     }
 
     public var canAddToCollection: Bool {
-        album != nil && (status == "safe_to_buy" || status == "owned")
+        album != nil && status == "safe_to_buy"
     }
 
     enum CodingKeys: String, CodingKey {

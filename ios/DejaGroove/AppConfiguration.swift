@@ -73,6 +73,7 @@ enum AppConfiguration {
             runtimeMode: .hosted,
             apiBaseURL: apiBaseURL,
             recognitionProxyBaseURL: nil,
+            recognitionProxyKey: nil,
             entra: EntraConfig(
                 authority: authority,
                 clientID: clientID,
@@ -82,17 +83,23 @@ enum AppConfiguration {
 
     private static func loadLocalProxy(bundle: Bundle) -> Result<LoadedAppConfiguration, AppConfigurationError> {
         guard let proxyURLRaw = bundle.object(forInfoDictionaryKey: "DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL") as? String,
-              let recognitionProxyBaseURL = URL(string: proxyURLRaw) else {
+              let recognitionProxyBaseURL = URL(string: proxyURLRaw),
+              let recognitionProxyKey = bundle.object(forInfoDictionaryKey: "DEJA_GROOVE_RECOGNITION_PROXY_KEY") as? String else {
             return .failure(.missingRequiredKeys)
         }
         guard recognitionProxyBaseURL.scheme?.lowercased() == "https" else {
             return .failure(.recognitionProxyBaseUrlMustUseHttps)
+        }
+        guard !recognitionProxyKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !recognitionProxyKey.hasPrefix("REPLACE_") else {
+            return .failure(.placeholderRecognitionProxyKey)
         }
 
         return .success(LoadedAppConfiguration(
             runtimeMode: .localProxy,
             apiBaseURL: nil,
             recognitionProxyBaseURL: recognitionProxyBaseURL,
+            recognitionProxyKey: recognitionProxyKey,
             entra: nil))
     }
 }
@@ -101,6 +108,7 @@ struct LoadedAppConfiguration {
     let runtimeMode: DejaGrooveRuntimeMode
     let apiBaseURL: URL?
     let recognitionProxyBaseURL: URL?
+    let recognitionProxyKey: String?
     let entra: EntraConfig?
 }
 
@@ -111,6 +119,7 @@ enum AppConfigurationError: Error, LocalizedError {
     case recognitionProxyBaseUrlMustUseHttps
     case authorityMustUseHttps
     case placeholderClientId
+    case placeholderRecognitionProxyKey
     case redirectUriSchemeMismatch
     case emptyScopes
 
@@ -128,6 +137,8 @@ enum AppConfigurationError: Error, LocalizedError {
             return "Entra authority must use HTTPS."
         case .placeholderClientId:
             return "Entra client ID is not configured for this build."
+        case .placeholderRecognitionProxyKey:
+            return "Recognition proxy function key is not configured for this build."
         case .redirectUriSchemeMismatch:
             return "Redirect URI scheme does not match app URL scheme."
         case .emptyScopes:
