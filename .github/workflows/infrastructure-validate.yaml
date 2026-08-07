@@ -30,8 +30,23 @@ jobs:
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "minimal-function.bicep is not present yet; Azure validation is skipped until issue #169 adds it."
+            echo "minimal-function.bicep is not present yet; Azure validation is skipped."
           fi
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.exists == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/recognition-proxy/package-lock.json
+
+      - name: Test recognition Function
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: functions/recognition-proxy
+        run: |
+          npm ci --workspaces=false
+          npm run test
 
       - name: Lint minimal Function infrastructure
         if: steps.detect.outputs.exists == 'true'

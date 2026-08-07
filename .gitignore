@@ -19,3 +19,8 @@ ios/.DS_Store
 ios/DejaGroove.xcodeproj/project.xcworkspace/
 ios/DejaGroove.xcodeproj/xcuserdata/
 ios/DejaGrooveApp/.swiftpm/
+
+# Azure Function local build/package artifacts
+.artifacts/
+functions/**/node_modules/
+functions/**/dist/

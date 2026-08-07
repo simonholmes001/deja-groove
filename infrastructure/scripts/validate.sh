@@ -8,6 +8,7 @@ BICEP_DIR="${SCRIPT_DIR}/../bicep"
 MINIMAL_TEMPLATE="${BICEP_DIR}/minimal-function.bicep"
 PARAMS_FILE="${BICEP_DIR}/parameters/${ENVIRONMENT}.bicepparam"
 DEPLOY_LOCATION="${AZURE_LOCATION:-swedencentral}"
+VALIDATION_OPENAI_KEY="${OPENAI_KEY:-validation-placeholder}"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev> [--lint-only|--what-if]" >&2
@@ -29,7 +30,7 @@ esac
 
 if [[ ! -f "${MINIMAL_TEMPLATE}" ]]; then
   echo "Minimal Function template is not present yet: ${MINIMAL_TEMPLATE}"
-  echo "Skipping Azure validation until issue #169 adds the minimum-cost Function infrastructure."
+  echo "Skipping Azure validation until the minimum-cost Function infrastructure exists."
   exit 0
 fi
 
@@ -54,6 +55,7 @@ az deployment sub validate \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
   --parameters "${PARAMS_FILE}" \
+  --parameters openAiKey="${VALIDATION_OPENAI_KEY}" \
   --output none
 
 if [[ "${MODE}" == "--what-if" ]]; then
@@ -62,7 +64,8 @@ if [[ "${MODE}" == "--what-if" ]]; then
     --name "deja-minimal-function-${ENVIRONMENT}-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
     --location "${DEPLOY_LOCATION}" \
     --template-file "${MINIMAL_TEMPLATE}" \
-    --parameters "${PARAMS_FILE}"
+    --parameters "${PARAMS_FILE}" \
+    --parameters openAiKey="${VALIDATION_OPENAI_KEY}"
 fi
 
 echo "Validation complete for environment: ${ENVIRONMENT}"
