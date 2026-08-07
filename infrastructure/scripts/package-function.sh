@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 FUNCTION_DIR="${REPO_ROOT}/functions/recognition-proxy"
 OUTPUT_DIR="${REPO_ROOT}/.artifacts"
 PACKAGE_FILE="${OUTPUT_DIR}/recognition-proxy.zip"
+PACKAGE_VERSION="${DEJA_PACKAGE_VERSION:-local}"
 
 if [[ ! -f "${FUNCTION_DIR}/package.json" ]]; then
   echo "Error: Function project not found: ${FUNCTION_DIR}" >&2
@@ -21,6 +22,7 @@ else
   npm install >&2
 fi
 npm run build >&2
+printf '{"packageVersion":"%s"}\n' "${PACKAGE_VERSION}" > dist/deployment-marker.json
 npm prune --omit=dev >&2
 rm -f "${PACKAGE_FILE}"
 zip -qr "${PACKAGE_FILE}" host.json package.json package-lock.json node_modules dist >&2
