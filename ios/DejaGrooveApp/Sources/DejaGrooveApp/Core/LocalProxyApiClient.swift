@@ -10,6 +10,12 @@ public protocol LocalCollectionStore: Sendable {
     func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse
     func fetchCollection(search: String?) async throws -> CollectionListResponse
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection]
+    func createCrateCollection(name: String) async throws -> CrateCollection
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection
+    func deleteCrateCollection(id: UUID) async throws
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection
 }
 
 public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
@@ -54,6 +60,30 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
 
     public func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         try await collectionStore.patchCollection(id: id, format: format, notes: notes)
+    }
+
+    public func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        try await collectionStore.fetchCrateCollections(search: search)
+    }
+
+    public func createCrateCollection(name: String) async throws -> CrateCollection {
+        try await collectionStore.createCrateCollection(name: name)
+    }
+
+    public func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        try await collectionStore.renameCrateCollection(id: id, name: name)
+    }
+
+    public func deleteCrateCollection(id: UUID) async throws {
+        try await collectionStore.deleteCrateCollection(id: id)
+    }
+
+    public func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        try await collectionStore.addRecord(recordId, toCrateCollection: collectionId)
+    }
+
+    public func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        try await collectionStore.removeRecord(recordId, fromCrateCollection: collectionId)
     }
 }
 
@@ -116,6 +146,30 @@ private struct UnconfiguredLocalCollectionStore: LocalCollectionStore {
     }
 
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        throw unconfiguredError(message: "Local collection storage is not configured yet.")
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
         throw unconfiguredError(message: "Local collection storage is not configured yet.")
     }
 

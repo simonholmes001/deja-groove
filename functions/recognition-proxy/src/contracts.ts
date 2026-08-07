@@ -4,7 +4,14 @@ export type Album = {
   title: string;
   artist: string;
   year?: number | null;
+  first_release_year?: number | null;
+  release_year?: number | null;
   format?: string | null;
+  label?: string | null;
+  catalog_number?: string | null;
+  country?: string | null;
+  back_cover_text?: string | null;
+  release_notes?: string | null;
 };
 
 export type ScanResponse = {

@@ -6,7 +6,44 @@ public struct Album: Codable, Equatable, Sendable {
     public let title: String
     public let artist: String
     public let year: Int?
+    public let firstReleaseYear: Int?
+    public let releaseYear: Int?
     public let format: String?
+    public let label: String?
+    public let catalogNumber: String?
+    public let country: String?
+    public let backCoverText: String?
+    public let releaseNotes: String?
+
+    public init(
+        mbid: String?,
+        discogsReleaseId: String?,
+        title: String,
+        artist: String,
+        year: Int?,
+        format: String?,
+        firstReleaseYear: Int? = nil,
+        releaseYear: Int? = nil,
+        label: String? = nil,
+        catalogNumber: String? = nil,
+        country: String? = nil,
+        backCoverText: String? = nil,
+        releaseNotes: String? = nil
+    ) {
+        self.mbid = mbid
+        self.discogsReleaseId = discogsReleaseId
+        self.title = title
+        self.artist = artist
+        self.year = year
+        self.format = format
+        self.firstReleaseYear = firstReleaseYear
+        self.releaseYear = releaseYear
+        self.label = label
+        self.catalogNumber = catalogNumber
+        self.country = country
+        self.backCoverText = backCoverText
+        self.releaseNotes = releaseNotes
+    }
 
     enum CodingKeys: String, CodingKey {
         case mbid
@@ -14,7 +51,14 @@ public struct Album: Codable, Equatable, Sendable {
         case title
         case artist
         case year
+        case firstReleaseYear = "first_release_year"
+        case releaseYear = "release_year"
         case format
+        case label
+        case catalogNumber = "catalog_number"
+        case country
+        case backCoverText = "back_cover_text"
+        case releaseNotes = "release_notes"
     }
 }
 
@@ -97,6 +141,22 @@ public struct CollectionListResponse: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case items
         case nextCursor = "next_cursor"
+    }
+}
+
+public struct CrateCollection: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let recordIds: [UUID]
+    public let createdAt: String
+    public let updatedAt: String
+
+    public init(id: UUID, name: String, recordIds: [UUID], createdAt: String, updatedAt: String) {
+        self.id = id
+        self.name = name
+        self.recordIds = recordIds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
 

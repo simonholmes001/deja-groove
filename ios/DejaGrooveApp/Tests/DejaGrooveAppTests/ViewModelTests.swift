@@ -70,6 +70,7 @@ final class ViewModelTests: XCTestCase {
     }
 
     func testCollectionViewModelLoadsRecords() async {
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000501")!
         let response = CollectionListResponse(items: [
             CollectionRecord(
                 id: UUID(),
@@ -79,14 +80,85 @@ final class ViewModelTests: XCTestCase {
                 createdAt: "2026-01-01T00:00:00Z",
                 updatedAt: "2026-01-01T00:00:00Z")
         ], nextCursor: nil)
-        let api = MockApiClient(collectionResponse: response)
+        let api = MockApiClient(
+            collectionResponse: response,
+            crateCollections: [
+                CrateCollection(id: collectionId, name: "Jazz", recordIds: [], createdAt: "", updatedAt: "")
+            ])
         let sut = await CollectionViewModel(api: api)
 
         await sut.load()
 
         let records = await sut.records
+        let collections = await sut.crateCollections
         XCTAssertEqual(1, records.count)
         XCTAssertEqual("John Coltrane", records.first?.album.artist)
+        XCTAssertEqual("Jazz", collections.first?.name)
+    }
+
+    func testCollectionViewModelFiltersBySearchArtistFormatAndCollection() async {
+        let blueId = UUID(uuidString: "00000000-0000-0000-0000-000000000511")!
+        let kindId = UUID(uuidString: "00000000-0000-0000-0000-000000000512")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000513")!
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: blueId,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "LP"),
+                notes: "gatefold",
+                version: 1,
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z"),
+            CollectionRecord(
+                id: kindId,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Kind of Blue", artist: "Miles Davis", year: 1959, format: "CD"),
+                notes: nil,
+                version: 1,
+                createdAt: "2026-01-02T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z")
+        ], nextCursor: nil)
+        let api = MockApiClient(
+            collectionResponse: response,
+            crateCollections: [
+                CrateCollection(id: collectionId, name: "Favorites", recordIds: [blueId], createdAt: "", updatedAt: "")
+            ])
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        await MainActor.run {
+            sut.search = "blue"
+            sut.selectedArtist = "Joni Mitchell"
+            sut.selectedFormat = "LP"
+            sut.selectedCollectionId = collectionId
+        }
+
+        let records = await sut.visibleRecords
+        XCTAssertEqual([blueId], records.map(\.id))
+    }
+
+    func testCollectionViewModelCreatesAndAssignsCollections() async {
+        let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000521")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000522")!
+        let api = MockApiClient(
+            collectionResponse: CollectionListResponse(items: [
+                CollectionRecord(
+                    id: recordId,
+                    album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "LP"),
+                    notes: nil,
+                    version: 1,
+                    createdAt: "",
+                    updatedAt: "")
+            ], nextCursor: nil),
+            crateCollections: [],
+            createdCollection: CrateCollection(id: collectionId, name: "Favorites", recordIds: [], createdAt: "", updatedAt: ""))
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        await sut.createCollection(named: "Favorites")
+        await sut.setRecord(recordId, in: collectionId, isIncluded: true)
+
+        let collections = await sut.crateCollections
+        XCTAssertEqual("Favorites", collections.first?.name)
+        XCTAssertEqual([recordId], collections.first?.recordIds)
     }
 
     func testCollectionViewModelAuthenticationErrorShowsSignInMessageAndRefreshesAuthState() async {
@@ -221,6 +293,8 @@ actor MockApiClient: ApiClient {
     let scanResponse: ScanResponse
     let resolveResponse: ScanResponse
     let collectionResponse: CollectionListResponse
+    private(set) var crateCollections: [CrateCollection]
+    private let createdCollection: CrateCollection?
     private(set) var resolveCallCount = 0
     private(set) var scanCallCount = 0
     private var scanErrorSequence: [ApiClientError]
@@ -232,6 +306,8 @@ actor MockApiClient: ApiClient {
         scanResponse: ScanResponse? = nil,
         resolveResponse: ScanResponse? = nil,
         collectionResponse: CollectionListResponse? = nil,
+        crateCollections: [CrateCollection] = [],
+        createdCollection: CrateCollection? = nil,
         scanErrorSequence: [ApiClientError] = [],
         resolveErrorSequence: [ApiClientError] = [],
         collectionErrorSequence: [ApiClientError] = [],
@@ -241,6 +317,8 @@ actor MockApiClient: ApiClient {
         self.scanResponse = scanResponse ?? fallback
         self.resolveResponse = resolveResponse ?? fallback
         self.collectionResponse = collectionResponse ?? CollectionListResponse(items: [], nextCursor: nil)
+        self.crateCollections = crateCollections
+        self.createdCollection = createdCollection
         self.scanErrorSequence = scanErrorSequence
         self.resolveErrorSequence = resolveErrorSequence
         self.collectionErrorSequence = collectionErrorSequence
@@ -290,6 +368,52 @@ actor MockApiClient: ApiClient {
 
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         return CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        guard let search, !search.isEmpty else { return crateCollections }
+        return crateCollections.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        let collection = createdCollection ?? CrateCollection(id: UUID(), name: name, recordIds: [], createdAt: "", updatedAt: "")
+        crateCollections.append(collection)
+        return collection
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        guard let index = crateCollections.firstIndex(where: { $0.id == id }) else {
+            throw ApiClientError.invalidResponse
+        }
+        let current = crateCollections[index]
+        let renamed = CrateCollection(id: current.id, name: name, recordIds: current.recordIds, createdAt: current.createdAt, updatedAt: current.updatedAt)
+        crateCollections[index] = renamed
+        return renamed
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {
+        crateCollections.removeAll { $0.id == id }
+    }
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        guard let index = crateCollections.firstIndex(where: { $0.id == collectionId }) else {
+            throw ApiClientError.invalidResponse
+        }
+        let current = crateCollections[index]
+        let recordIds = current.recordIds.contains(recordId) ? current.recordIds : current.recordIds + [recordId]
+        let updated = CrateCollection(id: current.id, name: current.name, recordIds: recordIds, createdAt: current.createdAt, updatedAt: current.updatedAt)
+        crateCollections[index] = updated
+        return updated
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        guard let index = crateCollections.firstIndex(where: { $0.id == collectionId }) else {
+            throw ApiClientError.invalidResponse
+        }
+        let current = crateCollections[index]
+        let updated = CrateCollection(id: current.id, name: current.name, recordIds: current.recordIds.filter { $0 != recordId }, createdAt: current.createdAt, updatedAt: current.updatedAt)
+        crateCollections[index] = updated
+        return updated
     }
 }
 

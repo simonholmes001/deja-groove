@@ -17,10 +17,18 @@ const defaultPrompt = [
   "{",
   "  \"status\": \"safe_to_buy\" | \"ambiguous\" | \"no_match\",",
   "  \"confidence\": number,",
-  "  \"album\": { \"title\": string, \"artist\": string, \"year\": number|null, \"format\": string|null, \"mbid\": string|null, \"discogs_release_id\": string|null } | null,",
+  "  \"album\": {",
+  "    \"title\": string, \"artist\": string, \"year\": number|null,",
+  "    \"first_release_year\": number|null, \"release_year\": number|null,",
+  "    \"format\": string|null, \"label\": string|null, \"catalog_number\": string|null,",
+  "    \"country\": string|null, \"back_cover_text\": string|null, \"release_notes\": string|null,",
+  "    \"mbid\": string|null, \"discogs_release_id\": string|null",
+  "  } | null,",
   "  \"candidates\": [same album shape]",
   "}",
   "Use status safe_to_buy for one strong match, ambiguous for multiple plausible matches, and no_match when the cover is not recognizable.",
+  "Use year as the best available release year, first_release_year for the album's original first release, and release_year for this visible pressing/version.",
+  "Only transcribe back_cover_text when the provided image actually shows readable back-cover text; otherwise return null.",
   "Do not invent MBID or Discogs IDs; use null unless you are certain."
 ].join("\n");
 
@@ -82,7 +90,14 @@ function isAlbum(value: unknown): value is Album {
     && typeof value.title === "string"
     && typeof value.artist === "string"
     && optionalNumber(value.year)
+    && optionalNumber(value.first_release_year)
+    && optionalNumber(value.release_year)
     && optionalString(value.format)
+    && optionalString(value.label)
+    && optionalString(value.catalog_number)
+    && optionalString(value.country)
+    && optionalString(value.back_cover_text)
+    && optionalString(value.release_notes)
     && optionalString(value.mbid)
     && optionalString(value.discogs_release_id);
 }
@@ -108,9 +123,30 @@ const albumSchema = {
     title: { type: "string" },
     artist: { type: "string" },
     year: { type: ["number", "null"] },
-    format: { type: ["string", "null"] }
+    first_release_year: { type: ["number", "null"] },
+    release_year: { type: ["number", "null"] },
+    format: { type: ["string", "null"] },
+    label: { type: ["string", "null"] },
+    catalog_number: { type: ["string", "null"] },
+    country: { type: ["string", "null"] },
+    back_cover_text: { type: ["string", "null"] },
+    release_notes: { type: ["string", "null"] }
   },
-  required: ["mbid", "discogs_release_id", "title", "artist", "year", "format"]
+  required: [
+    "mbid",
+    "discogs_release_id",
+    "title",
+    "artist",
+    "year",
+    "first_release_year",
+    "release_year",
+    "format",
+    "label",
+    "catalog_number",
+    "country",
+    "back_cover_text",
+    "release_notes"
+  ]
 } as const;
 
 const recognitionSchema = {

@@ -12,6 +12,12 @@ public protocol ApiClient: Sendable {
     func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse
     func fetchCollection(search: String?) async throws -> CollectionListResponse
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection]
+    func createCrateCollection(name: String) async throws -> CrateCollection
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection
+    func deleteCrateCollection(id: UUID) async throws
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection
 }
 
 public protocol HttpTransport: Sendable {
@@ -114,6 +120,30 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
         return try await send(request)
     }
 
+    public func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
+    public func createCrateCollection(name: String) async throws -> CrateCollection {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
+    public func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
+    public func deleteCrateCollection(id: UUID) async throws {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
+    public func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
+    public func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        throw unsupportedLocalCollectionManagementError()
+    }
+
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await transport.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
@@ -130,6 +160,16 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
     private func applyAuth(to request: inout URLRequest) async {
         guard let token = await authTokenProvider(), !token.isEmpty else { return }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+
+    private func unsupportedLocalCollectionManagementError() -> ApiClientError {
+        ApiClientError.httpError(
+            501,
+            ApiError(
+                code: "local_collection_management_only",
+                message: "Collection management is available in local runtime mode.",
+                retryable: false,
+                requestId: UUID()))
     }
 }
 

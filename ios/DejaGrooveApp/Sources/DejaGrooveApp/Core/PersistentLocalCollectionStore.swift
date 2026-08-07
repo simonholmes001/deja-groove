@@ -28,6 +28,11 @@ public struct SystemISO8601Clock: ISO8601Clock {
 }
 
 public actor PersistentLocalCollectionStore: LocalCollectionStore {
+    private struct StoreDocument: Codable {
+        var records: [CollectionRecord]
+        var collections: [CrateCollection]
+    }
+
     private let fileURL: URL
     private let idProvider: UUIDProviding
     private let clock: ISO8601Clock
@@ -52,13 +57,13 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
     }
 
     public func contains(album: Album) async throws -> Bool {
-        let records = try loadRecords()
+        let records = try loadDocument().records
         return records.contains(where: { Self.isDuplicate($0.album, album) })
     }
 
     public func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
-        var records = try loadRecords()
-        if !addAnyway, records.contains(where: { Self.isDuplicate($0.album, album) }) {
+        var document = try loadDocument()
+        if !addAnyway, document.records.contains(where: { Self.isDuplicate($0.album, album) }) {
             throw ApiClientError.httpError(
                 409,
                 ApiError(
@@ -76,13 +81,13 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             version: 1,
             createdAt: now,
             updatedAt: now)
-        records.append(record)
-        try save(records: records)
+        document.records.append(record)
+        try save(document: document)
         return Self.itemResponse(from: record)
     }
 
     public func fetchCollection(search: String?) async throws -> CollectionListResponse {
-        let records = try loadRecords()
+        let records = try loadDocument().records
             .filter { Self.matchesSearch($0, search: search) }
             .sorted { lhs, rhs in
                 if lhs.createdAt == rhs.createdAt {
@@ -94,8 +99,8 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
     }
 
     public func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
-        var records = try loadRecords()
-        guard let index = records.firstIndex(where: { $0.id == id }) else {
+        var document = try loadDocument()
+        guard let index = document.records.firstIndex(where: { $0.id == id }) else {
             throw ApiClientError.httpError(
                 404,
                 ApiError(
@@ -105,14 +110,21 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
                     requestId: await duplicateRequestIdProvider.nextUUID()))
         }
 
-        let current = records[index]
+        let current = document.records[index]
         let patchedAlbum = Album(
             mbid: current.album.mbid,
             discogsReleaseId: current.album.discogsReleaseId,
             title: current.album.title,
             artist: current.album.artist,
             year: current.album.year,
-            format: format ?? current.album.format)
+            format: format ?? current.album.format,
+            firstReleaseYear: current.album.firstReleaseYear,
+            releaseYear: current.album.releaseYear,
+            label: current.album.label,
+            catalogNumber: current.album.catalogNumber,
+            country: current.album.country,
+            backCoverText: current.album.backCoverText,
+            releaseNotes: current.album.releaseNotes)
         let patched = CollectionRecord(
             id: current.id,
             album: patchedAlbum,
@@ -120,9 +132,101 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             version: current.version + 1,
             createdAt: current.createdAt,
             updatedAt: await clock.now())
-        records[index] = patched
-        try save(records: records)
+        document.records[index] = patched
+        try save(document: document)
         return Self.itemResponse(from: patched)
+    }
+
+    public func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        try loadDocument().collections
+            .filter { Self.matchesCollectionSearch($0, search: search) }
+            .sorted { lhs, rhs in
+                Self.normalized(lhs.name) < Self.normalized(rhs.name)
+            }
+    }
+
+    public func createCrateCollection(name: String) async throws -> CrateCollection {
+        var document = try loadDocument()
+        let cleanName = Self.cleanCollectionName(name)
+        try await validateCollectionName(cleanName, in: document.collections)
+
+        let now = await clock.now()
+        let collection = CrateCollection(
+            id: await idProvider.nextUUID(),
+            name: cleanName,
+            recordIds: [],
+            createdAt: now,
+            updatedAt: now)
+        document.collections.append(collection)
+        try save(document: document)
+        return collection
+    }
+
+    public func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        var document = try loadDocument()
+        guard let index = document.collections.firstIndex(where: { $0.id == id }) else {
+            throw await collectionNotFoundError()
+        }
+
+        let cleanName = Self.cleanCollectionName(name)
+        try await validateCollectionName(cleanName, in: document.collections, excluding: id)
+        let current = document.collections[index]
+        let renamed = CrateCollection(
+            id: current.id,
+            name: cleanName,
+            recordIds: current.recordIds,
+            createdAt: current.createdAt,
+            updatedAt: await clock.now())
+        document.collections[index] = renamed
+        try save(document: document)
+        return renamed
+    }
+
+    public func deleteCrateCollection(id: UUID) async throws {
+        var document = try loadDocument()
+        guard let index = document.collections.firstIndex(where: { $0.id == id }) else {
+            throw await collectionNotFoundError()
+        }
+        document.collections.remove(at: index)
+        try save(document: document)
+    }
+
+    public func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        var document = try loadDocument()
+        guard document.records.contains(where: { $0.id == recordId }) else {
+            throw await recordNotFoundError()
+        }
+        guard let index = document.collections.firstIndex(where: { $0.id == collectionId }) else {
+            throw await collectionNotFoundError()
+        }
+        let current = document.collections[index]
+        let updatedIds = current.recordIds.contains(recordId) ? current.recordIds : current.recordIds + [recordId]
+        let updated = CrateCollection(
+            id: current.id,
+            name: current.name,
+            recordIds: updatedIds,
+            createdAt: current.createdAt,
+            updatedAt: await clock.now())
+        document.collections[index] = updated
+        try save(document: document)
+        return updated
+    }
+
+    public func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        var document = try loadDocument()
+        guard let index = document.collections.firstIndex(where: { $0.id == collectionId }) else {
+            throw await collectionNotFoundError()
+        }
+        let current = document.collections[index]
+        let updated = CrateCollection(
+            id: current.id,
+            name: current.name,
+            recordIds: current.recordIds.filter { $0 != recordId },
+            createdAt: current.createdAt,
+            updatedAt: await clock.now())
+        document.collections[index] = updated
+        try save(document: document)
+        return updated
     }
 
     public static func defaultStoreURL() -> URL {
@@ -133,21 +237,25 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             .appendingPathComponent("collection.json")
     }
 
-    private func loadRecords() throws -> [CollectionRecord] {
+    private func loadDocument() throws -> StoreDocument {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return []
+            return StoreDocument(records: [], collections: [])
         }
         let data = try Data(contentsOf: fileURL)
         if data.isEmpty {
-            return []
+            return StoreDocument(records: [], collections: [])
         }
-        return try decoder.decode([CollectionRecord].self, from: data)
+        if let document = try? decoder.decode(StoreDocument.self, from: data) {
+            return document
+        }
+        let records = try decoder.decode([CollectionRecord].self, from: data)
+        return StoreDocument(records: records, collections: [])
     }
 
-    private func save(records: [CollectionRecord]) throws {
+    private func save(document: StoreDocument) throws {
         let directory = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try encoder.encode(records)
+        let data = try encoder.encode(document)
         try data.write(to: fileURL, options: [.atomic])
     }
 
@@ -191,6 +299,31 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         return normalized(record.album.title).contains(query)
             || normalized(record.album.artist).contains(query)
             || normalized(record.notes ?? "").contains(query)
+            || normalized(record.album.format ?? "").contains(query)
+            || normalized(record.album.label ?? "").contains(query)
+            || normalized(record.album.catalogNumber ?? "").contains(query)
+            || normalized(record.album.country ?? "").contains(query)
+            || normalized(record.album.backCoverText ?? "").contains(query)
+            || normalized(record.album.releaseNotes ?? "").contains(query)
+            || Self.year(record.album.year, matches: query)
+            || Self.year(record.album.firstReleaseYear, matches: query)
+            || Self.year(record.album.releaseYear, matches: query)
+    }
+
+    private static func matchesCollectionSearch(_ collection: CrateCollection, search: String?) -> Bool {
+        guard let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return true
+        }
+        return normalized(collection.name).contains(normalized(search))
+    }
+
+    private static func cleanCollectionName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func year(_ year: Int?, matches query: String) -> Bool {
+        guard let year else { return false }
+        return String(year).contains(query)
     }
 
     private static func normalized(_ value: String) -> String {
@@ -199,5 +332,50 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .lowercased()
+    }
+
+    private func validateCollectionName(
+        _ name: String,
+        in collections: [CrateCollection],
+        excluding excludedId: UUID? = nil
+    ) async throws {
+        guard !name.isEmpty else {
+            throw ApiClientError.httpError(
+                400,
+                ApiError(
+                    code: "collection_name_required",
+                    message: "Collection name is required.",
+                    retryable: false,
+                    requestId: await duplicateRequestIdProvider.nextUUID()))
+        }
+        if collections.contains(where: { $0.id != excludedId && Self.normalized($0.name) == Self.normalized(name) }) {
+            throw ApiClientError.httpError(
+                409,
+                ApiError(
+                    code: "collection_name_duplicate",
+                    message: "A collection with this name already exists.",
+                    retryable: false,
+                    requestId: await duplicateRequestIdProvider.nextUUID()))
+        }
+    }
+
+    private func recordNotFoundError() async -> ApiClientError {
+        ApiClientError.httpError(
+            404,
+            ApiError(
+                code: "collection_record_not_found",
+                message: "Collection record was not found.",
+                retryable: false,
+                requestId: await duplicateRequestIdProvider.nextUUID()))
+    }
+
+    private func collectionNotFoundError() async -> ApiClientError {
+        ApiClientError.httpError(
+            404,
+            ApiError(
+                code: "crate_collection_not_found",
+                message: "Crate collection was not found.",
+                retryable: false,
+                requestId: await duplicateRequestIdProvider.nextUUID()))
     }
 }

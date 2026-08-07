@@ -116,6 +116,30 @@ private struct DisabledApiClient: ApiClient {
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
         throw ApiClientError.encodingFailure
     }
+
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        throw ApiClientError.encodingFailure
+    }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        throw ApiClientError.encodingFailure
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        throw ApiClientError.encodingFailure
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {
+        throw ApiClientError.encodingFailure
+    }
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        throw ApiClientError.encodingFailure
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        throw ApiClientError.encodingFailure
+    }
 }
 
 private final class DisabledInteractiveTokenProvider: InteractiveAuthTokenProvider, @unchecked Sendable {

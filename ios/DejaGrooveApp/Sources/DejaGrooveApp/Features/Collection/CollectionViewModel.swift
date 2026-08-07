@@ -3,10 +3,14 @@ import Foundation
 @MainActor
 public final class CollectionViewModel: ObservableObject {
     @Published public private(set) var records: [CollectionRecord] = []
+    @Published public private(set) var crateCollections: [CrateCollection] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var requiresAuthentication = false
     @Published public var search: String = ""
+    @Published public var selectedArtist: String = ""
+    @Published public var selectedFormat: String = ""
+    @Published public var selectedCollectionId: UUID?
 
     private let api: ApiClient
     private let onAuthenticationRequired: @Sendable () async -> Void
@@ -19,6 +23,31 @@ public final class CollectionViewModel: ObservableObject {
         self.onAuthenticationRequired = onAuthenticationRequired
     }
 
+    public var visibleRecords: [CollectionRecord] {
+        records.filter { record in
+            matchesSearch(record)
+                && matchesArtist(record)
+                && matchesFormat(record)
+                && matchesCollection(record)
+        }
+    }
+
+    public var availableArtists: [String] {
+        uniqueSorted(records.map(\.album.artist))
+    }
+
+    public var availableFormats: [String] {
+        uniqueSorted(records.compactMap(\.album.format))
+    }
+
+    public func collections(containing recordId: UUID) -> [CrateCollection] {
+        crateCollections.filter { $0.recordIds.contains(recordId) }
+    }
+
+    public func isRecord(_ recordId: UUID, in collectionId: UUID) -> Bool {
+        crateCollections.first(where: { $0.id == collectionId })?.recordIds.contains(recordId) ?? false
+    }
+
     public func load() async {
         isLoading = true
         errorMessage = nil
@@ -26,9 +55,11 @@ public final class CollectionViewModel: ObservableObject {
         do {
             let response = try await api.fetchCollection(search: search.isEmpty ? nil : search)
             records = response.items
+            crateCollections = try await api.fetchCrateCollections(search: nil)
         } catch let error as ApiClientError {
             if Self.isAuthenticationError(error) {
                 records = []
+                crateCollections = []
                 requiresAuthentication = true
                 errorMessage = "Sign in to view My Crate."
                 await onAuthenticationRequired()
@@ -39,6 +70,61 @@ public final class CollectionViewModel: ObservableObject {
             errorMessage = "Unexpected error."
         }
         isLoading = false
+    }
+
+    public func createCollection(named name: String) async {
+        do {
+            _ = try await api.createCrateCollection(name: name)
+            crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
+    }
+
+    public func renameCollection(id: UUID, name: String) async {
+        do {
+            _ = try await api.renameCrateCollection(id: id, name: name)
+            crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
+    }
+
+    public func deleteCollection(id: UUID) async {
+        do {
+            try await api.deleteCrateCollection(id: id)
+            if selectedCollectionId == id {
+                selectedCollectionId = nil
+            }
+            crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
+    }
+
+    public func setRecord(_ recordId: UUID, in collectionId: UUID, isIncluded: Bool) async {
+        do {
+            if isIncluded {
+                _ = try await api.addRecord(recordId, toCrateCollection: collectionId)
+            } else {
+                _ = try await api.removeRecord(recordId, fromCrateCollection: collectionId)
+            }
+            crateCollections = try await api.fetchCrateCollections(search: nil)
+            errorMessage = nil
+        } catch let error as ApiClientError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = "Unexpected error."
+        }
     }
 
     private static func message(for error: ApiClientError) -> String {
@@ -57,5 +143,55 @@ public final class CollectionViewModel: ObservableObject {
         default:
             return false
         }
+    }
+
+    private func matchesSearch(_ record: CollectionRecord) -> Bool {
+        let cleanSearch = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanSearch.isEmpty else { return true }
+        let query = Self.normalized(cleanSearch)
+        let searchable = [
+            record.album.artist,
+            record.album.title,
+            record.album.format,
+            record.album.label,
+            record.album.catalogNumber,
+            record.album.country,
+            record.album.backCoverText,
+            record.album.releaseNotes,
+            record.notes,
+            record.album.year.map(String.init),
+            record.album.firstReleaseYear.map(String.init),
+            record.album.releaseYear.map(String.init)
+        ].compactMap { $0 }
+        return searchable.contains { Self.normalized($0).contains(query) }
+    }
+
+    private func matchesArtist(_ record: CollectionRecord) -> Bool {
+        selectedArtist.isEmpty || record.album.artist == selectedArtist
+    }
+
+    private func matchesFormat(_ record: CollectionRecord) -> Bool {
+        selectedFormat.isEmpty || record.album.format == selectedFormat
+    }
+
+    private func matchesCollection(_ record: CollectionRecord) -> Bool {
+        guard let selectedCollectionId else { return true }
+        return crateCollections
+            .first(where: { $0.id == selectedCollectionId })?
+            .recordIds
+            .contains(record.id) ?? false
+    }
+
+    private func uniqueSorted(_ values: [String]) -> [String] {
+        Array(Set(values.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
+            .sorted { Self.normalized($0) < Self.normalized($1) }
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .lowercased()
     }
 }

@@ -12,7 +12,14 @@ test("parseRecognitionOutput accepts the scan contract", () => {
       title: "Blue Train",
       artist: "John Coltrane",
       year: 1958,
-      format: "LP"
+      first_release_year: 1958,
+      release_year: 1958,
+      format: "LP",
+      label: "Blue Note",
+      catalog_number: "BLP 1577",
+      country: "US",
+      back_cover_text: null,
+      release_notes: "Hard bop album"
     },
     candidates: []
   }));

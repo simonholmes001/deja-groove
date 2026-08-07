@@ -12,7 +12,14 @@ test("toScanResponse returns one album for strong matches", () => {
       title: "Kind of Blue",
       artist: "Miles Davis",
       year: 1959,
-      format: "LP"
+      first_release_year: 1959,
+      release_year: 1959,
+      format: "LP",
+      label: null,
+      catalog_number: null,
+      country: null,
+      back_cover_text: null,
+      release_notes: null
     },
     candidates: []
   }, "00000000-0000-4000-8000-000000000001");
@@ -35,7 +42,14 @@ test("toScanResponse returns candidates for ambiguous matches", () => {
         title: "Unknown Pleasures",
         artist: "Joy Division",
         year: 1979,
-        format: "LP"
+        first_release_year: 1979,
+        release_year: 1979,
+        format: "LP",
+        label: null,
+        catalog_number: null,
+        country: null,
+        back_cover_text: null,
+        release_notes: null
       }
     ]
   }, "00000000-0000-4000-8000-000000000002");

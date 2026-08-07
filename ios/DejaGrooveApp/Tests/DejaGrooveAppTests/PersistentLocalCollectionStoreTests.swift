@@ -151,6 +151,95 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         }
     }
 
+    func testCreateRenameDeleteCrateCollectionsAndAssignAlbums() async throws {
+        let albumId = UUID(uuidString: "00000000-0000-0000-0000-000000000401")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000402")!
+        let store = try makeStore(
+            ids: [albumId, collectionId],
+            instants: [
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "2026-01-03T00:00:00Z",
+                "2026-01-04T00:00:00Z"
+            ])
+
+        _ = try await store.addToCollection(
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "LP"),
+            notes: nil,
+            addAnyway: false)
+        let favorites = try await store.createCrateCollection(name: "Favorites")
+        XCTAssertEqual(collectionId, favorites.id)
+
+        let assigned = try await store.addRecord(albumId, toCrateCollection: collectionId)
+        XCTAssertEqual([albumId], assigned.recordIds)
+
+        let renamed = try await store.renameCrateCollection(id: collectionId, name: "Sunday Records")
+        XCTAssertEqual("Sunday Records", renamed.name)
+        XCTAssertEqual([albumId], renamed.recordIds)
+
+        let collections = try await store.fetchCrateCollections(search: "sunday")
+        XCTAssertEqual(1, collections.count)
+
+        try await store.deleteCrateCollection(id: collectionId)
+        let remaining = try await store.fetchCrateCollections(search: nil)
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
+    func testCollectionNameValidationRejectsEmptyAndDuplicateNames() async throws {
+        let store = try makeStore(
+            ids: [UUID(uuidString: "00000000-0000-0000-0000-000000000411")!],
+            instants: ["2026-01-01T00:00:00Z"])
+
+        do {
+            _ = try await store.createCrateCollection(name: " ")
+            XCTFail("Expected empty collection name to fail")
+        } catch let error as ApiClientError {
+            if case .httpError(let status, let apiError) = error {
+                XCTAssertEqual(400, status)
+                XCTAssertEqual("collection_name_required", apiError?.code)
+            } else {
+                XCTFail("Expected ApiClientError.httpError")
+            }
+        }
+
+        _ = try await store.createCrateCollection(name: "Favorites")
+        do {
+            _ = try await store.createCrateCollection(name: " favorites ")
+            XCTFail("Expected duplicate collection name to fail")
+        } catch let error as ApiClientError {
+            if case .httpError(let status, let apiError) = error {
+                XCTAssertEqual(409, status)
+                XCTAssertEqual("collection_name_duplicate", apiError?.code)
+            } else {
+                XCTFail("Expected ApiClientError.httpError")
+            }
+        }
+    }
+
+    func testMigratesLegacyFlatCollectionFile() async throws {
+        let fileURL = temporaryStoreURL()
+        let legacyRecord = CollectionRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000421")!,
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Hejira", artist: "Joni Mitchell", year: 1976, format: "LP"),
+            notes: "legacy",
+            version: 1,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z")
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode([legacyRecord]).write(to: fileURL)
+
+        let store = PersistentLocalCollectionStore(fileURL: fileURL)
+        let records = try await store.fetchCollection(search: "hejira")
+        let collections = try await store.fetchCrateCollections(search: nil)
+
+        XCTAssertEqual(1, records.items.count)
+        XCTAssertEqual("legacy", records.items.first?.notes)
+        XCTAssertTrue(collections.isEmpty)
+    }
+
     private func makeStore(ids: [UUID], instants: [String]) throws -> PersistentLocalCollectionStore {
         PersistentLocalCollectionStore(
             fileURL: temporaryStoreURL(),

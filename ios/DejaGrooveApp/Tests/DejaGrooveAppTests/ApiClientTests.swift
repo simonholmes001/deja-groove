@@ -280,6 +280,29 @@ actor LocalCollectionStoreSpy: LocalCollectionStore {
             updatedAt: "")
     }
 
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        []
+    }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        CrateCollection(id: UUID(), name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        CrateCollection(id: id, name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {
+    }
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [recordId], createdAt: "", updatedAt: "")
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [], createdAt: "", updatedAt: "")
+    }
+
     func snapshot() -> LocalCollectionStoreSnapshot {
         LocalCollectionStoreSnapshot(
             addCallCount: addCallCount,
