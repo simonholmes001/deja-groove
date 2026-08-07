@@ -99,11 +99,11 @@ public struct ScanView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
-                if let collectionMessage = viewModel.collectionMessage {
-                    Text(collectionMessage)
-                        .foregroundStyle(.secondary)
-                        .font(.footnote)
-                }
+            }
+            if let collectionMessage = viewModel.collectionMessage {
+                Text(collectionMessage)
+                    .foregroundStyle(.secondary)
+                    .font(.footnote)
             }
 
             Spacer()
@@ -129,8 +129,13 @@ private struct ScanResultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Status: \(response.status)")
-                .font(.headline)
+            HStack(spacing: 6) {
+                Text("Status:")
+                    .font(.headline)
+                Text(statusLabel)
+                    .font(.headline.bold())
+                    .foregroundStyle(statusColor)
+            }
             if let album = response.album {
                 Text("\(album.artist) — \(album.title)")
             }
@@ -166,6 +171,36 @@ private struct ScanResultView: View {
         }
         .onChange(of: response.requestId) { _, _ in
             selectedCandidateIndex = nil
+        }
+    }
+
+    private var statusLabel: String {
+        switch response.status {
+        case "safe_to_buy":
+            return "SAFE TO BUY"
+        case "owned":
+            return "DUPLICATE"
+        case "ambiguous":
+            return "AMBIGUOUS"
+        case "no_match":
+            return "NO MATCH"
+        default:
+            return response.status
+                .replacingOccurrences(of: "_", with: " ")
+                .uppercased()
+        }
+    }
+
+    private var statusColor: Color {
+        switch response.status {
+        case "safe_to_buy":
+            return .green
+        case "owned":
+            return .red
+        case "ambiguous":
+            return .orange
+        default:
+            return .secondary
         }
     }
 }

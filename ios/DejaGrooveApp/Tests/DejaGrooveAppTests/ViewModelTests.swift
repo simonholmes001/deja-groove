@@ -134,6 +134,25 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual(1, callbackCount)
     }
 
+    func testScanViewModelClearsResultAfterSuccessfulAddToCollection() async {
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: nil, title: "T", artist: "A", year: 2001, format: nil),
+            candidates: [],
+            requestId: UUID())
+        let api = MockApiClient(scanResponse: response)
+        let sut = await ScanViewModel(api: api)
+
+        await sut.submitScan(imageData: Data([0xFF, 0xD8]))
+        await sut.addResultToCollection()
+
+        let state = await sut.state
+        let message = await sut.collectionMessage
+        XCTAssertEqual(.idle, state)
+        XCTAssertEqual("Added to My Crate.", message)
+    }
+
     func testScanViewModelRetryableHttpErrorExposesRetryFlagAndCanRetryLastScan() async {
         let failure = ApiClientError.httpError(
             503,
