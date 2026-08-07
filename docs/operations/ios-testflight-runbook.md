@@ -82,3 +82,25 @@ The target runtime is:
 Until the minimal Function is implemented, keep the app in `hosted` mode only
 for comparison against existing deployed environments. New iPhone-first
 testing should target `local_proxy` mode once the Function endpoint exists.
+
+## Local Xcode User Testing
+
+Use this path for direct testing from Xcode on a physical iPhone. No Azure CLI
+commands are required.
+
+1. In the Azure Portal, open the Function App
+   `func-deja-recognition-dev-yzoqh3gf`.
+2. Open **App keys** and copy the `default` function key.
+3. In the repository, copy
+   `ios/DejaGroove/Config/Debug.local.example.xcconfig` to
+   `ios/DejaGroove/Config/Debug.local.xcconfig`.
+4. Replace `REPLACE_WITH_AZURE_FUNCTION_DEFAULT_KEY` in
+   `Debug.local.xcconfig` with the copied key.
+5. Open `ios/DejaGroove.xcodeproj` in Xcode.
+6. Select the `DejaGroove` scheme and a connected iPhone as the run
+   destination.
+7. Build and run. The Debug build uses `local_proxy`, calls the deployed
+   Function for recognition, and stores the collection locally on the device.
+
+`Debug.local.xcconfig` is ignored by git. Do not put the real Function key in
+`Debug.xcconfig`, `Release.xcconfig`, or any committed file.

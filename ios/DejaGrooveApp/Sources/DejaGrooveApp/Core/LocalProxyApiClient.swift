@@ -45,9 +45,18 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
 }
 
 public enum LocalProxyApiClientFactory {
-    public static func make(recognitionProxyBaseURL: URL? = nil) -> LocalProxyApiClient {
-        LocalProxyApiClient(
-            scanRuntime: UnconfiguredLocalScanRuntime(recognitionProxyBaseURL: recognitionProxyBaseURL),
+    public static func make(recognitionProxyBaseURL: URL? = nil, recognitionProxyKey: String? = nil) -> LocalProxyApiClient {
+        let scanRuntime: LocalScanRuntime
+        if let recognitionProxyBaseURL, let recognitionProxyKey, !recognitionProxyKey.isEmpty {
+            scanRuntime = RecognitionProxyScanRuntime(
+                baseURL: recognitionProxyBaseURL,
+                functionKey: recognitionProxyKey)
+        } else {
+            scanRuntime = UnconfiguredLocalScanRuntime(recognitionProxyBaseURL: recognitionProxyBaseURL)
+        }
+
+        return LocalProxyApiClient(
+            scanRuntime: scanRuntime,
             collectionStore: PersistentLocalCollectionStore())
     }
 
