@@ -27,6 +27,7 @@ detection, and local persistence.
 infrastructure/
 ├── bicep/
 │   ├── minimal-function.bicep      # subscription-scope RG bootstrap
+│   ├── function-onedeploy.bicep    # Flex Consumption code deployment
 │   ├── recognition-function.bicep  # Function resources in the recognition RG
 │   └── parameters/
 │       └── dev.bicepparam
@@ -67,6 +68,12 @@ For scan calls after deployment:
   runs when `minimal-function.bicep` exists.
 - `infrastructure-deploy-dev.yaml`: push-to-main and manual dev deployment
   using `infrastructure/scripts/deploy.sh dev`; deploys infrastructure and publishes Function code after validation.
+
+Flex Consumption code publish uses One Deploy. The deploy script uploads the
+ready-to-run package to the configured deployment blob container as
+`released-package.zip`, invokes the `Microsoft.Web/sites/extensions/onedeploy`
+resource, then verifies `GET /health` and the protected `POST /v1/scan`
+without a function key.
 
 ## Local Usage
 

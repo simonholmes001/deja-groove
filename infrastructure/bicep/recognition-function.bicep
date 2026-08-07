@@ -10,6 +10,9 @@ param appBaseName string
 @description('OpenAI API key. This is stored in Key Vault and referenced by the Function App.')
 param openAiKey string
 
+@description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
+param deploymentPrincipalObjectId string = ''
+
 @description('OpenAI model used by the recognition proxy.')
 param openAiModel string
 
@@ -29,6 +32,7 @@ var appInsightsName = 'appi-${appBaseName}'
 var keyVaultName = take('${replace(normalizedBaseName, 'dejarecognition', 'dejarec')}${uniqueSuffix}', 24)
 
 var storageBlobDataOwnerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var storageQueueDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
 var storageTableDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
 var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
@@ -188,6 +192,16 @@ resource functionStorageBlobDataOwner 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
+resource deploymentPrincipalStorageBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deploymentPrincipalObjectId)) {
+  name: guid(storageAccount.id, deploymentPrincipalObjectId, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleId
+    principalId: deploymentPrincipalObjectId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource functionStorageQueueDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, functionApp.name, storageQueueDataContributorRoleId)
   scope: storageAccount
@@ -221,4 +235,5 @@ resource functionKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@20
 output functionAppName string = functionApp.name
 output functionAppHostName string = functionApp.properties.defaultHostName
 output storageAccountName string = storageAccount.name
+output deploymentContainerName string = deploymentContainer.name
 output keyVaultName string = keyVault.name

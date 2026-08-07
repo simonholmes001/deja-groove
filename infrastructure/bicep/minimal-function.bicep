@@ -19,6 +19,9 @@ param appBaseName string = 'deja-recognition-${environment}'
 @description('OpenAI API key. This is stored as a Function App setting.')
 param openAiKey string
 
+@description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
+param deploymentPrincipalObjectId string = ''
+
 @description('OpenAI model used by the recognition proxy.')
 param openAiModel string = 'gpt-5-mini'
 
@@ -46,6 +49,7 @@ module recognitionProxy 'recognition-function.bicep' = {
     location: location
     appBaseName: appBaseName
     openAiKey: openAiKey
+    deploymentPrincipalObjectId: deploymentPrincipalObjectId
     openAiModel: openAiModel
     enableApplicationInsights: enableApplicationInsights
     tags: tags
@@ -58,3 +62,5 @@ output resourceGroupName string = recognitionResourceGroup.name
 output scanEndpoint string = 'https://${recognitionProxy.outputs.functionAppHostName}/v1/scan'
 output healthEndpoint string = 'https://${recognitionProxy.outputs.functionAppHostName}/health'
 output keyVaultName string = recognitionProxy.outputs.keyVaultName
+output storageAccountName string = recognitionProxy.outputs.storageAccountName
+output deploymentContainerName string = recognitionProxy.outputs.deploymentContainerName

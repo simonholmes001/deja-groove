@@ -80,4 +80,5 @@ jobs:
         shell: bash
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         run: bash ./infrastructure/scripts/deploy.sh dev
