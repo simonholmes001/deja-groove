@@ -16,14 +16,14 @@ mkdir -p "${OUTPUT_DIR}"
 
 pushd "${FUNCTION_DIR}" >/dev/null
 if [[ -f package-lock.json ]]; then
-  npm ci --workspaces=false
+  npm ci --workspaces=false >&2
 else
-  npm install
+  npm install >&2
 fi
-npm run build
-npm prune --omit=dev
+npm run build >&2
+npm prune --omit=dev >&2
 rm -f "${PACKAGE_FILE}"
-zip -qr "${PACKAGE_FILE}" host.json package.json package-lock.json node_modules dist
+zip -qr "${PACKAGE_FILE}" host.json package.json package-lock.json node_modules dist >&2
 popd >/dev/null
 
 echo "${PACKAGE_FILE}"

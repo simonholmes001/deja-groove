@@ -65,6 +65,10 @@ fi
 
 echo "==> Packaging Function app..."
 PACKAGE_FILE="$("${PACKAGE_SCRIPT}")"
+if [[ ! -f "${PACKAGE_FILE}" ]]; then
+  echo "Error: Function package was not created: ${PACKAGE_FILE}" >&2
+  exit 1
+fi
 
 echo "==> Publishing Function package to ${FUNCTION_APP_NAME}..."
 az functionapp deployment source config-zip \
