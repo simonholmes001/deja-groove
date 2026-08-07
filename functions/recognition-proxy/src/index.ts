@@ -1,4 +1,5 @@
 import { app } from "@azure/functions";
+import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
 import { health } from "./health.js";
@@ -13,6 +14,10 @@ const recognition = new OpenAIAlbumRecognition({
   model: process.env.OPENAI_MODEL || "gpt-5-mini"
 });
 
+const enrichment = process.env.DISCOGS_TOKEN
+  ? new DiscogsAlbumEnrichment({ token: process.env.DISCOGS_TOKEN })
+  : new NoopAlbumEnrichment();
+
 app.http("health", {
   methods: ["GET"],
   authLevel: "anonymous",
@@ -24,5 +29,5 @@ app.http("scan", {
   methods: ["POST"],
   authLevel: "function",
   route: "v1/scan",
-  handler: createScanHandler(recognition)
+  handler: createScanHandler(recognition, enrichment)
 });

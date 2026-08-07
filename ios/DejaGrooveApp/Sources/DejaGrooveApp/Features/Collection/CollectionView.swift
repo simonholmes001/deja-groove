@@ -89,30 +89,70 @@ private struct AlbumRow: View {
     let collections: [CrateCollection]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(record.album.artist)
-                .font(.headline)
-            Text(record.album.title)
-                .font(.subheadline)
-            HStack(spacing: 8) {
-                if let year = record.album.releaseYear ?? record.album.year {
-                    Label(String(year), systemImage: "calendar")
-                }
-                if let format = record.album.format, !format.isEmpty {
-                    Label(format, systemImage: "record.circle")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            AlbumArtwork(urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl, size: 56)
 
-            if !collections.isEmpty {
-                Text(collections.map(\.name).joined(separator: ", "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.album.artist)
+                    .font(.headline)
+                Text(record.album.title)
+                    .font(.subheadline)
+                HStack(spacing: 8) {
+                    if let firstRelease = record.album.firstReleaseDate ?? record.album.firstReleaseYear.map(String.init) ?? record.album.releaseDate ?? record.album.releaseYear.map(String.init) ?? record.album.year.map(String.init) {
+                        Label(firstRelease, systemImage: "calendar")
+                    }
+                    if let format = record.album.format, !format.isEmpty {
+                        Label(format, systemImage: "record.circle")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if !collections.isEmpty {
+                    Text(collections.map(\.name).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct AlbumArtwork: View {
+    let urlString: String?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let urlString, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Rectangle()
+                .fill(.secondary.opacity(0.12))
+            Image(systemName: "record.circle")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -122,17 +162,35 @@ private struct AlbumDetailView: View {
 
     var body: some View {
         List {
+            if record.album.coverImageUrl != nil || record.album.thumbnailUrl != nil {
+                Section {
+                    HStack {
+                        Spacer()
+                        AlbumArtwork(urlString: record.album.coverImageUrl ?? record.album.thumbnailUrl, size: 220)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+
             Section("Album") {
                 detail("Artist", record.album.artist)
                 detail("Title", record.album.title)
-                detail("First Released", record.album.firstReleaseYear.map(String.init))
-                detail("This Release", (record.album.releaseYear ?? record.album.year).map(String.init))
+                detail("First Release Date", record.album.firstReleaseDate ?? record.album.firstReleaseYear.map(String.init) ?? record.album.releaseDate ?? record.album.releaseYear.map(String.init) ?? record.album.year.map(String.init))
+                detail("Discogs Release Date", record.album.releaseDate ?? record.album.releaseYear.map(String.init))
                 detail("Format", record.album.format)
                 detail("Label", record.album.label)
                 detail("Catalog Number", record.album.catalogNumber)
                 detail("Country", record.album.country)
+                detail("Barcode", record.album.barcode)
                 detail("MusicBrainz ID", record.album.mbid)
                 detail("Discogs Release", record.album.discogsReleaseId)
+                detail("Discogs Master", record.album.discogsMasterId)
+                detail("Discogs Quality", record.album.discogsDataQuality)
+                detail("Discogs API Resource", record.album.discogsResourceUrl)
+                if let discogsUrl = record.album.discogsUrl, let url = URL(string: discogsUrl) {
+                    Link("Open In Discogs", destination: url)
+                }
             }
 
             if let notes = record.notes, !notes.isEmpty {
@@ -147,9 +205,70 @@ private struct AlbumDetailView: View {
                 }
             }
 
+            if !record.album.genres.isEmpty || !record.album.styles.isEmpty {
+                Section("Genre & Style") {
+                    detail("Genres", record.album.genres.joined(separator: ", "))
+                    detail("Styles", record.album.styles.joined(separator: ", "))
+                }
+            }
+
+            if !record.album.companies.isEmpty {
+                Section("Companies") {
+                    ForEach(record.album.companies, id: \.self) { company in
+                        Text(company)
+                    }
+                }
+            }
+
+            if !record.album.tracklist.isEmpty {
+                Section("Tracklist") {
+                    ForEach(Array(record.album.tracklist.enumerated()), id: \.offset) { _, track in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(track.title)
+                            HStack(spacing: 8) {
+                                if let position = track.position, !position.isEmpty {
+                                    Text(position)
+                                }
+                                if let duration = track.duration, !duration.isEmpty {
+                                    Text(duration)
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            if !record.album.identifiers.isEmpty {
+                Section("Identifiers") {
+                    ForEach(Array(record.album.identifiers.enumerated()), id: \.offset) { _, identifier in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(identifier.type)
+                            Text([identifier.value, identifier.description]
+                                .compactMap { $0 }
+                                .joined(separator: " - "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             if let backCoverText = record.album.backCoverText, !backCoverText.isEmpty {
                 Section("Back Cover") {
                     Text(backCoverText)
+                }
+            }
+
+            if record.album.backCoverImageUrl != nil {
+                Section("Back Cover Image") {
+                    HStack {
+                        Spacer()
+                        AlbumArtwork(urlString: record.album.backCoverImageUrl, size: 220)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
                 }
             }
 

@@ -15,7 +15,32 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
             ])
 
         _ = try await store.addToCollection(
-            album: Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "vinyl"),
+            album: Album(
+                mbid: "mbid-blue",
+                discogsReleaseId: "249504",
+                discogsMasterId: "52245",
+                discogsUrl: "https://www.discogs.com/release/249504",
+                discogsResourceUrl: "https://api.discogs.com/releases/249504",
+                title: "Blue",
+                artist: "Joni Mitchell",
+                year: 1971,
+                format: "vinyl",
+                firstReleaseDate: nil,
+                releaseDate: "1971-06",
+                label: "Reprise",
+                catalogNumber: "MS 2038",
+                country: "US",
+                barcode: "075992718127",
+                coverImageUrl: "https://img.discogs.com/front.jpg",
+                thumbnailUrl: "https://img.discogs.com/thumb.jpg",
+                backCoverImageUrl: "https://img.discogs.com/back.jpg",
+                releaseNotes: "Gatefold sleeve.",
+                genres: ["Rock"],
+                styles: ["Folk Rock"],
+                companies: ["Record Company: Reprise Records"],
+                tracklist: [AlbumTrack(position: "A1", title: "All I Want", duration: "3:34")],
+                identifiers: [AlbumIdentifier(type: "Matrix / Runout", value: "MS2038A", description: "Side A")],
+                discogsDataQuality: "Correct"),
             notes: "gatefold",
             addAnyway: false)
         _ = try await store.addToCollection(
@@ -32,6 +57,16 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertEqual(1, search.items.count)
         XCTAssertEqual("Blue", search.items.first?.album.title)
         XCTAssertEqual("gatefold", search.items.first?.notes)
+
+        let barcodeSearch = try await store.fetchCollection(search: "075992718127")
+        XCTAssertEqual(1, barcodeSearch.items.count)
+        XCTAssertEqual("https://img.discogs.com/front.jpg", barcodeSearch.items.first?.album.coverImageUrl)
+
+        let trackSearch = try await store.fetchCollection(search: "all i want")
+        XCTAssertEqual(1, trackSearch.items.count)
+
+        let companySearch = try await store.fetchCollection(search: "reprise records")
+        XCTAssertEqual(1, companySearch.items.count)
     }
 
     func testAddRejectsDuplicateAlbumUnlessAddAnywayIsTrue() async throws {

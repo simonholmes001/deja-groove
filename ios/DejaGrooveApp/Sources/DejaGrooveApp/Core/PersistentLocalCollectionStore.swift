@@ -114,17 +114,32 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         let patchedAlbum = Album(
             mbid: current.album.mbid,
             discogsReleaseId: current.album.discogsReleaseId,
+            discogsMasterId: current.album.discogsMasterId,
+            discogsUrl: current.album.discogsUrl,
+            discogsResourceUrl: current.album.discogsResourceUrl,
             title: current.album.title,
             artist: current.album.artist,
             year: current.album.year,
             format: format ?? current.album.format,
             firstReleaseYear: current.album.firstReleaseYear,
             releaseYear: current.album.releaseYear,
+            firstReleaseDate: current.album.firstReleaseDate,
+            releaseDate: current.album.releaseDate,
             label: current.album.label,
             catalogNumber: current.album.catalogNumber,
             country: current.album.country,
+            barcode: current.album.barcode,
+            coverImageUrl: current.album.coverImageUrl,
+            thumbnailUrl: current.album.thumbnailUrl,
+            backCoverImageUrl: current.album.backCoverImageUrl,
             backCoverText: current.album.backCoverText,
-            releaseNotes: current.album.releaseNotes)
+            releaseNotes: current.album.releaseNotes,
+            genres: current.album.genres,
+            styles: current.album.styles,
+            companies: current.album.companies,
+            tracklist: current.album.tracklist,
+            identifiers: current.album.identifiers,
+            discogsDataQuality: current.album.discogsDataQuality)
         let patched = CollectionRecord(
             id: current.id,
             album: patchedAlbum,
@@ -303,6 +318,18 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             || normalized(record.album.label ?? "").contains(query)
             || normalized(record.album.catalogNumber ?? "").contains(query)
             || normalized(record.album.country ?? "").contains(query)
+            || normalized(record.album.barcode ?? "").contains(query)
+            || normalized(record.album.discogsReleaseId ?? "").contains(query)
+            || normalized(record.album.discogsMasterId ?? "").contains(query)
+            || normalized(record.album.discogsUrl ?? "").contains(query)
+            || normalized(record.album.discogsResourceUrl ?? "").contains(query)
+            || normalized(record.album.firstReleaseDate ?? "").contains(query)
+            || normalized(record.album.releaseDate ?? "").contains(query)
+            || normalized(record.album.genres.joined(separator: " ")).contains(query)
+            || normalized(record.album.styles.joined(separator: " ")).contains(query)
+            || normalized(record.album.companies.joined(separator: " ")).contains(query)
+            || normalized(record.album.tracklist.map(\.title).joined(separator: " ")).contains(query)
+            || normalized(record.album.identifiers.compactMap(\.value).joined(separator: " ")).contains(query)
             || normalized(record.album.backCoverText ?? "").contains(query)
             || normalized(record.album.releaseNotes ?? "").contains(query)
             || Self.year(record.album.year, matches: query)

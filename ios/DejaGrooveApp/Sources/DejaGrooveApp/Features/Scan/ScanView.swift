@@ -137,7 +137,7 @@ private struct ScanResultView: View {
                     .foregroundStyle(statusColor)
             }
             if let album = response.album {
-                Text("\(album.artist) — \(album.title)")
+                ScanAlbumSummary(album: album)
             }
             if response.status == "ambiguous" {
                 Text("Select the correct release:")
@@ -201,6 +201,83 @@ private struct ScanResultView: View {
             return .orange
         default:
             return .secondary
+        }
+    }
+}
+
+private struct ScanAlbumSummary: View {
+    let album: Album
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AlbumArtwork(urlString: album.thumbnailUrl ?? album.coverImageUrl, size: 72)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(album.artist)
+                    .font(.headline)
+                Text(album.title)
+                    .font(.subheadline)
+
+                if let firstRelease = album.firstReleaseDate ?? album.firstReleaseYear.map(String.init) ?? album.releaseDate ?? album.releaseYear.map(String.init) ?? album.year.map(String.init) {
+                    Label(firstRelease, systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let format = album.format, !format.isEmpty {
+                    Label(format, systemImage: "record.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let label = album.label, !label.isEmpty {
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let catalogNumber = album.catalogNumber, !catalogNumber.isEmpty {
+                    Text(catalogNumber)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct AlbumArtwork: View {
+    let urlString: String?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let urlString, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Rectangle()
+                .fill(.secondary.opacity(0.12))
+            Image(systemName: "record.circle")
+                .foregroundStyle(.secondary)
         }
     }
 }
