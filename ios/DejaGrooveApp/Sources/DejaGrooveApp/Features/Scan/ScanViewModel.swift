@@ -22,8 +22,10 @@ public final class ScanViewModel: ObservableObject {
     public func submitScan(imageData: Data) async {
         lastSubmittedImageData = imageData
         isLastErrorRetryable = false
-        state = .loading
+        state = .loading(.uploading)
         do {
+            await Task.yield()
+            state = .loading(.recognizing)
             let response = try await api.scan(imageData: imageData, clientScanId: UUID(), capturedAtIso: ISO8601DateFormatter().string(from: Date()))
             state = .result(response)
             isLastErrorRetryable = false
@@ -43,7 +45,7 @@ public final class ScanViewModel: ObservableObject {
 
     public func resolve(requestId: UUID, candidate: Album) async {
         isLastErrorRetryable = false
-        state = .loading
+        state = .loading(.resolving)
         do {
             let response = try await api.resolve(requestId: requestId, selectedMbid: candidate.mbid, selectedDiscogsReleaseId: candidate.discogsReleaseId)
             state = .result(response)
@@ -116,7 +118,24 @@ public final class ScanViewModel: ObservableObject {
 
 public enum ScanState: Equatable, Sendable {
     case idle
-    case loading
+    case loading(ScanProgress)
     case result(ScanResponse)
     case error(String)
+}
+
+public enum ScanProgress: Equatable, Sendable {
+    case uploading
+    case recognizing
+    case resolving
+
+    var message: String {
+        switch self {
+        case .uploading:
+            return "Preparing and uploading cover..."
+        case .recognizing:
+            return "Recognizing album..."
+        case .resolving:
+            return "Resolving selected release..."
+        }
+    }
 }

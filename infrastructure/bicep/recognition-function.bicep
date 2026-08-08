@@ -16,6 +16,9 @@ param deploymentPrincipalObjectId string = ''
 @description('OpenAI model used by the recognition proxy.')
 param openAiModel string
 
+@description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
+param scanEnrichmentTimeoutMs int
+
 @description('Enable Application Insights. Disabled by default to keep dev cost minimal.')
 param enableApplicationInsights bool
 
@@ -171,6 +174,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         {
           name: 'OPENAI_MODEL'
           value: openAiModel
+        }
+        {
+          name: 'SCAN_ENRICHMENT_TIMEOUT_MS'
+          value: string(scanEnrichmentTimeoutMs)
         }
         {
           name: 'DISCOGS_TOKEN'

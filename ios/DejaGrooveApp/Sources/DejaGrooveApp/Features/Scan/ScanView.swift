@@ -73,8 +73,8 @@ public struct ScanView: View {
             case .idle:
                 Text("Take a clear photo to start.")
                 qualityGuidance
-            case .loading:
-                ProgressView("Analyzing cover...")
+            case .loading(let progress):
+                ProgressView(progress.message)
             case .error(let message):
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message).foregroundStyle(.red)

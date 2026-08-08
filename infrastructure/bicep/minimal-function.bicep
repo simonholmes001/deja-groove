@@ -25,6 +25,9 @@ param deploymentPrincipalObjectId string = ''
 @description('OpenAI model used by the recognition proxy.')
 param openAiModel string = 'gpt-5-mini'
 
+@description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
+param scanEnrichmentTimeoutMs int = 1500
+
 @description('Enable Application Insights. Disabled by default to keep dev cost minimal.')
 param enableApplicationInsights bool = false
 
@@ -51,6 +54,7 @@ module recognitionProxy 'recognition-function.bicep' = {
     openAiKey: openAiKey
     deploymentPrincipalObjectId: deploymentPrincipalObjectId
     openAiModel: openAiModel
+    scanEnrichmentTimeoutMs: scanEnrichmentTimeoutMs
     enableApplicationInsights: enableApplicationInsights
     tags: tags
   }

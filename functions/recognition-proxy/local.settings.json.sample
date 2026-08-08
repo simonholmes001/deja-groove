@@ -5,6 +5,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "OPENAI_KEY": "replace-with-local-openai-key",
     "OPENAI_MODEL": "gpt-5-mini",
+    "SCAN_ENRICHMENT_TIMEOUT_MS": "1500",
     "DISCOGS_TOKEN": "replace-with-local-discogs-token"
   }
 }

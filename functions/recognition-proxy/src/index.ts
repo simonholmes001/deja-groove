@@ -34,5 +34,7 @@ app.http("scan", {
   methods: ["POST"],
   authLevel: "function",
   route: "v1/scan",
-  handler: createScanHandler(recognition, enrichment)
+  handler: createScanHandler(recognition, enrichment, {
+    enrichmentTimeoutMs: Number.parseInt(process.env.SCAN_ENRICHMENT_TIMEOUT_MS || "1500", 10)
+  })
 });

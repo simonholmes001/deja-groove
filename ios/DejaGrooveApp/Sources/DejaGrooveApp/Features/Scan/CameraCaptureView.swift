@@ -41,22 +41,12 @@ struct CameraCaptureView: UIViewControllerRepresentable {
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]
         ) {
             guard let image = info[.originalImage] as? UIImage,
-                  let imageData = normalizedForUpload(image).jpegData(compressionQuality: 0.92) else {
+                  let imageData = ScanImageUploadPreparer.prepareForUpload(image) else {
                 onCancel()
                 return
             }
 
             onImageCaptured(imageData)
-        }
-
-        private func normalizedForUpload(_ image: UIImage) -> UIImage {
-            guard image.imageOrientation != .up else { return image }
-            let format = UIGraphicsImageRendererFormat.default()
-            format.scale = image.scale
-            let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
-            return renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: image.size))
-            }
         }
     }
 }
