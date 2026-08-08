@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
@@ -19,18 +20,18 @@ export function createScanHandler(
   const enrichmentTimeoutMs = validTimeoutMs(options.enrichmentTimeoutMs, defaultEnrichmentTimeoutMs);
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
-    const scanStartedAt = Date.now();
+    const scanStartedAt = performance.now();
 
     try {
-      const imageReadStartedAt = Date.now();
+      const imageReadStartedAt = performance.now();
       const image = await readScanImage(request);
       const imageReadMs = elapsedSince(imageReadStartedAt);
 
-      const recognitionStartedAt = Date.now();
+      const recognitionStartedAt = performance.now();
       const result = await recognition.recognize(image);
       const recognitionMs = elapsedSince(recognitionStartedAt);
 
-      const enrichmentStartedAt = Date.now();
+      const enrichmentStartedAt = performance.now();
       const enrichmentResult = enrichment
         ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs)
         : { result, timedOut: false };
@@ -76,7 +77,7 @@ function validTimeoutMs(value: number | undefined, fallback: number): number {
 }
 
 function elapsedSince(startedAt: number): number {
-  return Date.now() - startedAt;
+  return Math.round(performance.now() - startedAt);
 }
 
 async function enrichRecognitionResult(

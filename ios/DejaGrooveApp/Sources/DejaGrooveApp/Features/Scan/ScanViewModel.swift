@@ -23,11 +23,12 @@ public final class ScanViewModel: ObservableObject {
         lastSubmittedImageData = imageData
         isLastErrorRetryable = false
         state = .loading(.uploading)
+        let startedAt = Date()
         do {
             await Task.yield()
             state = .loading(.recognizing)
             let response = try await api.scan(imageData: imageData, clientScanId: UUID(), capturedAtIso: ISO8601DateFormatter().string(from: Date()))
-            state = .result(response)
+            state = .result(response.withClientElapsedMs(Self.elapsedMs(since: startedAt)))
             isLastErrorRetryable = false
             lastSubmittedImageData = nil
             collectionMessage = nil
@@ -113,6 +114,10 @@ public final class ScanViewModel: ObservableObject {
         case .invalidResponse, .encodingFailure:
             return true
         }
+    }
+
+    private static func elapsedMs(since startedAt: Date) -> Int {
+        max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
     }
 }
 

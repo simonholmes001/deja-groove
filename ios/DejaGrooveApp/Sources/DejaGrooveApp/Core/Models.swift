@@ -232,6 +232,16 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         album != nil && status == "safe_to_buy"
     }
 
+    public func withClientElapsedMs(_ clientElapsedMs: Int) -> ScanResponse {
+        ScanResponse(
+            status: status,
+            confidence: confidence,
+            album: album,
+            candidates: candidates,
+            timings: timings?.withClientElapsedMs(clientElapsedMs),
+            requestId: requestId)
+    }
+
     enum CodingKeys: String, CodingKey {
         case status
         case confidence
@@ -283,6 +293,7 @@ public struct ScanTimings: Codable, Equatable, Sendable {
     public let enrichmentMs: Int
     public let imageBytes: Int
     public let enrichmentTimedOut: Bool
+    public let clientElapsedMs: Int?
 
     public init(
         totalMs: Int,
@@ -290,7 +301,8 @@ public struct ScanTimings: Codable, Equatable, Sendable {
         recognitionMs: Int,
         enrichmentMs: Int,
         imageBytes: Int,
-        enrichmentTimedOut: Bool
+        enrichmentTimedOut: Bool,
+        clientElapsedMs: Int? = nil
     ) {
         self.totalMs = totalMs
         self.imageReadMs = imageReadMs
@@ -298,6 +310,18 @@ public struct ScanTimings: Codable, Equatable, Sendable {
         self.enrichmentMs = enrichmentMs
         self.imageBytes = imageBytes
         self.enrichmentTimedOut = enrichmentTimedOut
+        self.clientElapsedMs = clientElapsedMs
+    }
+
+    public func withClientElapsedMs(_ clientElapsedMs: Int) -> ScanTimings {
+        ScanTimings(
+            totalMs: totalMs,
+            imageReadMs: imageReadMs,
+            recognitionMs: recognitionMs,
+            enrichmentMs: enrichmentMs,
+            imageBytes: imageBytes,
+            enrichmentTimedOut: enrichmentTimedOut,
+            clientElapsedMs: clientElapsedMs)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -307,6 +331,7 @@ public struct ScanTimings: Codable, Equatable, Sendable {
         case enrichmentMs = "enrichment_ms"
         case imageBytes = "image_bytes"
         case enrichmentTimedOut = "enrichment_timed_out"
+        case clientElapsedMs = "client_elapsed_ms"
     }
 }
 
