@@ -180,6 +180,14 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           value: string(scanEnrichmentTimeoutMs)
         }
         {
+          name: 'ENRICHMENT_CACHE_TTL_MS'
+          value: '86400000'
+        }
+        {
+          name: 'ENRICHMENT_CACHE_MAX_ENTRIES'
+          value: '500'
+        }
+        {
           name: 'DISCOGS_TOKEN'
           value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=DISCOGS-TOKEN)'
         }
