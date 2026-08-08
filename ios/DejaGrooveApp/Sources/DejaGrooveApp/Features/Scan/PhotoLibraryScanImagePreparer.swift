@@ -10,8 +10,8 @@ enum PhotoLibraryScanImagePreparer {
 }
 
 enum ScanImageUploadPreparer {
-    static let maxPixelDimension: CGFloat = 1280
-    static let jpegCompressionQuality: CGFloat = 0.72
+    static let maxPixelDimension: CGFloat = 1024
+    static let jpegCompressionQuality: CGFloat = 0.65
 
     static func prepareForUpload(_ image: UIImage) -> Data? {
         normalizedAndResized(image).jpegData(compressionQuality: jpegCompressionQuality)

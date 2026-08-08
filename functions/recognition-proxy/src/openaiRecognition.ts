@@ -12,30 +12,12 @@ type OpenAIConfig = {
 };
 
 const defaultPrompt = [
-  "Identify the vinyl record album shown in this cover image.",
-  "Return only JSON matching this schema:",
-  "{",
-  "  \"status\": \"safe_to_buy\" | \"ambiguous\" | \"no_match\",",
-  "  \"confidence\": number,",
-  "  \"album\": {",
-  "    \"title\": string, \"artist\": string, \"year\": number|null,",
-  "    \"first_release_year\": number|null, \"release_year\": number|null,",
-  "    \"first_release_date\": string|null, \"release_date\": string|null,",
-  "    \"format\": string|null, \"label\": string|null, \"catalog_number\": string|null,",
-  "    \"country\": string|null, \"barcode\": string|null,",
-  "    \"cover_image_url\": string|null, \"thumbnail_url\": string|null, \"back_cover_image_url\": string|null,",
-  "    \"back_cover_text\": string|null, \"release_notes\": string|null,",
-  "    \"genres\": string[], \"styles\": string[], \"tracklist\": [], \"identifiers\": [],",
-  "    \"discogs_data_quality\": string|null,",
-  "    \"mbid\": string|null, \"discogs_release_id\": string|null, \"discogs_master_id\": string|null,",
-  "    \"discogs_url\": string|null, \"discogs_resource_url\": string|null",
-  "  } | null,",
-  "  \"candidates\": [same album shape]",
-  "}",
-  "Use status safe_to_buy for one strong match, ambiguous for multiple plausible matches, and no_match when the cover is not recognizable.",
-  "Use year as the best available release year, first_release_year for the album's original first release, and release_year for this visible pressing/version.",
-  "Only transcribe back_cover_text when the provided image actually shows readable back-cover text; otherwise return null.",
-  "Do not invent MBID or Discogs IDs; use null unless you are certain."
+  "Identify the vinyl record album from the cover image.",
+  "Return JSON only, using the supplied schema.",
+  "Set safe_to_buy for one strong match, ambiguous for multiple plausible matches, or no_match if unrecognizable.",
+  "Prefer visible cover evidence. Use null for unknown IDs, dates, labels, catalog numbers, and URLs.",
+  "Do not invent MusicBrainz or Discogs IDs.",
+  "Set back_cover_text to null unless the provided image shows readable back-cover text."
 ].join("\n");
 
 export class OpenAIAlbumRecognition implements RecognitionPort {
@@ -67,7 +49,8 @@ export class OpenAIAlbumRecognition implements RecognitionPort {
           schema: recognitionSchema,
           strict: true
         }
-      }
+      },
+      max_output_tokens: 1500
     });
 
     return parseRecognitionOutput(response.output_text);
