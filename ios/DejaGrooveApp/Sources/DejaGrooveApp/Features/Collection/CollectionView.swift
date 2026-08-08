@@ -2,11 +2,10 @@ import SwiftUI
 
 #if os(iOS)
 public struct CollectionView: View {
-    @StateObject private var viewModel: CollectionViewModel
-    @State private var isManagingCollections = false
+    @ObservedObject private var viewModel: CollectionViewModel
 
     public init(viewModel: CollectionViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
     }
 
     public var body: some View {
@@ -41,18 +40,6 @@ public struct CollectionView: View {
             }
             .searchable(text: $viewModel.search)
             .navigationTitle("My Crate")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isManagingCollections = true
-                    } label: {
-                        Label("Collections", systemImage: "folder.badge.gearshape")
-                    }
-                }
-            }
-            .sheet(isPresented: $isManagingCollections) {
-                ManageCollectionsView(viewModel: viewModel)
-            }
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
             .onSubmit(of: .search) { Task { await viewModel.load() } }
@@ -124,6 +111,149 @@ private struct AlbumRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+public struct CollectionsView: View {
+    @ObservedObject private var viewModel: CollectionViewModel
+    @State private var newCollectionName = ""
+
+    public init(viewModel: CollectionViewModel) {
+        self.viewModel = viewModel
+    }
+
+    public var body: some View {
+        NavigationStack {
+            List {
+                Section("New Collection") {
+                    HStack {
+                        TextField("Collection name", text: $newCollectionName)
+                            .textInputAutocapitalization(.words)
+                        Button {
+                            let name = newCollectionName
+                            newCollectionName = ""
+                            Task { await viewModel.createCollection(named: name) }
+                        } label: {
+                            Label("Add", systemImage: "plus.circle.fill")
+                        }
+                        .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                Section("Collections") {
+                    ForEach(viewModel.crateCollections) { collection in
+                        NavigationLink {
+                            CollectionDetailView(collection: collection, viewModel: viewModel)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(collection.name)
+                                        .font(.headline)
+                                    Text(albumCountLabel(collection.recordIds.count))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                Task { await viewModel.deleteCollection(id: collection.id) }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+
+                    if !viewModel.isLoading && viewModel.crateCollections.isEmpty {
+                        ContentUnavailableView("No Collections", systemImage: "folder", description: Text("Create collections to organize albums from My Crate."))
+                    }
+                }
+            }
+            .overlay {
+                if viewModel.isLoading { ProgressView("Loading...") }
+                if let error = viewModel.errorMessage { Text(error).foregroundStyle(.red) }
+            }
+            .navigationTitle("Collections")
+            .refreshable { await viewModel.load() }
+            .task { await viewModel.load() }
+        }
+    }
+}
+
+private func albumCountLabel(_ count: Int) -> String {
+    count == 1 ? "1 album" : "\(count) albums"
+}
+
+private struct CollectionDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let collection: CrateCollection
+    @ObservedObject var viewModel: CollectionViewModel
+    @State private var draftName: String
+
+    init(collection: CrateCollection, viewModel: CollectionViewModel) {
+        self.collection = collection
+        self.viewModel = viewModel
+        _draftName = State(initialValue: collection.name)
+    }
+
+    var body: some View {
+        List {
+            Section("Name") {
+                HStack {
+                    TextField("Collection name", text: $draftName)
+                        .textInputAutocapitalization(.words)
+                    Button {
+                        Task { await viewModel.renameCollection(id: collection.id, name: draftName) }
+                    } label: {
+                        Label("Save", systemImage: "checkmark")
+                    }
+                    .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            Section("Albums") {
+                let records = viewModel.records(in: currentCollection)
+                ForEach(records, id: \.id) { record in
+                    NavigationLink {
+                        AlbumDetailView(record: record, viewModel: viewModel)
+                    } label: {
+                        AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: false)
+                            }
+                        } label: {
+                            Label("Remove", systemImage: "minus.circle")
+                        }
+                    }
+                }
+
+                if records.isEmpty {
+                    ContentUnavailableView("No Albums", systemImage: "square.stack", description: Text("Add albums to this collection from an album detail screen."))
+                }
+            }
+        }
+        .navigationTitle(currentCollection.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) {
+                    Task {
+                        await viewModel.deleteCollection(id: currentCollection.id)
+                        dismiss()
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    private var currentCollection: CrateCollection {
+        viewModel.crateCollections.first(where: { $0.id == collection.id }) ?? collection
     }
 }
 
@@ -580,78 +710,4 @@ private struct AlbumEditView: View {
     }
 }
 
-private struct ManageCollectionsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var viewModel: CollectionViewModel
-    @State private var newCollectionName = ""
-    @State private var draftNames: [UUID: String] = [:]
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("New Collection") {
-                    HStack {
-                        TextField("Collection name", text: $newCollectionName)
-                            .textInputAutocapitalization(.words)
-                        Button {
-                            let name = newCollectionName
-                            newCollectionName = ""
-                            Task { await viewModel.createCollection(named: name) }
-                        } label: {
-                            Label("Add", systemImage: "plus.circle.fill")
-                        }
-                        .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-
-                Section("Collections") {
-                    if viewModel.crateCollections.isEmpty {
-                        Text("No collections yet.")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ForEach(viewModel.crateCollections) { collection in
-                        HStack {
-                            TextField("Collection name", text: binding(for: collection))
-                                .textInputAutocapitalization(.words)
-                            Text("\(collection.recordIds.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button {
-                                Task {
-                                    await viewModel.renameCollection(
-                                        id: collection.id,
-                                        name: draftNames[collection.id] ?? collection.name)
-                                }
-                            } label: {
-                                Image(systemName: "checkmark")
-                            }
-                            Button(role: .destructive) {
-                                Task { await viewModel.deleteCollection(id: collection.id) }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Collections")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .task {
-                draftNames = Dictionary(uniqueKeysWithValues: viewModel.crateCollections.map { ($0.id, $0.name) })
-            }
-        }
-    }
-
-    private func binding(for collection: CrateCollection) -> Binding<String> {
-        Binding(
-            get: { draftNames[collection.id] ?? collection.name },
-            set: { draftNames[collection.id] = $0 })
-    }
-}
 #endif

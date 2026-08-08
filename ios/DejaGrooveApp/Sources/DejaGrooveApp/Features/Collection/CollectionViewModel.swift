@@ -47,6 +47,12 @@ public final class CollectionViewModel: ObservableObject {
         crateCollections.filter { $0.recordIds.contains(recordId) }
     }
 
+    public func records(in collection: CrateCollection) -> [CollectionRecord] {
+        records
+            .filter { collection.recordIds.contains($0.id) }
+            .sorted { Self.compareByArtistFamilyName($0, $1) }
+    }
+
     public func record(id: UUID) -> CollectionRecord? {
         records.first { $0.id == id }
     }

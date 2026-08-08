@@ -128,6 +128,50 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual(["Blue Train", "Mingus Ah Um", "Saxophone Colossus"], titles)
     }
 
+    func testCollectionViewModelSortsCollectionRecordsByArtistFamilyNameThenTitle() async {
+        let rollinsId = UUID(uuidString: "00000000-0000-0000-0000-000000000561")!
+        let coltraneId = UUID(uuidString: "00000000-0000-0000-0000-000000000562")!
+        let mingusId = UUID(uuidString: "00000000-0000-0000-0000-000000000563")!
+        let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000564")!
+        let collection = CrateCollection(
+            id: collectionId,
+            name: "Jazz",
+            recordIds: [rollinsId, coltraneId, mingusId],
+            createdAt: "",
+            updatedAt: "")
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: rollinsId,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "The Bridge", artist: "Sonny Rollins", year: 1962, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: ""),
+            CollectionRecord(
+                id: coltraneId,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: ""),
+            CollectionRecord(
+                id: mingusId,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Mingus Ah Um", artist: "Charles Mingus", year: 1959, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: "")
+        ], nextCursor: nil)
+        let sut = await CollectionViewModel(api: MockApiClient(
+            collectionResponse: response,
+            crateCollections: [collection]))
+
+        await sut.load()
+
+        let titles = await sut.records(in: collection).map(\.album.title)
+        XCTAssertEqual(["Blue Train", "Mingus Ah Um", "The Bridge"], titles)
+    }
+
     func testCollectionViewModelDeletesRecordAndRefreshesCollections() async {
         let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000541")!
         let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000542")!
