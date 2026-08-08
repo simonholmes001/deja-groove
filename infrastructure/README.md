@@ -4,9 +4,10 @@ The legacy .NET backend, APIM, App Service container, PostgreSQL, Key Vault,
 and VNet infrastructure has been retired from the active repository.
 
 The active target is a minimum-cost Azure Function recognition proxy. Key Vault
-holds the project OpenAI API key, and the Function reads it via a Key Vault
-reference. The Function performs only OpenAI album recognition. The iOS app owns collection state, scan state, duplicate
-detection, and local persistence.
+holds the project OpenAI API key and Discogs token, and the Function reads them
+via Key Vault references. The Function performs OpenAI album recognition and
+optional Discogs metadata enrichment. The iOS app owns collection state, scan
+state, duplicate detection, and local persistence.
 
 ## Scope
 
@@ -15,7 +16,8 @@ detection, and local persistence.
 - Active runtime target: Azure Function App
 - Secret store: Azure Key Vault with RBAC authorization
 - Azure resource access: Function system-assigned managed identity
-- Required secret: `OPENAI_KEY`
+- Required pipeline secret: `OPENAI_KEY`
+- Required Key Vault secret for Discogs enrichment: `DISCOGS-TOKEN`
 - `POST /v1/scan` requires an Azure Functions key; `GET /health` is anonymous.
 - Out of scope: hosted collection API, PostgreSQL, APIM, App Service
   containers, container registry, Entra-backed API auth, and private network
@@ -51,10 +53,11 @@ For GitHub OIDC login:
 For Function App configuration:
 
 - `OPENAI_KEY` (pipeline secret, written into Key Vault during deployment)
+- `DISCOGS-TOKEN` (Key Vault secret, manually created in the vault; exposed to the Function as `DISCOGS_TOKEN`)
 
 Managed identity and RBAC:
 
-- Function identity reads `openai-key` from Key Vault via `Key Vault Secrets User`.
+- Function identity reads `openai-key` and `DISCOGS-TOKEN` from Key Vault via `Key Vault Secrets User`.
 - Function identity accesses host/deployment storage via Storage Blob Data Owner, Storage Queue Data Contributor, and Storage Table Data Contributor.
 - Storage shared key access is disabled; Function storage uses identity-based settings.
 

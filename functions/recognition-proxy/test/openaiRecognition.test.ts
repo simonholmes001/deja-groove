@@ -12,7 +12,33 @@ test("parseRecognitionOutput accepts the scan contract", () => {
       title: "Blue Train",
       artist: "John Coltrane",
       year: 1958,
-      format: "LP"
+      first_release_year: 1958,
+      release_year: 1958,
+      first_release_date: null,
+      release_date: "1958",
+      format: "LP",
+      label: "Blue Note",
+      catalog_number: "BLP 1577",
+      country: "US",
+      barcode: null,
+      cover_image_url: null,
+      thumbnail_url: null,
+      back_cover_image_url: null,
+      back_cover_text: null,
+      release_notes: "Hard bop album",
+      genres: ["Jazz"],
+      styles: ["Hard Bop"],
+      companies: ["Recorded At: Van Gelder Studio"],
+      tracklist: [
+        { position: "A1", title: "Blue Train", duration: "10:43" }
+      ],
+      identifiers: [
+        { type: "Matrix / Runout", value: "BN-LP-1577-A", description: "Side A" }
+      ],
+      discogs_data_quality: null,
+      discogs_master_id: "456",
+      discogs_url: "https://www.discogs.com/release/123",
+      discogs_resource_url: "https://api.discogs.com/releases/123"
     },
     candidates: []
   }));

@@ -280,6 +280,46 @@ actor LocalCollectionStoreSpy: LocalCollectionStore {
             updatedAt: "")
     }
 
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        CollectionItemResponse(
+            id: id,
+            mbid: album.mbid,
+            discogsReleaseId: album.discogsReleaseId,
+            title: album.title,
+            artist: album.artist,
+            year: album.year,
+            format: album.format,
+            notes: notes,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func deleteCollectionRecord(id: UUID) async throws {
+    }
+
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
+        []
+    }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        CrateCollection(id: UUID(), name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        CrateCollection(id: id, name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {
+    }
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [recordId], createdAt: "", updatedAt: "")
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [], createdAt: "", updatedAt: "")
+    }
+
     func snapshot() -> LocalCollectionStoreSnapshot {
         LocalCollectionStoreSnapshot(
             addCallCount: addCallCount,

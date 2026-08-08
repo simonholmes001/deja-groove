@@ -172,6 +172,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           name: 'OPENAI_MODEL'
           value: openAiModel
         }
+        {
+          name: 'DISCOGS_TOKEN'
+          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=DISCOGS-TOKEN)'
+        }
       ], enableApplicationInsights ? [
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

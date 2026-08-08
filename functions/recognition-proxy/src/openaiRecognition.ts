@@ -17,10 +17,24 @@ const defaultPrompt = [
   "{",
   "  \"status\": \"safe_to_buy\" | \"ambiguous\" | \"no_match\",",
   "  \"confidence\": number,",
-  "  \"album\": { \"title\": string, \"artist\": string, \"year\": number|null, \"format\": string|null, \"mbid\": string|null, \"discogs_release_id\": string|null } | null,",
+  "  \"album\": {",
+  "    \"title\": string, \"artist\": string, \"year\": number|null,",
+  "    \"first_release_year\": number|null, \"release_year\": number|null,",
+  "    \"first_release_date\": string|null, \"release_date\": string|null,",
+  "    \"format\": string|null, \"label\": string|null, \"catalog_number\": string|null,",
+  "    \"country\": string|null, \"barcode\": string|null,",
+  "    \"cover_image_url\": string|null, \"thumbnail_url\": string|null, \"back_cover_image_url\": string|null,",
+  "    \"back_cover_text\": string|null, \"release_notes\": string|null,",
+  "    \"genres\": string[], \"styles\": string[], \"tracklist\": [], \"identifiers\": [],",
+  "    \"discogs_data_quality\": string|null,",
+  "    \"mbid\": string|null, \"discogs_release_id\": string|null, \"discogs_master_id\": string|null,",
+  "    \"discogs_url\": string|null, \"discogs_resource_url\": string|null",
+  "  } | null,",
   "  \"candidates\": [same album shape]",
   "}",
   "Use status safe_to_buy for one strong match, ambiguous for multiple plausible matches, and no_match when the cover is not recognizable.",
+  "Use year as the best available release year, first_release_year for the album's original first release, and release_year for this visible pressing/version.",
+  "Only transcribe back_cover_text when the provided image actually shows readable back-cover text; otherwise return null.",
   "Do not invent MBID or Discogs IDs; use null unless you are certain."
 ].join("\n");
 
@@ -82,9 +96,31 @@ function isAlbum(value: unknown): value is Album {
     && typeof value.title === "string"
     && typeof value.artist === "string"
     && optionalNumber(value.year)
+    && optionalNumber(value.first_release_year)
+    && optionalNumber(value.release_year)
     && optionalString(value.format)
+    && optionalString(value.label)
+    && optionalString(value.catalog_number)
+    && optionalString(value.country)
+    && optionalString(value.back_cover_text)
+    && optionalString(value.release_notes)
     && optionalString(value.mbid)
-    && optionalString(value.discogs_release_id);
+    && optionalString(value.discogs_release_id)
+    && optionalString(value.discogs_master_id)
+    && optionalString(value.discogs_url)
+    && optionalString(value.discogs_resource_url)
+    && optionalString(value.first_release_date)
+    && optionalString(value.release_date)
+    && optionalString(value.barcode)
+    && optionalString(value.cover_image_url)
+    && optionalString(value.thumbnail_url)
+    && optionalString(value.back_cover_image_url)
+    && optionalString(value.discogs_data_quality)
+    && optionalStringArray(value.genres)
+    && optionalStringArray(value.styles)
+    && optionalStringArray(value.companies)
+    && optionalTrackArray(value.tracklist)
+    && optionalIdentifierArray(value.identifiers);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,18 +135,114 @@ function optionalNumber(value: unknown): boolean {
   return value === undefined || value === null || typeof value === "number";
 }
 
+function optionalStringArray(value: unknown): boolean {
+  return value === undefined
+    || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+}
+
+function optionalTrackArray(value: unknown): boolean {
+  return value === undefined
+    || (Array.isArray(value) && value.every((track) => isRecord(track)
+      && optionalString(track.position)
+      && typeof track.title === "string"
+      && optionalString(track.duration)));
+}
+
+function optionalIdentifierArray(value: unknown): boolean {
+  return value === undefined
+    || (Array.isArray(value) && value.every((identifier) => isRecord(identifier)
+      && typeof identifier.type === "string"
+      && optionalString(identifier.value)
+      && optionalString(identifier.description)));
+}
+
 const albumSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
     mbid: { type: ["string", "null"] },
     discogs_release_id: { type: ["string", "null"] },
+    discogs_master_id: { type: ["string", "null"] },
+    discogs_url: { type: ["string", "null"] },
+    discogs_resource_url: { type: ["string", "null"] },
     title: { type: "string" },
     artist: { type: "string" },
     year: { type: ["number", "null"] },
-    format: { type: ["string", "null"] }
+    first_release_year: { type: ["number", "null"] },
+    release_year: { type: ["number", "null"] },
+    first_release_date: { type: ["string", "null"] },
+    release_date: { type: ["string", "null"] },
+    format: { type: ["string", "null"] },
+    label: { type: ["string", "null"] },
+    catalog_number: { type: ["string", "null"] },
+    country: { type: ["string", "null"] },
+    barcode: { type: ["string", "null"] },
+    cover_image_url: { type: ["string", "null"] },
+    thumbnail_url: { type: ["string", "null"] },
+    back_cover_image_url: { type: ["string", "null"] },
+    back_cover_text: { type: ["string", "null"] },
+    release_notes: { type: ["string", "null"] },
+    genres: { type: "array", items: { type: "string" } },
+    styles: { type: "array", items: { type: "string" } },
+    companies: { type: "array", items: { type: "string" } },
+    tracklist: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          position: { type: ["string", "null"] },
+          title: { type: "string" },
+          duration: { type: ["string", "null"] }
+        },
+        required: ["position", "title", "duration"]
+      }
+    },
+    identifiers: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          type: { type: "string" },
+          value: { type: ["string", "null"] },
+          description: { type: ["string", "null"] }
+        },
+        required: ["type", "value", "description"]
+      }
+    },
+    discogs_data_quality: { type: ["string", "null"] }
   },
-  required: ["mbid", "discogs_release_id", "title", "artist", "year", "format"]
+  required: [
+    "mbid",
+    "discogs_release_id",
+    "discogs_master_id",
+    "discogs_url",
+    "discogs_resource_url",
+    "title",
+    "artist",
+    "year",
+    "first_release_year",
+    "release_year",
+    "first_release_date",
+    "release_date",
+    "format",
+    "label",
+    "catalog_number",
+    "country",
+    "barcode",
+    "cover_image_url",
+    "thumbnail_url",
+    "back_cover_image_url",
+    "back_cover_text",
+    "release_notes",
+    "genres",
+    "styles",
+    "companies",
+    "tracklist",
+    "identifiers",
+    "discogs_data_quality"
+  ]
 } as const;
 
 const recognitionSchema = {

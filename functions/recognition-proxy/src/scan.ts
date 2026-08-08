@@ -2,18 +2,22 @@ import { randomUUID } from "node:crypto";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import type { ApiError, RecognitionResult, ScanResponse } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
+import type { AlbumEnrichmentPort } from "./discogs.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
 
-export function createScanHandler(recognition: RecognitionPort) {
+export function createScanHandler(recognition: RecognitionPort, enrichment?: AlbumEnrichmentPort) {
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
 
     try {
       const image = await readScanImage(request);
       const result = await recognition.recognize(image);
+      const enriched = enrichment
+        ? await enrichRecognitionResult(result, enrichment, context)
+        : result;
       return {
         status: 200,
-        jsonBody: toScanResponse(result, requestId),
+        jsonBody: toScanResponse(enriched, requestId),
         headers: noStoreHeaders()
       };
     } catch (error) {
@@ -30,6 +34,25 @@ export function createScanHandler(recognition: RecognitionPort) {
         requestId);
     }
   };
+}
+
+async function enrichRecognitionResult(
+  result: RecognitionResult,
+  enrichment: AlbumEnrichmentPort,
+  context: InvocationContext
+): Promise<RecognitionResult> {
+  try {
+    return {
+      ...result,
+      album: result.album ? await enrichment.enrich(result.album) : result.album,
+      candidates: result.candidates
+        ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate)))
+        : result.candidates
+    };
+  } catch (error) {
+    context.warn("Album metadata enrichment failed; returning recognition-only result.", error);
+    return result;
+  }
 }
 
 export function toScanResponse(result: RecognitionResult, requestId: string): ScanResponse {

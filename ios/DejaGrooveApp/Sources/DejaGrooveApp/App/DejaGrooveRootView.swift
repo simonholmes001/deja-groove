@@ -4,6 +4,7 @@ import SwiftUI
 public struct DejaGrooveRootView: View {
     private let api: ApiClient
     private let onAuthenticationRequired: @Sendable () async -> Void
+    @StateObject private var collectionViewModel: CollectionViewModel
 
     public init(
         api: ApiClient,
@@ -11,6 +12,9 @@ public struct DejaGrooveRootView: View {
     ) {
         self.api = api
         self.onAuthenticationRequired = onAuthenticationRequired
+        _collectionViewModel = StateObject(wrappedValue: CollectionViewModel(
+            api: api,
+            onAuthenticationRequired: onAuthenticationRequired))
     }
 
     public var body: some View {
@@ -18,8 +22,11 @@ public struct DejaGrooveRootView: View {
             ScanView(viewModel: ScanViewModel(api: api, onAuthenticationRequired: onAuthenticationRequired))
                 .tabItem { Label("Scan", systemImage: "camera") }
 
-            CollectionView(viewModel: CollectionViewModel(api: api, onAuthenticationRequired: onAuthenticationRequired))
+            CollectionView(viewModel: collectionViewModel)
                 .tabItem { Label("My Crate", systemImage: "square.stack") }
+
+            CollectionsView(viewModel: collectionViewModel)
+                .tabItem { Label("Collections", systemImage: "folder") }
         }
     }
 }
