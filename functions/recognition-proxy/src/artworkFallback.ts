@@ -66,7 +66,8 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
   private async tryApplyCoverArtArchive(album: Album): Promise<Album> {
     try {
       return await this.applyCoverArtArchive(album);
-    } catch {
+    } catch (error) {
+      logFallbackFailure("Cover Art Archive", error);
       return album;
     }
   }
@@ -74,7 +75,8 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
   private async tryApplyITunes(album: Album): Promise<Album> {
     try {
       return await this.applyITunes(album);
-    } catch {
+    } catch (error) {
+      logFallbackFailure("iTunes Search", error);
       return album;
     }
   }
@@ -104,7 +106,10 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
       headers: { "Accept": "application/json" }
     });
     if (response.status === 404) return null;
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`Artwork fallback provider Cover Art Archive returned HTTP ${response.status}.`);
+      return null;
+    }
 
     const body = await response.json() as CoverArtArchiveResponse;
     const images = body.images || [];
@@ -144,7 +149,10 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     const response = await this.fetchImpl(`${this.itunesBaseURL}/search?${params.toString()}`, {
       headers: { "Accept": "application/json" }
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`Artwork fallback provider iTunes Search returned HTTP ${response.status}.`);
+      return null;
+    }
 
     const body = await response.json() as ITunesSearchResponse;
     const results = body.results || [];
@@ -217,4 +225,9 @@ function normalize(value: string | undefined | null): string {
 function clean(value: string | undefined | null): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function logFallbackFailure(provider: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`Artwork fallback provider ${provider} failed: ${message}`);
 }

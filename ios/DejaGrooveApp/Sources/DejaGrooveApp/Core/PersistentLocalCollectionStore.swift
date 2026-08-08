@@ -33,6 +33,34 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         var collections: [CrateCollection]
     }
 
+    private struct LegacyCollectionRecord: Decodable {
+        let id: UUID
+        let album: Album
+        let notes: String?
+        let version: Int?
+        let createdAt: String?
+        let updatedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case album
+            case notes
+            case version
+            case createdAt
+            case updatedAt
+        }
+
+        func migratedRecord(defaultTimestamp: String) -> CollectionRecord {
+            CollectionRecord(
+                id: id,
+                album: album,
+                notes: notes,
+                version: version ?? 1,
+                createdAt: createdAt ?? defaultTimestamp,
+                updatedAt: updatedAt ?? createdAt ?? defaultTimestamp)
+        }
+    }
+
     private let fileURL: URL
     private let idProvider: UUIDProviding
     private let clock: ISO8601Clock
@@ -174,13 +202,15 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
             throw await recordNotFoundError()
         }
         document.records.removeAll { $0.id == id }
+        let now = await clock.now()
         document.collections = document.collections.map { collection in
-            CrateCollection(
+            let updatedIds = collection.recordIds.filter { $0 != id }
+            return CrateCollection(
                 id: collection.id,
                 name: collection.name,
-                recordIds: collection.recordIds.filter { $0 != id },
+                recordIds: updatedIds,
                 createdAt: collection.createdAt,
-                updatedAt: collection.updatedAt)
+                updatedAt: updatedIds == collection.recordIds ? collection.updatedAt : now)
         }
         try save(document: document)
     }
@@ -296,8 +326,13 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
         if let document = try? decoder.decode(StoreDocument.self, from: data) {
             return document
         }
-        let records = try decoder.decode([CollectionRecord].self, from: data)
-        return StoreDocument(records: records, collections: [])
+        if let records = try? decoder.decode([CollectionRecord].self, from: data) {
+            return StoreDocument(records: records, collections: [])
+        }
+        let legacyRecords = try decoder.decode([LegacyCollectionRecord].self, from: data)
+        return StoreDocument(
+            records: legacyRecords.map { $0.migratedRecord(defaultTimestamp: "1970-01-01T00:00:00Z") },
+            collections: [])
     }
 
     private func save(document: StoreDocument) throws {

@@ -300,6 +300,7 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertTrue(records.items.isEmpty)
         XCTAssertEqual(1, collections.count)
         XCTAssertTrue(collections.first?.recordIds.isEmpty ?? false)
+        XCTAssertEqual("2026-01-04T00:00:00Z", collections.first?.updatedAt)
     }
 
     func testCollectionNameValidationRejectsEmptyAndDuplicateNames() async throws {
@@ -335,25 +336,37 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
 
     func testMigratesLegacyFlatCollectionFile() async throws {
         let fileURL = temporaryStoreURL()
-        let legacyRecord = CollectionRecord(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000421")!,
-            album: Album(mbid: nil, discogsReleaseId: nil, title: "Hejira", artist: "Joni Mitchell", year: 1976, format: "LP"),
-            notes: "legacy",
-            version: 1,
-            createdAt: "2026-01-01T00:00:00Z",
-            updatedAt: "2026-01-01T00:00:00Z")
         let directory = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode([legacyRecord]).write(to: fileURL)
+        let legacyJSON = """
+        [
+          {
+            "id": "00000000-0000-0000-0000-000000000421",
+            "album": {
+              "mbid": null,
+              "discogs_release_id": null,
+              "title": "Hejira",
+              "artist": "Joni Mitchell",
+              "year": 1976,
+              "format": "LP"
+            },
+            "notes": "legacy"
+          }
+        ]
+        """
+        try Data(legacyJSON.utf8).write(to: fileURL)
 
         let store = PersistentLocalCollectionStore(fileURL: fileURL)
         let records = try await store.fetchCollection(search: "hejira")
         let collections = try await store.fetchCrateCollections(search: nil)
 
         XCTAssertEqual(1, records.items.count)
+        XCTAssertEqual("Hejira", records.items.first?.album.title)
+        XCTAssertEqual("Joni Mitchell", records.items.first?.album.artist)
         XCTAssertEqual("legacy", records.items.first?.notes)
+        XCTAssertEqual(1, records.items.first?.version)
+        XCTAssertEqual("1970-01-01T00:00:00Z", records.items.first?.createdAt)
+        XCTAssertEqual("1970-01-01T00:00:00Z", records.items.first?.updatedAt)
         XCTAssertTrue(collections.isEmpty)
     }
 

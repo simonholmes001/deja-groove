@@ -36,7 +36,7 @@ test("DiscogsAlbumEnrichment maps search and release metadata", async () => {
         master_id: 52245,
         resource_url: "https://api.discogs.test/releases/249504",
         uri: "https://www.discogs.com/release/249504",
-        title: "Kind Of Blue",
+        title: "Kind Of Blue (Mono Variant)",
         country: "US",
         year: 1959,
         released: "1959-08-17",
@@ -89,6 +89,8 @@ test("DiscogsAlbumEnrichment maps search and release metadata", async () => {
   assert.equal(album.discogs_master_id, "52245");
   assert.equal(album.discogs_url, "https://www.discogs.com/release/249504");
   assert.equal(album.discogs_resource_url, "https://api.discogs.test/releases/249504");
+  assert.equal(album.title, "Kind of Blue");
+  assert.equal(album.artist, "Miles Davis");
   assert.equal(album.release_date, "1959-08-17");
   assert.equal(album.release_year, 1959);
   assert.equal(album.label, "Columbia");

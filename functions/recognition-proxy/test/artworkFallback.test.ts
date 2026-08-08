@@ -130,6 +130,7 @@ test("ArtworkFallbackAlbumEnrichment tries release-group artwork after release a
 });
 
 test("ArtworkFallbackAlbumEnrichment keeps primary enrichment when fallback provider fails", async () => {
+  const warnings = captureWarnings();
   const enrichment = new ArtworkFallbackAlbumEnrichment({
     primary: new StubEnrichment({
       label: "Bluebird",
@@ -147,6 +148,25 @@ test("ArtworkFallbackAlbumEnrichment keeps primary enrichment when fallback prov
   assert.equal(album.label, "Bluebird");
   assert.equal(album.cover_image_url, null);
   assert.equal(album.back_cover_image_url, null);
+  assert.match(warnings.restore().join("\n"), /Cover Art Archive failed: network down/);
+});
+
+test("ArtworkFallbackAlbumEnrichment logs non-OK fallback provider responses", async () => {
+  const warnings = captureWarnings();
+  const enrichment = new ArtworkFallbackAlbumEnrichment({
+    primary: new StubEnrichment({}),
+    coverArtArchiveBaseURL: "https://cover-art.test",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 429,
+      json: async () => ({})
+    }) as Response
+  });
+
+  const album = await enrichment.enrich(baseAlbum());
+
+  assert.equal(album.cover_image_url, null);
+  assert.match(warnings.restore().join("\n"), /Cover Art Archive returned HTTP 429/);
 });
 
 class StubEnrichment implements AlbumEnrichmentPort {
@@ -184,4 +204,18 @@ function jsonResponse(body: unknown): Response {
     status: 200,
     json: async () => body
   } as Response;
+}
+
+function captureWarnings(): { restore: () => string[] } {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (message?: unknown, ...args: unknown[]) => {
+    warnings.push([message, ...args].map(String).join(" "));
+  };
+  return {
+    restore: () => {
+      console.warn = originalWarn;
+      return warnings;
+    }
+  };
 }
