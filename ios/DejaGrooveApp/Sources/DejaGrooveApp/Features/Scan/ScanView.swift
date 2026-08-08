@@ -261,7 +261,7 @@ private struct ScanTimingSummary: View {
 
     private var summary: String {
         let timeout = timings.enrichmentTimedOut ? " • metadata timed out" : ""
-        return "Scan \(seconds(timings.totalMs)) • recognition \(seconds(timings.recognitionMs)) • metadata \(seconds(timings.enrichmentMs)) • \(bytes(timings.imageBytes))\(timeout)"
+        return "Scan \(seconds(timings.totalMs)) • upload \(seconds(timings.imageReadMs)) • recognition \(seconds(timings.recognitionMs)) • metadata \(seconds(timings.enrichmentMs)) • \(bytes(timings.imageBytes))\(timeout)"
     }
 
     private func seconds(_ milliseconds: Int) -> String {

@@ -26,7 +26,7 @@ param deploymentPrincipalObjectId string = ''
 param openAiModel string = 'gpt-5-mini'
 
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
-param scanEnrichmentTimeoutMs int = 1500
+param scanEnrichmentTimeoutMs int = 4000
 
 @description('Enable Application Insights. Disabled by default to keep dev cost minimal.')
 param enableApplicationInsights bool = false

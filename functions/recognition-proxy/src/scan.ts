@@ -9,7 +9,7 @@ type ScanHandlerOptions = {
   enrichmentTimeoutMs?: number;
 };
 
-const defaultEnrichmentTimeoutMs = 1500;
+const defaultEnrichmentTimeoutMs = 4000;
 
 export function createScanHandler(
   recognition: RecognitionPort,

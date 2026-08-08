@@ -54,7 +54,7 @@ For Function App configuration:
 
 - `OPENAI_KEY` (pipeline secret, written into Key Vault during deployment)
 - `DISCOGS-TOKEN` (Key Vault secret, manually created in the vault; exposed to the Function as `DISCOGS_TOKEN`)
-- `SCAN_ENRICHMENT_TIMEOUT_MS` defaults to `1500`.
+- `SCAN_ENRICHMENT_TIMEOUT_MS` defaults to `4000`.
 - `ENRICHMENT_CACHE_TTL_MS` defaults to `86400000` for a 24-hour warm-instance metadata/artwork cache.
 - `ENRICHMENT_CACHE_MAX_ENTRIES` defaults to `500`.
 
