@@ -42,6 +42,7 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
             confidence: response.confidence,
             album: album,
             candidates: response.candidates,
+            timings: response.timings,
             requestId: response.requestId)
     }
 

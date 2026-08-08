@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import type { ApiError, RecognitionResult, ScanResponse } from "./contracts.js";
+import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
@@ -19,16 +19,40 @@ export function createScanHandler(
   const enrichmentTimeoutMs = validTimeoutMs(options.enrichmentTimeoutMs, defaultEnrichmentTimeoutMs);
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
+    const scanStartedAt = Date.now();
 
     try {
+      const imageReadStartedAt = Date.now();
       const image = await readScanImage(request);
+      const imageReadMs = elapsedSince(imageReadStartedAt);
+
+      const recognitionStartedAt = Date.now();
       const result = await recognition.recognize(image);
-      const enriched = enrichment
+      const recognitionMs = elapsedSince(recognitionStartedAt);
+
+      const enrichmentStartedAt = Date.now();
+      const enrichmentResult = enrichment
         ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs)
-        : result;
+        : { result, timedOut: false };
+      const enrichmentMs = elapsedSince(enrichmentStartedAt);
+      const timings: ScanTimings = {
+        total_ms: elapsedSince(scanStartedAt),
+        image_read_ms: imageReadMs,
+        recognition_ms: recognitionMs,
+        enrichment_ms: enrichmentMs,
+        image_bytes: image.data.length,
+        enrichment_timed_out: enrichmentResult.timedOut
+      };
+
+      context.log("Album scan completed.", {
+        requestId,
+        status: enrichmentResult.result.status,
+        timings
+      });
+
       return {
         status: 200,
-        jsonBody: toScanResponse(enriched, requestId),
+        jsonBody: toScanResponse(enrichmentResult.result, requestId, timings),
         headers: noStoreHeaders()
       };
     } catch (error) {
@@ -51,15 +75,19 @@ function validTimeoutMs(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function elapsedSince(startedAt: number): number {
+  return Date.now() - startedAt;
+}
+
 async function enrichRecognitionResult(
   result: RecognitionResult,
   enrichment: AlbumEnrichmentPort,
   context: InvocationContext,
   timeoutMs: number
-): Promise<RecognitionResult> {
+): Promise<{ result: RecognitionResult; timedOut: boolean }> {
   try {
-    return await withTimeout(
-      async () => ({
+    const enriched = await withTimeout(
+      async (): Promise<RecognitionResult> => ({
         ...result,
         album: result.album ? await enrichment.enrich(result.album) : result.album,
         candidates: result.candidates
@@ -67,13 +95,14 @@ async function enrichRecognitionResult(
           : result.candidates
       }),
       timeoutMs);
+    return { result: enriched, timedOut: false };
   } catch (error) {
     if (error instanceof EnrichmentTimeoutError) {
       context.warn(`Album metadata enrichment exceeded ${timeoutMs}ms; returning recognition-only result.`);
-      return result;
+      return { result, timedOut: true };
     }
     context.warn("Album metadata enrichment failed; returning recognition-only result.", error);
-    return result;
+    return { result, timedOut: false };
   }
 }
 
@@ -95,12 +124,13 @@ async function withTimeout<T>(operation: () => Promise<T>, timeoutMs: number): P
 
 class EnrichmentTimeoutError extends Error {}
 
-export function toScanResponse(result: RecognitionResult, requestId: string): ScanResponse {
+export function toScanResponse(result: RecognitionResult, requestId: string, timings?: ScanTimings): ScanResponse {
   return {
     status: result.status,
     confidence: clampConfidence(result.confidence),
     album: result.status === "safe_to_buy" ? result.album ?? null : null,
     candidates: result.status === "ambiguous" ? result.candidates ?? [] : [],
+    timings,
     request_id: requestId
   };
 }

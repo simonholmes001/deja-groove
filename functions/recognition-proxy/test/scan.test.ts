@@ -75,6 +75,9 @@ test("scan handler returns recognition-only result when enrichment times out", a
 
   assert.equal(response.status, 200);
   assert.equal(response.jsonBody?.album?.label, null);
+  assert.equal(response.jsonBody?.timings?.image_bytes, 3);
+  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, true);
+  assert.equal(typeof response.jsonBody?.timings?.total_ms, "number");
   assert.match(String(warnings[0]), /enrichment exceeded 1ms/);
 });
 
@@ -90,6 +93,7 @@ test("scan handler returns enriched result within enrichment budget", async () =
 
   assert.equal(response.status, 200);
   assert.equal(response.jsonBody?.album?.label, "Impulse!");
+  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
 });
 
 class StubRecognition {
@@ -136,6 +140,7 @@ function fakeMultipartRequest(): HttpRequest {
 
 function fakeContext(warnings: unknown[]): InvocationContext {
   return {
+    log: () => {},
     warn: (...args: unknown[]) => warnings.push(args.join(" ")),
     error: () => {}
   } as unknown as InvocationContext;

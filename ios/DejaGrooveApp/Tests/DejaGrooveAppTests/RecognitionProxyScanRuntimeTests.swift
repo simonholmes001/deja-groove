@@ -19,6 +19,10 @@ final class RecognitionProxyScanRuntimeTests: XCTestCase {
 
         XCTAssertEqual(requestId, response.requestId)
         XCTAssertEqual("no_match", response.status)
+        XCTAssertEqual(2250, response.timings?.totalMs)
+        XCTAssertEqual(1200, response.timings?.recognitionMs)
+        XCTAssertEqual(12_345, response.timings?.imageBytes)
+        XCTAssertFalse(response.timings?.enrichmentTimedOut ?? true)
 
         let request = await transport.lastRequest
         XCTAssertEqual("POST", request?.httpMethod)
@@ -78,7 +82,7 @@ final class RecognitionProxyScanRuntimeTests: XCTestCase {
 
     private static func scanResponseJson(requestId: UUID) -> Data {
         """
-        {"status":"no_match","confidence":0.0,"album":null,"candidates":[],"request_id":"\(requestId.uuidString.lowercased())"}
+        {"status":"no_match","confidence":0.0,"album":null,"candidates":[],"timings":{"total_ms":2250,"image_read_ms":25,"recognition_ms":1200,"enrichment_ms":1000,"image_bytes":12345,"enrichment_timed_out":false},"request_id":"\(requestId.uuidString.lowercased())"}
         """.data(using: .utf8)!
     }
 
