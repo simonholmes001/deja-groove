@@ -3,6 +3,8 @@ import SwiftUI
 #if os(iOS)
 public struct CollectionView: View {
     @ObservedObject private var viewModel: CollectionViewModel
+    @State private var editingRecord: CollectionRecord?
+    @State private var selectedRecordId: UUID?
 
     public init(viewModel: CollectionViewModel) {
         self.viewModel = viewModel
@@ -40,6 +42,19 @@ public struct CollectionView: View {
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
             .onSubmit(of: .search) { Task { await viewModel.load() } }
+            .navigationDestination(item: $selectedRecordId) { recordId in
+                if let record = viewModel.record(id: recordId) {
+                    AlbumDetailView(record: record, viewModel: viewModel)
+                }
+            }
+            .sheet(item: $editingRecord) { record in
+                AlbumEditView(record: viewModel.record(id: record.id) ?? record) { album, notes in
+                    Task {
+                        await viewModel.updateRecord(id: record.id, album: album, notes: notes)
+                        editingRecord = nil
+                    }
+                }
+            }
         }
     }
 
@@ -122,19 +137,21 @@ public struct CollectionView: View {
                     detail: "Adjust the filters or scan albums into My Crate.")
             } else {
                 ForEach(viewModel.visibleRecords, id: \.id) { record in
-                    NavigationLink {
-                        AlbumDetailView(record: record, viewModel: viewModel)
-                    } label: {
-                        DejaGroovePanel {
-                            AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            Task { await viewModel.deleteRecord(id: record.id) }
+                    SwipeActionCard {
+                        Button {
+                            selectedRecordId = record.id
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            DejaGroovePanel {
+                                AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } actions: {
+                        SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
+                            editingRecord = record
+                        }
+                        SwipeActionButton(title: "Delete", systemImage: "trash", color: DejaGrooveStyle.coral) {
+                            Task { await viewModel.deleteRecord(id: record.id) }
                         }
                     }
                 }
@@ -282,6 +299,84 @@ private struct DejaGrooveErrorBanner: View {
     }
 }
 
+private struct SwipeActionCard<Content: View, Actions: View>: View {
+    private let actionWidth: CGFloat = 76
+    private let maxOffset: CGFloat
+    let content: Content
+    let actions: Actions
+    @State private var offset: CGFloat = 0
+    @State private var dragStartOffset: CGFloat?
+
+    init(
+        actionCount: Int = 2,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder actions: () -> Actions
+    ) {
+        maxOffset = CGFloat(actionCount) * actionWidth
+        self.content = content()
+        self.actions = actions()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            HStack(spacing: 8) {
+                actions
+            }
+            .padding(.trailing, 2)
+            .zIndex(2)
+
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(DejaGrooveStyle.paper))
+                .offset(x: offset)
+                .zIndex(3)
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 16)
+                        .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            if dragStartOffset == nil {
+                                dragStartOffset = offset
+                            }
+                            offset = min(0, max(-maxOffset, (dragStartOffset ?? 0) + value.translation.width))
+                        }
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            let projectedOffset = (dragStartOffset ?? 0) + value.translation.width
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                offset = projectedOffset < -(maxOffset * 0.35) ? -maxOffset : 0
+                            }
+                            dragStartOffset = nil
+                        })
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SwipeActionButton: View {
+    let title: String
+    let systemImage: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.headline.weight(.bold))
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 68, height: 74)
+            .background(color, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct AlbumRow: View {
     let record: CollectionRecord
     let collections: [CrateCollection]
@@ -348,6 +443,8 @@ private struct FlowLine: View {
 public struct CollectionsView: View {
     @ObservedObject private var viewModel: CollectionViewModel
     @State private var newCollectionName = ""
+    @State private var editingCollection: CrateCollection?
+    @State private var selectedCollectionId: UUID?
 
     public init(viewModel: CollectionViewModel) {
         self.viewModel = viewModel
@@ -383,6 +480,19 @@ public struct CollectionsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
+            .navigationDestination(item: $selectedCollectionId) { collectionId in
+                if let collection = viewModel.crateCollections.first(where: { $0.id == collectionId }) {
+                    CollectionDetailView(collection: collection, viewModel: viewModel)
+                }
+            }
+            .sheet(item: $editingCollection) { collection in
+                CollectionRenameView(collection: collection) { name in
+                    Task {
+                        await viewModel.renameCollection(id: collection.id, name: name)
+                        editingCollection = nil
+                    }
+                }
+            }
         }
     }
 
@@ -391,7 +501,11 @@ public struct CollectionsView: View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(DejaGrooveStyle.ink)
+                        .fill(
+                            LinearGradient(
+                                colors: [DejaGrooveStyle.blue, DejaGrooveStyle.coral],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing))
                     Image(systemName: "folder.fill")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
@@ -455,21 +569,23 @@ public struct CollectionsView: View {
                     detail: "Create collections to organize albums from My Crate.")
             } else {
                 ForEach(viewModel.crateCollections) { collection in
-                    NavigationLink {
-                        CollectionDetailView(collection: collection, viewModel: viewModel)
-                    } label: {
-                        DejaGroovePanel {
-                            CollectionRow(
-                                collection: collection,
-                                records: viewModel.records(in: collection))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            Task { await viewModel.deleteCollection(id: collection.id) }
+                    SwipeActionCard {
+                        Button {
+                            selectedCollectionId = collection.id
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            DejaGroovePanel {
+                                CollectionRow(
+                                    collection: collection,
+                                    records: viewModel.records(in: collection))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } actions: {
+                        SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
+                            editingCollection = collection
+                        }
+                        SwipeActionButton(title: "Delete", systemImage: "trash", color: DejaGrooveStyle.coral) {
+                            Task { await viewModel.deleteCollection(id: collection.id) }
                         }
                     }
                 }
@@ -481,6 +597,54 @@ public struct CollectionsView: View {
         let albumCount = albumCountLabel(viewModel.records.count)
         let collectionCount = viewModel.crateCollections.count == 1 ? "1 collection" : "\(viewModel.crateCollections.count) collections"
         return "\(collectionCount) organizing \(albumCount)"
+    }
+}
+
+private struct CollectionRenameView: View {
+    @Environment(\.dismiss) private var dismiss
+    let collection: CrateCollection
+    let onSave: (String) -> Void
+    @State private var draftName: String
+
+    init(collection: CrateCollection, onSave: @escaping (String) -> Void) {
+        self.collection = collection
+        self.onSave = onSave
+        _draftName = State(initialValue: collection.name)
+    }
+
+    var body: some View {
+        NavigationStack {
+            DejaGrooveScreen {
+                VStack(alignment: .leading, spacing: 18) {
+                    DejaGroovePanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Rename Collection")
+                                .font(.title3.bold())
+                            TextField("Collection name", text: $draftName)
+                                .textInputAutocapitalization(.words)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 12)
+                                .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(20)
+            }
+            .navigationTitle(collection.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(draftName)
+                    }
+                    .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }
 
@@ -552,6 +716,8 @@ private struct CollectionDetailView: View {
     let collection: CrateCollection
     @ObservedObject var viewModel: CollectionViewModel
     @State private var draftName: String
+    @State private var editingRecord: CollectionRecord?
+    @State private var selectedRecordId: UUID?
 
     init(collection: CrateCollection, viewModel: CollectionViewModel) {
         self.collection = collection
@@ -583,6 +749,19 @@ private struct CollectionDetailView: View {
                     }
                 } label: {
                     Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .navigationDestination(item: $selectedRecordId) { recordId in
+            if let record = viewModel.record(id: recordId) {
+                AlbumDetailView(record: record, viewModel: viewModel)
+            }
+        }
+        .sheet(item: $editingRecord) { record in
+            AlbumEditView(record: viewModel.record(id: record.id) ?? record) { album, notes in
+                Task {
+                    await viewModel.updateRecord(id: record.id, album: album, notes: notes)
+                    editingRecord = nil
                 }
             }
         }
@@ -664,21 +843,23 @@ private struct CollectionDetailView: View {
                     detail: "Add albums to this collection from an album detail screen.")
             } else {
                 ForEach(currentRecords, id: \.id) { record in
-                    NavigationLink {
-                        AlbumDetailView(record: record, viewModel: viewModel)
-                    } label: {
-                        DejaGroovePanel {
-                            AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                    SwipeActionCard {
+                        Button {
+                            selectedRecordId = record.id
+                        } label: {
+                            DejaGroovePanel {
+                                AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                            }
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
+                        .buttonStyle(.plain)
+                    } actions: {
+                        SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
+                            editingRecord = record
+                        }
+                        SwipeActionButton(title: "Remove", systemImage: "minus.circle", color: DejaGrooveStyle.coral) {
                             Task {
                                 await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: false)
                             }
-                        } label: {
-                            Label("Remove", systemImage: "minus.circle")
                         }
                     }
                 }

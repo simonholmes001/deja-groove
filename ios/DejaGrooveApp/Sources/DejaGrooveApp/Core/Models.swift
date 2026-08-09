@@ -335,7 +335,7 @@ public struct ScanTimings: Codable, Equatable, Sendable {
     }
 }
 
-public struct CollectionRecord: Codable, Equatable, Sendable {
+public struct CollectionRecord: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let album: Album
     public let notes: String?
