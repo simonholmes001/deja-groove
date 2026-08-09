@@ -11,67 +11,181 @@ public struct CollectionView: View {
     public var body: some View {
         NavigationStack {
             DejaGrooveScreen {
-                List {
-                    filters
-
-                    Section {
-                        ForEach(viewModel.visibleRecords, id: \.id) { record in
-                            NavigationLink {
-                                AlbumDetailView(record: record, viewModel: viewModel)
-                            } label: {
-                                AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task { await viewModel.deleteRecord(id: record.id) }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-
-                        if !viewModel.isLoading && viewModel.visibleRecords.isEmpty {
-                            ContentUnavailableView("No Albums", systemImage: "square.stack", description: Text("Adjust the filters or scan albums into My Crate."))
-                        }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        crateHeader
+                        filters
+                        albumList
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 110)
                 }
-                .scrollContentBackground(.hidden)
             }
             .overlay {
-                if viewModel.isLoading { ProgressView("Loading...") }
-                if let error = viewModel.errorMessage { Text(error).foregroundStyle(.red) }
+                if viewModel.isLoading {
+                    DejaGrooveLoadingOverlay(label: "Loading crate")
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let error = viewModel.errorMessage {
+                    DejaGrooveErrorBanner(message: error)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
             }
             .searchable(text: $viewModel.search)
             .navigationTitle("My Crate")
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
             .onSubmit(of: .search) { Task { await viewModel.load() } }
         }
     }
 
+    private var crateHeader: some View {
+        DejaGroovePanel {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [DejaGrooveStyle.blue, DejaGrooveStyle.coral],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing))
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 64, height: 64)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("My Crate")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                    Text(crateSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+        }
+    }
+
     private var filters: some View {
-        Section {
-            Picker("Collection", selection: collectionSelection) {
-                Text("All My Crate").tag(UUID?.none)
-                ForEach(viewModel.crateCollections) { collection in
-                    Text(collection.name).tag(Optional(collection.id))
-                }
-            }
+        DejaGroovePanel {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Filter")
+                    .font(.headline)
 
-            Picker("Artist", selection: $viewModel.selectedArtist) {
-                Text("All Artists").tag("")
-                ForEach(viewModel.availableArtists, id: \.self) { artist in
-                    Text(artist).tag(artist)
-                }
-            }
+                VStack(spacing: 10) {
+                    filterMenu(title: "Collection", systemImage: "folder", value: selectedCollectionName) {
+                        Picker("Collection", selection: collectionSelection) {
+                            Text("All My Crate").tag(UUID?.none)
+                            ForEach(viewModel.crateCollections) { collection in
+                                Text(collection.name).tag(Optional(collection.id))
+                            }
+                        }
+                    }
 
-            Picker("Format", selection: $viewModel.selectedFormat) {
-                Text("All Formats").tag("")
-                ForEach(viewModel.availableFormats, id: \.self) { format in
-                    Text(format).tag(format)
+                    filterMenu(title: "Artist", systemImage: "music.mic", value: viewModel.selectedArtist.isEmpty ? "All Artists" : viewModel.selectedArtist) {
+                        Picker("Artist", selection: $viewModel.selectedArtist) {
+                            Text("All Artists").tag("")
+                            ForEach(viewModel.availableArtists, id: \.self) { artist in
+                                Text(artist).tag(artist)
+                            }
+                        }
+                    }
+
+                    filterMenu(title: "Format", systemImage: "record.circle", value: viewModel.selectedFormat.isEmpty ? "All Formats" : viewModel.selectedFormat) {
+                        Picker("Format", selection: $viewModel.selectedFormat) {
+                            Text("All Formats").tag("")
+                            ForEach(viewModel.availableFormats, id: \.self) { format in
+                                Text(format).tag(format)
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private var albumList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DejaGrooveSectionHeader(
+                title: "Albums",
+                detail: "\(viewModel.visibleRecords.count) shown")
+
+            if !viewModel.isLoading && viewModel.visibleRecords.isEmpty {
+                DejaGrooveEmptyState(
+                    title: "No Albums",
+                    systemImage: "square.stack.3d.up",
+                    detail: "Adjust the filters or scan albums into My Crate.")
+            } else {
+                ForEach(viewModel.visibleRecords, id: \.id) { record in
+                    NavigationLink {
+                        AlbumDetailView(record: record, viewModel: viewModel)
+                    } label: {
+                        DejaGroovePanel {
+                            AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteRecord(id: record.id) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var crateSubtitle: String {
+        let albumCount = albumCountLabel(viewModel.records.count)
+        let collectionCount = viewModel.crateCollections.count == 1 ? "1 collection" : "\(viewModel.crateCollections.count) collections"
+        return "\(albumCount) across \(collectionCount)"
+    }
+
+    private var selectedCollectionName: String {
+        guard let selectedCollectionId = viewModel.selectedCollectionId,
+              let collection = viewModel.crateCollections.first(where: { $0.id == selectedCollectionId }) else {
+            return "All My Crate"
+        }
+        return collection.name
+    }
+
+    private func filterMenu<Content: View>(
+        title: String,
+        systemImage: String,
+        value: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.headline)
+                .foregroundStyle(DejaGrooveStyle.blue)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            content()
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(DejaGrooveStyle.blue)
+        }
+        .padding(12)
+        .background(.white.opacity(0.56), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var collectionSelection: Binding<UUID?> {
@@ -81,39 +195,153 @@ public struct CollectionView: View {
     }
 }
 
+private struct DejaGrooveSectionHeader: View {
+    let title: String
+    let detail: String?
+
+    init(title: String, detail: String? = nil) {
+        self.title = title
+        self.detail = detail
+    }
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.title3.bold())
+            Spacer()
+            if let detail {
+                Text(detail)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.62), in: Capsule())
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct DejaGrooveEmptyState: View {
+    let title: String
+    let systemImage: String
+    let detail: String
+
+    var body: some View {
+        DejaGroovePanel {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(DejaGrooveStyle.blue)
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct DejaGrooveLoadingOverlay: View {
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+                .tint(DejaGrooveStyle.blue)
+            Text(label)
+                .font(.footnote.weight(.semibold))
+        }
+        .padding(18)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
+    }
+}
+
+private struct DejaGrooveErrorBanner: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(DejaGrooveStyle.coral)
+            Text(message)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(DejaGrooveStyle.ink)
+            Spacer()
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(DejaGrooveStyle.coral.opacity(0.25), lineWidth: 1)
+        }
+    }
+}
+
 private struct AlbumRow: View {
     let record: CollectionRecord
     let collections: [CrateCollection]
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            AlbumArtwork(urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl, size: 56)
+        HStack(alignment: .center, spacing: 14) {
+            AlbumArtwork(urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl, size: 68)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(record.album.artist)
                     .font(.headline)
+                    .lineLimit(1)
                 Text(record.album.title)
                     .font(.subheadline)
-                HStack(spacing: 8) {
-                    if let firstRelease = record.album.firstReleaseDate ?? record.album.firstReleaseYear.map(String.init) ?? record.album.releaseDate ?? record.album.releaseYear.map(String.init) ?? record.album.year.map(String.init) {
-                        Label(firstRelease, systemImage: "calendar")
-                    }
-                    if let format = record.album.format, !format.isEmpty {
-                        Label(format, systemImage: "record.circle")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    .foregroundStyle(DejaGrooveStyle.ink)
+                    .lineLimit(2)
+
+                FlowLine(items: rowMetadata)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 if !collections.isEmpty {
-                    Text(collections.map(\.name).joined(separator: ", "))
+                    Label(collections.map(\.name).joined(separator: ", "), systemImage: "folder.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DejaGrooveStyle.blue)
                         .lineLimit(1)
                 }
             }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+    }
+
+    private var rowMetadata: [String] {
+        [
+            record.album.firstReleaseDate
+                ?? record.album.firstReleaseYear.map(String.init)
+                ?? record.album.releaseDate
+                ?? record.album.releaseYear.map(String.init)
+                ?? record.album.year.map(String.init),
+            record.album.format,
+            record.album.label
+        ]
+        .compactMap { value in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }
+    }
+}
+
+private struct FlowLine: View {
+    let items: [String]
+
+    var body: some View {
+        Text(items.joined(separator: " - "))
+            .lineLimit(2)
     }
 }
 
@@ -128,79 +356,190 @@ public struct CollectionsView: View {
     public var body: some View {
         NavigationStack {
             DejaGrooveScreen {
-                List {
-                    Section("New Collection") {
-                        HStack {
-                            TextField("Collection name", text: $newCollectionName)
-                                .textInputAutocapitalization(.words)
-                            Button {
-                                let name = newCollectionName
-                                newCollectionName = ""
-                                Task { await viewModel.createCollection(named: name) }
-                            } label: {
-                                Label("Add", systemImage: "plus.circle.fill")
-                            }
-                            .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        collectionsHeader
+                        createCollectionPanel
+                        collectionsList
                     }
-
-                    Section("Collections") {
-                        ForEach(viewModel.crateCollections) { collection in
-                            NavigationLink {
-                                CollectionDetailView(collection: collection, viewModel: viewModel)
-                            } label: {
-                                CollectionRow(collection: collection)
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task { await viewModel.deleteCollection(id: collection.id) }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-
-                        if !viewModel.isLoading && viewModel.crateCollections.isEmpty {
-                            ContentUnavailableView("No Collections", systemImage: "folder", description: Text("Create collections to organize albums from My Crate."))
-                        }
-                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 110)
                 }
-                .scrollContentBackground(.hidden)
             }
             .overlay {
-                if viewModel.isLoading { ProgressView("Loading...") }
-                if let error = viewModel.errorMessage { Text(error).foregroundStyle(.red) }
+                if viewModel.isLoading {
+                    DejaGrooveLoadingOverlay(label: "Loading collections")
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let error = viewModel.errorMessage {
+                    DejaGrooveErrorBanner(message: error)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
             }
             .navigationTitle("Collections")
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
         }
+    }
+
+    private var collectionsHeader: some View {
+        DejaGroovePanel {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(DejaGrooveStyle.ink)
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 64, height: 64)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Collections")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                    Text(collectionsSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private var createCollectionPanel: some View {
+        DejaGroovePanel {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("New Collection")
+                    .font(.headline)
+                HStack(spacing: 10) {
+                    TextField("Collection name", text: $newCollectionName)
+                        .textInputAutocapitalization(.words)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Button {
+                        let name = newCollectionName
+                        newCollectionName = ""
+                        Task { await viewModel.createCollection(named: name) }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline.weight(.bold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .foregroundStyle(.white)
+                    .background(
+                        DejaGrooveStyle.blue,
+                        in: Circle())
+                    .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                }
+            }
+        }
+    }
+
+    private var collectionsList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DejaGrooveSectionHeader(
+                title: "Your Collections",
+                detail: "\(viewModel.crateCollections.count) total")
+
+            if !viewModel.isLoading && viewModel.crateCollections.isEmpty {
+                DejaGrooveEmptyState(
+                    title: "No Collections",
+                    systemImage: "folder.badge.plus",
+                    detail: "Create collections to organize albums from My Crate.")
+            } else {
+                ForEach(viewModel.crateCollections) { collection in
+                    NavigationLink {
+                        CollectionDetailView(collection: collection, viewModel: viewModel)
+                    } label: {
+                        DejaGroovePanel {
+                            CollectionRow(
+                                collection: collection,
+                                records: viewModel.records(in: collection))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteCollection(id: collection.id) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var collectionsSubtitle: String {
+        let albumCount = albumCountLabel(viewModel.records.count)
+        let collectionCount = viewModel.crateCollections.count == 1 ? "1 collection" : "\(viewModel.crateCollections.count) collections"
+        return "\(collectionCount) organizing \(albumCount)"
     }
 }
 
 private struct CollectionRow: View {
     let collection: CrateCollection
+    let records: [CollectionRecord]
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(DejaGrooveStyle.blue.opacity(0.12))
-                Image(systemName: "folder.fill")
-                    .font(.title3)
-                    .foregroundStyle(DejaGrooveStyle.blue)
-            }
-            .frame(width: 46, height: 46)
+        HStack(spacing: 14) {
+            CollectionArtworkStack(records: records)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(collection.name)
                     .font(.headline)
+                    .lineLimit(1)
                 Text(albumCountLabel(collection.recordIds.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let firstArtist = records.first?.album.artist {
+                    Text(firstArtist)
+                        .font(.caption)
+                        .foregroundStyle(DejaGrooveStyle.blue)
+                        .lineLimit(1)
+                }
             }
             Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct CollectionArtworkStack: View {
+    let records: [CollectionRecord]
+
+    var body: some View {
+        ZStack {
+            if records.isEmpty {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(DejaGrooveStyle.blue.opacity(0.12))
+                    .overlay {
+                        Image(systemName: "folder.fill")
+                            .font(.title2)
+                            .foregroundStyle(DejaGrooveStyle.blue)
+                    }
+            } else {
+                ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
+                    AlbumArtwork(
+                        urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl,
+                        size: 52)
+                    .rotationEffect(.degrees(Double(index - 1) * 6))
+                    .offset(x: CGFloat(index) * 8, y: CGFloat(index) * -3)
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+                }
+            }
+        }
+        .frame(width: 78, height: 62)
     }
 }
 
@@ -221,42 +560,16 @@ private struct CollectionDetailView: View {
     }
 
     var body: some View {
-        List {
-            Section("Name") {
-                HStack {
-                    TextField("Collection name", text: $draftName)
-                        .textInputAutocapitalization(.words)
-                    Button {
-                        Task { await viewModel.renameCollection(id: collection.id, name: draftName) }
-                    } label: {
-                        Label("Save", systemImage: "checkmark")
-                    }
-                    .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        DejaGrooveScreen {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    detailHeader
+                    renamePanel
+                    recordsPanel
                 }
-            }
-
-            Section("Albums") {
-                let records = viewModel.records(in: currentCollection)
-                ForEach(records, id: \.id) { record in
-                    NavigationLink {
-                        AlbumDetailView(record: record, viewModel: viewModel)
-                    } label: {
-                        AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            Task {
-                                await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: false)
-                            }
-                        } label: {
-                            Label("Remove", systemImage: "minus.circle")
-                        }
-                    }
-                }
-
-                if records.isEmpty {
-                    ContentUnavailableView("No Albums", systemImage: "square.stack", description: Text("Add albums to this collection from an album detail screen."))
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 110)
             }
         }
         .navigationTitle(currentCollection.name)
@@ -277,6 +590,100 @@ private struct CollectionDetailView: View {
 
     private var currentCollection: CrateCollection {
         viewModel.crateCollections.first(where: { $0.id == collection.id }) ?? collection
+    }
+
+    private var currentRecords: [CollectionRecord] {
+        viewModel.records(in: currentCollection)
+    }
+
+    private var detailHeader: some View {
+        DejaGroovePanel {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 16) {
+                    CollectionArtworkStack(records: currentRecords)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(currentCollection.name)
+                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .lineLimit(2)
+                        Text(albumCountLabel(currentCollection.recordIds.count))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                if let firstArtist = currentRecords.first?.album.artist {
+                    Label(firstArtist, systemImage: "music.mic")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DejaGrooveStyle.blue)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var renamePanel: some View {
+        DejaGroovePanel {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Name")
+                    .font(.headline)
+                HStack(spacing: 10) {
+                    TextField("Collection name", text: $draftName)
+                        .textInputAutocapitalization(.words)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Button {
+                        Task { await viewModel.renameCollection(id: collection.id, name: draftName) }
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.headline.weight(.bold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .foregroundStyle(.white)
+                    .background(DejaGrooveStyle.blue, in: Circle())
+                    .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                }
+            }
+        }
+    }
+
+    private var recordsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DejaGrooveSectionHeader(
+                title: "Albums",
+                detail: "\(currentRecords.count) total")
+
+            if currentRecords.isEmpty {
+                DejaGrooveEmptyState(
+                    title: "No Albums",
+                    systemImage: "square.stack.3d.up",
+                    detail: "Add albums to this collection from an album detail screen.")
+            } else {
+                ForEach(currentRecords, id: \.id) { record in
+                    NavigationLink {
+                        AlbumDetailView(record: record, viewModel: viewModel)
+                    } label: {
+                        DejaGroovePanel {
+                            AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: false)
+                            }
+                        } label: {
+                            Label("Remove", systemImage: "minus.circle")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
