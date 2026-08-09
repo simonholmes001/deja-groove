@@ -28,7 +28,7 @@ const recognitionSchema = Function("albumSchema", `return (${schemaBlock[2]});`)
 const imageBase64 = fs.readFileSync(imagePath).toString("base64");
 
 const body = {
-  model: "gpt-5-mini",
+  model: "gpt-5.6-terra",
   input: [
     {
       role: "user",

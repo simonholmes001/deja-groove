@@ -23,7 +23,7 @@ param openAiKey string
 param deploymentPrincipalObjectId string = ''
 
 @description('OpenAI model used by the recognition proxy.')
-param openAiModel string = 'gpt-5-mini'
+param openAiModel string = 'gpt-5.6-terra'
 
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
 param scanEnrichmentTimeoutMs int = 4000

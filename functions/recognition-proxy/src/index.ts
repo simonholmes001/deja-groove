@@ -13,7 +13,7 @@ if (!apiKey) {
 
 const recognition = new OpenAIAlbumRecognition({
   apiKey,
-  model: process.env.OPENAI_MODEL || "gpt-5-mini"
+  model: process.env.OPENAI_MODEL || "gpt-5.6-terra"
 });
 
 const enrichmentChain = process.env.DISCOGS_TOKEN
