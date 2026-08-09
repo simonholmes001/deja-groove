@@ -4,6 +4,13 @@ def validated_string!(key)
   value
 end
 
+def testflight_build_number
+  value = ENV["DEJA_GROOVE_BUILD_NUMBER"] || ENV["GITHUB_RUN_NUMBER"]
+  UI.user_error!("Missing build number: set DEJA_GROOVE_BUILD_NUMBER or run in GitHub Actions.") if value.nil? || value.strip.empty?
+  UI.user_error!("Build number must be numeric: #{value}") unless value.match?(/\A\d+\z/)
+  value
+end
+
 platform :ios do
   desc "Verify required App Store/TestFlight environment configuration"
   lane :verify_distribution_env do
@@ -41,6 +48,7 @@ platform :ios do
       scheme: ENV.fetch("DEJA_GROOVE_XCODE_SCHEME"),
       export_method: "app-store",
       clean: true,
+      xcargs: "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
       project: ENV["DEJA_GROOVE_XCODE_PROJECT"],
       workspace: ENV["DEJA_GROOVE_XCODE_WORKSPACE"]
     )
