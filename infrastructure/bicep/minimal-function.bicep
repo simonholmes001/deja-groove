@@ -28,7 +28,7 @@ param openAiModel string = 'gpt-5-mini'
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
 param scanEnrichmentTimeoutMs int = 4000
 
-@description('Enable Application Insights. Disabled by default to keep dev cost minimal.')
+@description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool = false
 
 @description('Common Azure resource tags.')

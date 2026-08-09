@@ -19,7 +19,7 @@ param openAiModel string
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
 param scanEnrichmentTimeoutMs int
 
-@description('Enable Application Insights. Disabled by default to keep dev cost minimal.')
+@description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool
 
 @description('Common Azure resource tags.')
@@ -105,6 +105,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (enableAppl
   properties: {
     Application_Type: 'web'
     IngestionMode: 'ApplicationInsights'
+    RetentionInDays: 30
   }
 }
 
