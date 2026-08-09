@@ -1,0 +1,12 @@
+git_url(ENV.fetch("MATCH_GIT_URL"))
+storage_mode("git")
+
+type("appstore")
+app_identifier([ENV.fetch("DEJA_GROOVE_APP_IDENTIFIER")])
+username(ENV.fetch("DEJA_GROOVE_APPLE_ID"))
+team_id(ENV.fetch("DEJA_GROOVE_TEAM_ID"))
+
+# Fastlane 2.227.x can fail on macOS system Ruby while encrypting new Match
+# assets with the newer OpenSSL path. Legacy encryption keeps the private
+# signing repository usable from the current local and CI Fastlane setup.
+force_legacy_encryption(true)

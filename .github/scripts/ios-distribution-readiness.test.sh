@@ -69,6 +69,10 @@ platform :ios do
 end
 EOF_FAST
 
+  cat > "$repo/ios/fastlane/Matchfile" <<'EOF_MATCH'
+force_legacy_encryption(true)
+EOF_MATCH
+
   cat > "$repo/.github/workflows/ios-testflight.yml" <<'EOF_WF'
 name: iOS TestFlight
 on:
@@ -81,6 +85,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
+      - env:
+          MATCH_GIT_BASIC_AUTHORIZATION: secret
+        run: echo "$MATCH_GIT_BASIC_AUTHORIZATION" > /dev/null
       - run: |
           key_path="$(mktemp /tmp/deja-groove-authkey.XXXXXX.p8)"
           chmod 600 "$key_path"
@@ -119,6 +126,9 @@ platform :ios do
   end
 end
 EOF_FAST
+  cat > "$repo/ios/fastlane/Matchfile" <<'EOF_MATCH'
+force_legacy_encryption(true)
+EOF_MATCH
   cat > "$repo/.github/workflows/ios-testflight.yml" <<'EOF_WF'
 name: iOS TestFlight
 on:
@@ -131,6 +141,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
+      - env:
+          MATCH_GIT_BASIC_AUTHORIZATION: secret
+        run: echo "$MATCH_GIT_BASIC_AUTHORIZATION" > /dev/null
       - run: |
           key_path="$(mktemp /tmp/deja-groove-authkey.XXXXXX.p8)"
           chmod 600 "$key_path"
