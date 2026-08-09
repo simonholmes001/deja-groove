@@ -11,6 +11,19 @@ def testflight_build_number
   value
 end
 
+def xcode_container_path(key)
+  value = ENV[key]
+  return nil if value.nil? || value.strip.empty?
+
+  configured_path = value.strip
+  candidates = [configured_path]
+  candidates << File.join("..", configured_path) unless configured_path.start_with?("/")
+  resolved_path = candidates.find { |path| File.exist?(path) }
+
+  UI.user_error!("Configured #{key} not found. Checked: #{candidates.join(', ')}") if resolved_path.nil?
+  resolved_path
+end
+
 platform :ios do
   desc "Verify required App Store/TestFlight environment configuration"
   lane :verify_distribution_env do
@@ -49,8 +62,8 @@ platform :ios do
       export_method: "app-store",
       clean: true,
       xcargs: "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
-      project: ENV["DEJA_GROOVE_XCODE_PROJECT"],
-      workspace: ENV["DEJA_GROOVE_XCODE_WORKSPACE"]
+      project: xcode_container_path("DEJA_GROOVE_XCODE_PROJECT"),
+      workspace: xcode_container_path("DEJA_GROOVE_XCODE_WORKSPACE")
     )
 
     upload_to_testflight(

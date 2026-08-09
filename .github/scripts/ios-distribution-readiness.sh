@@ -27,6 +27,7 @@ grep -q 'lane :upload_internal_testflight' ios/fastlane/Fastfile || { echo "Miss
 grep -q 'sync_code_signing(type: "appstore"' ios/fastlane/Fastfile || { echo "Missing App Store signing sync in Fastfile" >&2; exit 1; }
 grep -q 'app_store_connect_api_key(' ios/fastlane/Fastfile || { echo "Missing explicit App Store Connect API key setup in Fastfile" >&2; exit 1; }
 grep -q 'upload_to_testflight(' ios/fastlane/Fastfile || { echo "Missing TestFlight upload in Fastfile" >&2; exit 1; }
+grep -q 'def xcode_container_path' ios/fastlane/Fastfile || { echo "Fastfile missing xcode container path normalization" >&2; exit 1; }
 
 grep -q 'force_legacy_encryption(true)' ios/fastlane/Matchfile || { echo "Matchfile missing legacy encryption compatibility setting" >&2; exit 1; }
 
