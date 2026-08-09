@@ -20,6 +20,7 @@ grep -q 'chmod 600 "\$key_path"' "$WORKFLOW" || fail "missing API key permission
 grep -q 'run: rm -f "${APP_STORE_CONNECT_API_KEY_PATH:-}"' "$WORKFLOW" || fail "missing API key cleanup"
 grep -q 'uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' "$WORKFLOW" || fail "missing immutable checkout pin"
 grep -q 'uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6' "$WORKFLOW" || fail "missing immutable ruby setup pin"
+grep -q "ruby-version: '3.1'" "$WORKFLOW" || fail "missing Ruby version compatible with locked Fastlane dependencies"
 grep -q "bundler: '2.5.23'" "$WORKFLOW" || fail "missing Ruby 3-compatible Bundler pin"
 
 echo "ios-testflight workflow tests passed."

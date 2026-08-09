@@ -83,7 +83,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
         with:
-          ruby-version: '3.3'
+          ruby-version: '3.1'
           bundler: '2.5.23'
           bundler-cache: true
           working-directory: ios
