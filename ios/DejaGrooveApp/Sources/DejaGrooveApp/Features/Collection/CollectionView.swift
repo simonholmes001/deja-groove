@@ -545,8 +545,12 @@ public struct CollectionsView: View {
 
                     Button {
                         let name = newCollectionName
-                        newCollectionName = ""
-                        Task { await viewModel.createCollection(named: name) }
+                        Task {
+                            await viewModel.createCollection(named: name)
+                            if viewModel.errorMessage == nil {
+                                newCollectionName = ""
+                            }
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.headline.weight(.bold))
@@ -868,7 +872,7 @@ private struct CollectionDetailView: View {
                         .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     Button {
-                        Task { await viewModel.renameCollection(id: collection.id, name: draftName) }
+                        Task { await viewModel.renameCollection(id: currentCollection.id, name: draftName) }
                     } label: {
                         Image(systemName: "checkmark")
                             .font(.headline.weight(.bold))
