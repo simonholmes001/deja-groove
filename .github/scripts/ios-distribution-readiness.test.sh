@@ -48,6 +48,10 @@ team_id(ENV.fetch("DEJA_GROOVE_TEAM_ID"))
 EOF_APP
 
   cat > "$repo/ios/fastlane/Fastfile" <<'EOF_FAST'
+def xcode_container_path(key)
+  ENV[key]
+end
+
 platform :ios do
   lane :verify_distribution_env do
     puts "ok"
@@ -116,6 +120,10 @@ itc_team_id("x")
 team_id("x")
 EOF_APP
   cat > "$repo/ios/fastlane/Fastfile" <<'EOF_FAST'
+def xcode_container_path(key)
+  ENV[key]
+end
+
 platform :ios do
   lane :verify_distribution_env do
   end
