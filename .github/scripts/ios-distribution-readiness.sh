@@ -34,6 +34,7 @@ grep -q 'permissions:' .github/workflows/ios-testflight.yml || { echo "Workflow 
 grep -q 'contents: read' .github/workflows/ios-testflight.yml || { echo "Workflow missing least-privilege contents: read" >&2; exit 1; }
 grep -q 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' .github/workflows/ios-testflight.yml || { echo "Workflow missing immutable checkout pin" >&2; exit 1; }
 grep -q 'ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6' .github/workflows/ios-testflight.yml || { echo "Workflow missing immutable ruby/setup-ruby pin" >&2; exit 1; }
+grep -q "bundler: '2.5.23'" .github/workflows/ios-testflight.yml || { echo "Workflow missing Ruby 3-compatible Bundler pin" >&2; exit 1; }
 grep -Fq 'mktemp /tmp/deja-groove-authkey' .github/workflows/ios-testflight.yml || { echo "Workflow missing unique API key temp path" >&2; exit 1; }
 grep -Fq 'chmod 600 "$key_path"' .github/workflows/ios-testflight.yml || { echo "Workflow missing API key permission hardening" >&2; exit 1; }
 grep -Fq 'rm -f "${APP_STORE_CONNECT_API_KEY_PATH:-}"' .github/workflows/ios-testflight.yml || { echo "Workflow missing API key cleanup" >&2; exit 1; }
