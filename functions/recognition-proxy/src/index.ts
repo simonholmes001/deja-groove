@@ -1,5 +1,6 @@
 import { app } from "@azure/functions";
 import { ArtworkFallbackAlbumEnrichment } from "./artworkFallback.js";
+import { CachedAlbumEnrichment } from "./cachedEnrichment.js";
 import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
@@ -15,13 +16,18 @@ const recognition = new OpenAIAlbumRecognition({
   model: process.env.OPENAI_MODEL || "gpt-5-mini"
 });
 
-const enrichment = process.env.DISCOGS_TOKEN
+const enrichmentChain = process.env.DISCOGS_TOKEN
   ? new ArtworkFallbackAlbumEnrichment({
       primary: new DiscogsAlbumEnrichment({ token: process.env.DISCOGS_TOKEN })
     })
   : new ArtworkFallbackAlbumEnrichment({
       primary: new NoopAlbumEnrichment()
     });
+const enrichment = new CachedAlbumEnrichment({
+  inner: enrichmentChain,
+  ttlMs: Number.parseInt(process.env.ENRICHMENT_CACHE_TTL_MS || "86400000", 10),
+  maxEntries: Number.parseInt(process.env.ENRICHMENT_CACHE_MAX_ENTRIES || "500", 10)
+});
 
 app.http("health", {
   methods: ["GET"],
@@ -34,5 +40,8 @@ app.http("scan", {
   methods: ["POST"],
   authLevel: "function",
   route: "v1/scan",
-  handler: createScanHandler(recognition, enrichment)
+  handler: createScanHandler(recognition, enrichment, {
+    enrichmentTimeoutMs: Number.parseInt(process.env.SCAN_ENRICHMENT_TIMEOUT_MS || "4000", 10),
+    includeTimings: process.env.SCAN_INCLUDE_TIMINGS === "true"
+  })
 });

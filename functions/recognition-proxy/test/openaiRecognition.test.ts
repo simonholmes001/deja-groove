@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseRecognitionOutput } from "../src/openaiRecognition.js";
+import { parseRecognitionOutput, RecognitionOutputError } from "../src/openaiRecognition.js";
 
 test("parseRecognitionOutput accepts the scan contract", () => {
   const result = parseRecognitionOutput(JSON.stringify({
@@ -47,14 +47,55 @@ test("parseRecognitionOutput accepts the scan contract", () => {
   assert.equal(result.confidence, 0.91);
 });
 
-test("parseRecognitionOutput rejects incomplete album records", () => {
-  assert.throws(
-    () => parseRecognitionOutput(JSON.stringify({
-      status: "safe_to_buy",
-      confidence: 0.91,
-      album: { title: "Blue Train" },
-      candidates: []
-    })),
-    /recognition contract/
-  );
+test("parseRecognitionOutput accepts the reduced scan-time recognition contract", () => {
+  const result = parseRecognitionOutput(JSON.stringify({
+    status: "safe_to_buy",
+    confidence: 0.93,
+    album: {
+      title: "A Love Supreme",
+      artist: "John Coltrane",
+      year: 1965,
+      format: "Vinyl",
+      label: "Impulse!",
+      catalog_number: "AS-77",
+      country: "US",
+      barcode: null
+    },
+    candidates: []
+  }));
+
+  assert.equal(result.album?.title, "A Love Supreme");
+  assert.equal(result.album?.artist, "John Coltrane");
+  assert.equal(result.album?.label, "Impulse!");
+  assert.equal(result.album?.tracklist, undefined);
 });
+
+test("parseRecognitionOutput rejects incomplete album records", () => {
+  const error = captureRecognitionOutputError(() => parseRecognitionOutput(JSON.stringify({
+    status: "safe_to_buy",
+    confidence: 0.91,
+    album: { title: "Blue Train" },
+    candidates: []
+  })));
+
+  assert.match(error.message, /recognition contract/);
+  assert.equal(error.outputLength > 0, true);
+});
+
+test("parseRecognitionOutput reports invalid JSON without logging payload content", () => {
+  const error = captureRecognitionOutputError(() => parseRecognitionOutput("{"));
+
+  assert.match(error.message, /not valid JSON/);
+  assert.equal(error.outputLength, 1);
+});
+
+function captureRecognitionOutputError(action: () => void): RecognitionOutputError {
+  try {
+    action();
+  } catch (error) {
+    assert.ok(error instanceof RecognitionOutputError);
+    return error;
+  }
+
+  assert.fail("Expected RecognitionOutputError.");
+}

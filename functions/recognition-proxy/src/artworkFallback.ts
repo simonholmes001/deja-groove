@@ -1,5 +1,5 @@
 import type { Album } from "./contracts.js";
-import type { AlbumEnrichmentPort } from "./discogs.js";
+import type { AlbumEnrichmentOptions, AlbumEnrichmentPort } from "./discogs.js";
 
 type ArtworkFallbackConfig = {
   primary: AlbumEnrichmentPort;
@@ -51,40 +51,40 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     this.itunesBaseURL = config.itunesBaseURL || "https://itunes.apple.com";
   }
 
-  async enrich(album: Album): Promise<Album> {
-    const enriched = await this.primary.enrich(album);
+  async enrich(album: Album, options: AlbumEnrichmentOptions = {}): Promise<Album> {
+    const enriched = await this.primary.enrich(album, options);
     if (hasCompleteArtwork(enriched)) return enriched;
 
-    const withCoverArtArchive = await this.tryApplyCoverArtArchive(enriched);
+    const withCoverArtArchive = await this.tryApplyCoverArtArchive(enriched, options);
     if (hasFrontArtwork(withCoverArtArchive) && hasBackArtwork(withCoverArtArchive)) {
       return withCoverArtArchive;
     }
 
-    return await this.tryApplyITunes(withCoverArtArchive);
+    return await this.tryApplyITunes(withCoverArtArchive, options);
   }
 
-  private async tryApplyCoverArtArchive(album: Album): Promise<Album> {
+  private async tryApplyCoverArtArchive(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
     try {
-      return await this.applyCoverArtArchive(album);
+      return await this.applyCoverArtArchive(album, options);
     } catch (error) {
       logFallbackFailure("Cover Art Archive", error);
       return album;
     }
   }
 
-  private async tryApplyITunes(album: Album): Promise<Album> {
+  private async tryApplyITunes(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
     try {
-      return await this.applyITunes(album);
+      return await this.applyITunes(album, options);
     } catch (error) {
       logFallbackFailure("iTunes Search", error);
       return album;
     }
   }
 
-  private async applyCoverArtArchive(album: Album): Promise<Album> {
+  private async applyCoverArtArchive(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
     if (!album.mbid || hasCompleteArtwork(album)) return album;
 
-    const artwork = await this.fetchCoverArtArchiveArtwork(album.mbid);
+    const artwork = await this.fetchCoverArtArchiveArtwork(album.mbid, options);
     if (!artwork) return album;
 
     return {
@@ -95,14 +95,15 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     };
   }
 
-  private async fetchCoverArtArchiveArtwork(mbid: string): Promise<ArtworkCandidate | null> {
-    const releaseArtwork = await this.fetchCoverArtArchivePath(`/release/${encodeURIComponent(mbid)}`);
+  private async fetchCoverArtArchiveArtwork(mbid: string, options: AlbumEnrichmentOptions): Promise<ArtworkCandidate | null> {
+    const releaseArtwork = await this.fetchCoverArtArchivePath(`/release/${encodeURIComponent(mbid)}`, options);
     if (releaseArtwork) return releaseArtwork;
-    return await this.fetchCoverArtArchivePath(`/release-group/${encodeURIComponent(mbid)}`);
+    return await this.fetchCoverArtArchivePath(`/release-group/${encodeURIComponent(mbid)}`, options);
   }
 
-  private async fetchCoverArtArchivePath(path: string): Promise<ArtworkCandidate | null> {
+  private async fetchCoverArtArchivePath(path: string, options: AlbumEnrichmentOptions): Promise<ArtworkCandidate | null> {
     const response = await this.fetchImpl(`${this.coverArtArchiveBaseURL}${path}`, {
+      signal: options.signal,
       headers: { "Accept": "application/json" }
     });
     if (response.status === 404) return null;
@@ -123,10 +124,10 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     };
   }
 
-  private async applyITunes(album: Album): Promise<Album> {
+  private async applyITunes(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
     if (hasFrontArtwork(album)) return album;
 
-    const result = await this.fetchITunesAlbum(album);
+    const result = await this.fetchITunesAlbum(album, options);
     const artwork = clean(result?.artworkUrl100);
     if (!artwork) return album;
 
@@ -138,7 +139,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     };
   }
 
-  private async fetchITunesAlbum(album: Album): Promise<ITunesAlbumResult | null> {
+  private async fetchITunesAlbum(album: Album, options: AlbumEnrichmentOptions): Promise<ITunesAlbumResult | null> {
     const term = [album.artist, album.title].filter(Boolean).join(" ");
     const params = new URLSearchParams({
       term,
@@ -147,6 +148,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
       limit: "10"
     });
     const response = await this.fetchImpl(`${this.itunesBaseURL}/search?${params.toString()}`, {
+      signal: options.signal,
       headers: { "Accept": "application/json" }
     });
     if (!response.ok) {

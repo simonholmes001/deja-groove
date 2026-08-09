@@ -12,30 +12,12 @@ type OpenAIConfig = {
 };
 
 const defaultPrompt = [
-  "Identify the vinyl record album shown in this cover image.",
-  "Return only JSON matching this schema:",
-  "{",
-  "  \"status\": \"safe_to_buy\" | \"ambiguous\" | \"no_match\",",
-  "  \"confidence\": number,",
-  "  \"album\": {",
-  "    \"title\": string, \"artist\": string, \"year\": number|null,",
-  "    \"first_release_year\": number|null, \"release_year\": number|null,",
-  "    \"first_release_date\": string|null, \"release_date\": string|null,",
-  "    \"format\": string|null, \"label\": string|null, \"catalog_number\": string|null,",
-  "    \"country\": string|null, \"barcode\": string|null,",
-  "    \"cover_image_url\": string|null, \"thumbnail_url\": string|null, \"back_cover_image_url\": string|null,",
-  "    \"back_cover_text\": string|null, \"release_notes\": string|null,",
-  "    \"genres\": string[], \"styles\": string[], \"tracklist\": [], \"identifiers\": [],",
-  "    \"discogs_data_quality\": string|null,",
-  "    \"mbid\": string|null, \"discogs_release_id\": string|null, \"discogs_master_id\": string|null,",
-  "    \"discogs_url\": string|null, \"discogs_resource_url\": string|null",
-  "  } | null,",
-  "  \"candidates\": [same album shape]",
-  "}",
-  "Use status safe_to_buy for one strong match, ambiguous for multiple plausible matches, and no_match when the cover is not recognizable.",
-  "Use year as the best available release year, first_release_year for the album's original first release, and release_year for this visible pressing/version.",
-  "Only transcribe back_cover_text when the provided image actually shows readable back-cover text; otherwise return null.",
-  "Do not invent MBID or Discogs IDs; use null unless you are certain."
+  "Identify the vinyl record album from the cover image.",
+  "Return JSON only, using the supplied schema.",
+  "Set safe_to_buy for one strong match, ambiguous for multiple plausible matches, or no_match if unrecognizable.",
+  "Prefer visible cover evidence. Use null for unknown years, labels, catalog numbers, countries, formats, and barcodes.",
+  "Do not return Discogs, MusicBrainz, artwork, tracklist, identifier, or release-note metadata.",
+  "Only identify the likely album; external enrichment will fill detailed release metadata."
 ].join("\n");
 
 export class OpenAIAlbumRecognition implements RecognitionPort {
@@ -75,11 +57,33 @@ export class OpenAIAlbumRecognition implements RecognitionPort {
 }
 
 export function parseRecognitionOutput(outputText: string): RecognitionResult {
-  const parsed = JSON.parse(outputText) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outputText) as unknown;
+  } catch (error) {
+    throw new RecognitionOutputError(
+      "OpenAI response was not valid JSON.",
+      outputText.length,
+      error);
+  }
+
   if (!isRecognitionResult(parsed)) {
-    throw new Error("OpenAI response did not match the recognition contract.");
+    throw new RecognitionOutputError(
+      "OpenAI response did not match the recognition contract.",
+      outputText.length);
   }
   return parsed;
+}
+
+export class RecognitionOutputError extends Error {
+  constructor(
+    message: string,
+    readonly outputLength: number,
+    cause?: unknown
+  ) {
+    super(message, { cause });
+    this.name = "RecognitionOutputError";
+  }
 }
 
 function isRecognitionResult(value: unknown): value is RecognitionResult {
@@ -160,88 +164,24 @@ const albumSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    mbid: { type: ["string", "null"] },
-    discogs_release_id: { type: ["string", "null"] },
-    discogs_master_id: { type: ["string", "null"] },
-    discogs_url: { type: ["string", "null"] },
-    discogs_resource_url: { type: ["string", "null"] },
     title: { type: "string" },
     artist: { type: "string" },
     year: { type: ["number", "null"] },
-    first_release_year: { type: ["number", "null"] },
-    release_year: { type: ["number", "null"] },
-    first_release_date: { type: ["string", "null"] },
-    release_date: { type: ["string", "null"] },
     format: { type: ["string", "null"] },
     label: { type: ["string", "null"] },
     catalog_number: { type: ["string", "null"] },
     country: { type: ["string", "null"] },
-    barcode: { type: ["string", "null"] },
-    cover_image_url: { type: ["string", "null"] },
-    thumbnail_url: { type: ["string", "null"] },
-    back_cover_image_url: { type: ["string", "null"] },
-    back_cover_text: { type: ["string", "null"] },
-    release_notes: { type: ["string", "null"] },
-    genres: { type: "array", items: { type: "string" } },
-    styles: { type: "array", items: { type: "string" } },
-    companies: { type: "array", items: { type: "string" } },
-    tracklist: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          position: { type: ["string", "null"] },
-          title: { type: "string" },
-          duration: { type: ["string", "null"] }
-        },
-        required: ["position", "title", "duration"]
-      }
-    },
-    identifiers: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          type: { type: "string" },
-          value: { type: ["string", "null"] },
-          description: { type: ["string", "null"] }
-        },
-        required: ["type", "value", "description"]
-      }
-    },
-    discogs_data_quality: { type: ["string", "null"] }
+    barcode: { type: ["string", "null"] }
   },
   required: [
-    "mbid",
-    "discogs_release_id",
-    "discogs_master_id",
-    "discogs_url",
-    "discogs_resource_url",
     "title",
     "artist",
     "year",
-    "first_release_year",
-    "release_year",
-    "first_release_date",
-    "release_date",
     "format",
     "label",
     "catalog_number",
     "country",
-    "barcode",
-    "cover_image_url",
-    "thumbnail_url",
-    "back_cover_image_url",
-    "back_cover_text",
-    "release_notes",
-    "genres",
-    "styles",
-    "companies",
-    "tracklist",
-    "identifiers",
-    "discogs_data_quality"
+    "barcode"
   ]
 } as const;
 

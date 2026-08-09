@@ -1,23 +1,62 @@
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import type { ApiError, RecognitionResult, ScanResponse } from "./contracts.js";
+import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
+import { RecognitionOutputError } from "./openaiRecognition.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
 
-export function createScanHandler(recognition: RecognitionPort, enrichment?: AlbumEnrichmentPort) {
+type ScanHandlerOptions = {
+  enrichmentTimeoutMs?: number;
+  includeTimings?: boolean;
+};
+
+const defaultEnrichmentTimeoutMs = 4000;
+
+export function createScanHandler(
+  recognition: RecognitionPort,
+  enrichment?: AlbumEnrichmentPort,
+  options: ScanHandlerOptions = {}
+) {
+  const enrichmentTimeoutMs = validTimeoutMs(options.enrichmentTimeoutMs, defaultEnrichmentTimeoutMs);
+  const includeTimings = options.includeTimings === true;
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
+    const scanStartedAt = performance.now();
 
     try {
+      const imageReadStartedAt = performance.now();
       const image = await readScanImage(request);
+      const imageReadMs = elapsedSince(imageReadStartedAt);
+
+      const recognitionStartedAt = performance.now();
       const result = await recognition.recognize(image);
-      const enriched = enrichment
-        ? await enrichRecognitionResult(result, enrichment, context)
-        : result;
+      const recognitionMs = elapsedSince(recognitionStartedAt);
+
+      const enrichmentStartedAt = performance.now();
+      const enrichmentResult = enrichment
+        ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs)
+        : { result, timedOut: false };
+      const enrichmentMs = elapsedSince(enrichmentStartedAt);
+      const timings: ScanTimings = {
+        total_ms: elapsedSince(scanStartedAt),
+        image_read_ms: imageReadMs,
+        recognition_ms: recognitionMs,
+        enrichment_ms: enrichmentMs,
+        image_bytes: image.data.length,
+        enrichment_timed_out: enrichmentResult.timedOut
+      };
+
+      context.log("Album scan completed.", {
+        requestId,
+        status: enrichmentResult.result.status,
+        timings
+      });
+
       return {
         status: 200,
-        jsonBody: toScanResponse(enriched, requestId),
+        jsonBody: toScanResponse(enrichmentResult.result, requestId, includeTimings ? timings : undefined),
         headers: noStoreHeaders()
       };
     } catch (error) {
@@ -25,7 +64,7 @@ export function createScanHandler(recognition: RecognitionPort, enrichment?: Alb
         return errorResponse(error.status, error.code, error.message, error.retryable, requestId);
       }
 
-      context.error("Album recognition failed.", error);
+      context.error("Album recognition failed.", errorDetails(error, requestId));
       return errorResponse(
         502,
         "recognition_failed",
@@ -36,31 +75,95 @@ export function createScanHandler(recognition: RecognitionPort, enrichment?: Alb
   };
 }
 
+function validTimeoutMs(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.round(performance.now() - startedAt);
+}
+
+function errorDetails(error: unknown, requestId: string): Record<string, unknown> {
+  if (error instanceof RecognitionOutputError) {
+    return {
+      requestId,
+      name: error.name,
+      message: error.message,
+      outputLength: error.outputLength
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      requestId,
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return {
+    requestId,
+    message: String(error)
+  };
+}
+
 async function enrichRecognitionResult(
   result: RecognitionResult,
   enrichment: AlbumEnrichmentPort,
-  context: InvocationContext
-): Promise<RecognitionResult> {
+  context: InvocationContext,
+  timeoutMs: number
+): Promise<{ result: RecognitionResult; timedOut: boolean }> {
   try {
-    return {
-      ...result,
-      album: result.album ? await enrichment.enrich(result.album) : result.album,
-      candidates: result.candidates
-        ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate)))
-        : result.candidates
-    };
+    const enriched = await withTimeout(
+      async (signal): Promise<RecognitionResult> => ({
+        ...result,
+        album: result.album ? await enrichment.enrich(result.album, { signal }) : result.album,
+        candidates: result.candidates
+          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate, { signal })))
+          : result.candidates
+      }),
+      timeoutMs);
+    return { result: enriched, timedOut: false };
   } catch (error) {
+    if (error instanceof EnrichmentTimeoutError) {
+      context.warn(`Album metadata enrichment exceeded ${timeoutMs}ms; returning recognition-only result.`);
+      return { result, timedOut: true };
+    }
     context.warn("Album metadata enrichment failed; returning recognition-only result.", error);
-    return result;
+    return { result, timedOut: false };
   }
 }
 
-export function toScanResponse(result: RecognitionResult, requestId: string): ScanResponse {
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  if (timeoutMs <= 0) return await operation(controller.signal);
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(controller.signal),
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new EnrichmentTimeoutError());
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+class EnrichmentTimeoutError extends Error {}
+
+export function toScanResponse(result: RecognitionResult, requestId: string, timings?: ScanTimings): ScanResponse {
   return {
     status: result.status,
     confidence: clampConfidence(result.confidence),
     album: result.status === "safe_to_buy" ? result.album ?? null : null,
     candidates: result.status === "ambiguous" ? result.candidates ?? [] : [],
+    timings,
     request_id: requestId
   };
 }

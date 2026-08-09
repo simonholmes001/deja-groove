@@ -113,13 +113,35 @@ Persist ambiguous candidates by request ID and resolve selections locally. The
 existing `ScanViewModel.resolve(...)` flow should continue to work through the
 `ApiClient` abstraction.
 
-### 8. Remove Hosted Auth From iOS Runtime
+### 8. Scan Latency And Progressive Enrichment
+
+Optimize the real-world scan experience for record-store conditions where
+mobile network quality may be weak. The current path can upload the prepared
+image, call OpenAI, call Discogs, and call artwork fallback providers before the
+user sees a final result. Keep the rich metadata path, but improve perceived
+speed:
+
+- measure latency by phase: image preparation, upload, OpenAI recognition,
+  Discogs enrichment, artwork fallback, and response decode
+- resize and compress the uploaded image more aggressively while preserving
+  recognition quality
+- show the first usable recognition result before optional enrichment completes
+  where the architecture allows it
+- move Discogs and artwork fallback into a second phase or cached follow-up path
+  where practical
+- cache metadata and artwork lookups locally for repeated scans of the same
+  album or release
+- add visible progress states so weak-network waits do not look like a frozen app
+- add provider timeouts/fallback behavior so slow enrichment providers do not
+  block the core scan result indefinitely
+
+### 9. Remove Hosted Auth From iOS Runtime
 
 Remove Entra authentication from the iPhone happy path. Keep the auth package
 temporarily if needed during migration, then delete it once no local/proxy
 runtime path depends on it.
 
-### 9. Minimal Azure Deployment And Cost Guardrails
+### 10. Minimal Azure Deployment And Cost Guardrails
 
 Replace the current Azure deployment path with a deliberately small Function
 deployment:
@@ -131,7 +153,7 @@ deployment:
 - explicit budget alert or manual cost check before wider testing
 - documented teardown command/process
 
-### 10. Legacy Runtime Decommission Plan
+### 11. Legacy Runtime Decommission Plan
 
 Document and execute shutdown of the old Azure runtime:
 
@@ -175,3 +197,5 @@ Updated issue list:
 - #167 `[NEW] Implement local ambiguous scan resolution`
 - #168 `[NEW] Remove hosted auth dependency from iOS runtime`
 - #169 `[NEW] Replace legacy Azure runtime with minimum-cost Function deployment`
+- #176 `[NEW] Harden local My Crate storage schema`
+- #178 `[NEW] Improve scan latency with progressive enrichment`

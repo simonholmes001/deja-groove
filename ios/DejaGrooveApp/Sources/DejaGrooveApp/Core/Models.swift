@@ -216,13 +216,15 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     public let confidence: Float
     public let album: Album?
     public let candidates: [Album]
+    public let timings: ScanTimings?
     public let requestId: UUID
 
-    public init(status: String, confidence: Float, album: Album?, candidates: [Album], requestId: UUID) {
+    public init(status: String, confidence: Float, album: Album?, candidates: [Album], timings: ScanTimings? = nil, requestId: UUID) {
         self.status = Self.normalizeStatus(status)
         self.confidence = confidence
         self.album = album
         self.candidates = candidates
+        self.timings = timings
         self.requestId = requestId
     }
 
@@ -230,11 +232,22 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         album != nil && status == "safe_to_buy"
     }
 
+    public func withClientElapsedMs(_ clientElapsedMs: Int) -> ScanResponse {
+        ScanResponse(
+            status: status,
+            confidence: confidence,
+            album: album,
+            candidates: candidates,
+            timings: timings?.withClientElapsedMs(clientElapsedMs),
+            requestId: requestId)
+    }
+
     enum CodingKeys: String, CodingKey {
         case status
         case confidence
         case album
         case candidates
+        case timings
         case requestId = "request_id"
     }
 
@@ -245,6 +258,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
             confidence: try container.decode(Float.self, forKey: .confidence),
             album: try container.decodeIfPresent(Album.self, forKey: .album),
             candidates: try container.decode([Album].self, forKey: .candidates),
+            timings: try container.decodeIfPresent(ScanTimings.self, forKey: .timings),
             requestId: try container.decode(UUID.self, forKey: .requestId)
         )
     }
@@ -269,6 +283,55 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         default:
             return status.lowercased()
         }
+    }
+}
+
+public struct ScanTimings: Codable, Equatable, Sendable {
+    public let totalMs: Int
+    public let imageReadMs: Int
+    public let recognitionMs: Int
+    public let enrichmentMs: Int
+    public let imageBytes: Int
+    public let enrichmentTimedOut: Bool
+    public let clientElapsedMs: Int?
+
+    public init(
+        totalMs: Int,
+        imageReadMs: Int,
+        recognitionMs: Int,
+        enrichmentMs: Int,
+        imageBytes: Int,
+        enrichmentTimedOut: Bool,
+        clientElapsedMs: Int? = nil
+    ) {
+        self.totalMs = totalMs
+        self.imageReadMs = imageReadMs
+        self.recognitionMs = recognitionMs
+        self.enrichmentMs = enrichmentMs
+        self.imageBytes = imageBytes
+        self.enrichmentTimedOut = enrichmentTimedOut
+        self.clientElapsedMs = clientElapsedMs
+    }
+
+    public func withClientElapsedMs(_ clientElapsedMs: Int) -> ScanTimings {
+        ScanTimings(
+            totalMs: totalMs,
+            imageReadMs: imageReadMs,
+            recognitionMs: recognitionMs,
+            enrichmentMs: enrichmentMs,
+            imageBytes: imageBytes,
+            enrichmentTimedOut: enrichmentTimedOut,
+            clientElapsedMs: clientElapsedMs)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case totalMs = "total_ms"
+        case imageReadMs = "image_read_ms"
+        case recognitionMs = "recognition_ms"
+        case enrichmentMs = "enrichment_ms"
+        case imageBytes = "image_bytes"
+        case enrichmentTimedOut = "enrichment_timed_out"
+        case clientElapsedMs = "client_elapsed_ms"
     }
 }
 

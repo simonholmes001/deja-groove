@@ -46,7 +46,17 @@ export type ScanResponse = {
   confidence: number;
   album: Album | null;
   candidates: Album[];
+  timings?: ScanTimings;
   request_id: string;
+};
+
+export type ScanTimings = {
+  total_ms: number;
+  image_read_ms: number;
+  recognition_ms: number;
+  enrichment_ms: number;
+  image_bytes: number;
+  enrichment_timed_out: boolean;
 };
 
 export type ApiError = {

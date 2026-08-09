@@ -16,6 +16,7 @@ state, duplicate detection, and local persistence.
 - Active runtime target: Azure Function App
 - Secret store: Azure Key Vault with RBAC authorization
 - Azure resource access: Function system-assigned managed identity
+- Observability: minimal Application Insights for Function request/error/timing diagnostics
 - Required pipeline secret: `OPENAI_KEY`
 - Required Key Vault secret for Discogs enrichment: `DISCOGS-TOKEN`
 - `POST /v1/scan` requires an Azure Functions key; `GET /health` is anonymous.
@@ -54,6 +55,11 @@ For Function App configuration:
 
 - `OPENAI_KEY` (pipeline secret, written into Key Vault during deployment)
 - `DISCOGS-TOKEN` (Key Vault secret, manually created in the vault; exposed to the Function as `DISCOGS_TOKEN`)
+- `SCAN_ENRICHMENT_TIMEOUT_MS` defaults to `4000`.
+- `ENRICHMENT_CACHE_TTL_MS` defaults to `86400000` for a 24-hour warm-instance metadata/artwork cache.
+- `ENRICHMENT_CACHE_MAX_ENTRIES` defaults to `500`.
+- `enableApplicationInsights` is enabled for dev to capture request status,
+  Function errors, scan timings, and recognition failure diagnostics.
 
 Managed identity and RBAC:
 
@@ -64,6 +70,22 @@ Managed identity and RBAC:
 For scan calls after deployment:
 
 - Use an Azure Functions key through the `x-functions-key` header.
+
+The enrichment cache is in-memory per warm Function instance. It reduces
+repeated Discogs/Cover Art Archive/iTunes lookups during active testing, but it
+is not durable and may be empty after scale-out or cold start.
+
+## Observability
+
+Dev deployments create an Application Insights resource named
+`appi-deja-recognition-dev`. The Function writes scan completion events,
+recognition failures, metadata timeout warnings, request IDs, and scan timing
+fields there. Logs must not include image payloads, OpenAI responses, API keys,
+Discogs tokens, or other secrets.
+
+Telemetry is intentionally minimal: the Function host samples telemetry in
+`functions/recognition-proxy/host.json`, keeps requests visible, and the
+Application Insights resource uses 30-day retention.
 
 ## Pipeline Behavior
 

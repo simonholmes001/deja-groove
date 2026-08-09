@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import PhotosUI
 
@@ -73,8 +74,8 @@ public struct ScanView: View {
             case .idle:
                 Text("Take a clear photo to start.")
                 qualityGuidance
-            case .loading:
-                ProgressView("Analyzing cover...")
+            case .loading(let progress):
+                ProgressView(progress.message)
             case .error(let message):
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message).foregroundStyle(.red)
@@ -178,6 +179,9 @@ private struct ScanResultView: View {
                 }
                 .buttonStyle(.plain)
             }
+            if let timings = response.timings {
+                ScanTimingSummary(timings: timings)
+            }
             if response.status == "ambiguous" {
                 Text("Select the correct release:")
                     .font(.subheadline.bold())
@@ -241,6 +245,35 @@ private struct ScanResultView: View {
         default:
             return .secondary
         }
+    }
+}
+
+private struct ScanTimingSummary: View {
+    let timings: ScanTimings
+
+    var body: some View {
+        Label(summary, systemImage: timings.enrichmentTimedOut ? "clock.badge.exclamationmark" : "clock")
+            .font(.caption)
+            .foregroundStyle(timings.enrichmentTimedOut ? .orange : .secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var summary: String {
+        let timeout = timings.enrichmentTimedOut ? " • metadata timed out" : ""
+        let appTiming = timings.clientElapsedMs.map { "App \(seconds($0)) • " } ?? ""
+        return "\(appTiming)server \(seconds(timings.totalMs)) • upload \(seconds(timings.imageReadMs)) • recognition \(seconds(timings.recognitionMs)) • metadata \(seconds(timings.enrichmentMs)) • \(bytes(timings.imageBytes))\(timeout)"
+    }
+
+    private func seconds(_ milliseconds: Int) -> String {
+        String(format: "%.1fs", Double(milliseconds) / 1000)
+    }
+
+    private func bytes(_ value: Int) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(value))
     }
 }
 
