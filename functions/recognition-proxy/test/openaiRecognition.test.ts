@@ -47,6 +47,29 @@ test("parseRecognitionOutput accepts the scan contract", () => {
   assert.equal(result.confidence, 0.91);
 });
 
+test("parseRecognitionOutput accepts the reduced scan-time recognition contract", () => {
+  const result = parseRecognitionOutput(JSON.stringify({
+    status: "safe_to_buy",
+    confidence: 0.93,
+    album: {
+      title: "A Love Supreme",
+      artist: "John Coltrane",
+      year: 1965,
+      format: "Vinyl",
+      label: "Impulse!",
+      catalog_number: "AS-77",
+      country: "US",
+      barcode: null
+    },
+    candidates: []
+  }));
+
+  assert.equal(result.album?.title, "A Love Supreme");
+  assert.equal(result.album?.artist, "John Coltrane");
+  assert.equal(result.album?.label, "Impulse!");
+  assert.equal(result.album?.tracklist, undefined);
+});
+
 test("parseRecognitionOutput rejects incomplete album records", () => {
   const error = captureRecognitionOutputError(() => parseRecognitionOutput(JSON.stringify({
     status: "safe_to_buy",

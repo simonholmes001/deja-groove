@@ -15,9 +15,9 @@ const defaultPrompt = [
   "Identify the vinyl record album from the cover image.",
   "Return JSON only, using the supplied schema.",
   "Set safe_to_buy for one strong match, ambiguous for multiple plausible matches, or no_match if unrecognizable.",
-  "Prefer visible cover evidence. Use null for unknown IDs, dates, labels, catalog numbers, and URLs.",
-  "Do not invent MusicBrainz or Discogs IDs.",
-  "Set back_cover_text to null unless the provided image shows readable back-cover text."
+  "Prefer visible cover evidence. Use null for unknown years, labels, catalog numbers, countries, formats, and barcodes.",
+  "Do not return Discogs, MusicBrainz, artwork, tracklist, identifier, or release-note metadata.",
+  "Only identify the likely album; external enrichment will fill detailed release metadata."
 ].join("\n");
 
 export class OpenAIAlbumRecognition implements RecognitionPort {
@@ -164,88 +164,24 @@ const albumSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    mbid: { type: ["string", "null"] },
-    discogs_release_id: { type: ["string", "null"] },
-    discogs_master_id: { type: ["string", "null"] },
-    discogs_url: { type: ["string", "null"] },
-    discogs_resource_url: { type: ["string", "null"] },
     title: { type: "string" },
     artist: { type: "string" },
     year: { type: ["number", "null"] },
-    first_release_year: { type: ["number", "null"] },
-    release_year: { type: ["number", "null"] },
-    first_release_date: { type: ["string", "null"] },
-    release_date: { type: ["string", "null"] },
     format: { type: ["string", "null"] },
     label: { type: ["string", "null"] },
     catalog_number: { type: ["string", "null"] },
     country: { type: ["string", "null"] },
-    barcode: { type: ["string", "null"] },
-    cover_image_url: { type: ["string", "null"] },
-    thumbnail_url: { type: ["string", "null"] },
-    back_cover_image_url: { type: ["string", "null"] },
-    back_cover_text: { type: ["string", "null"] },
-    release_notes: { type: ["string", "null"] },
-    genres: { type: "array", items: { type: "string" } },
-    styles: { type: "array", items: { type: "string" } },
-    companies: { type: "array", items: { type: "string" } },
-    tracklist: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          position: { type: ["string", "null"] },
-          title: { type: "string" },
-          duration: { type: ["string", "null"] }
-        },
-        required: ["position", "title", "duration"]
-      }
-    },
-    identifiers: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          type: { type: "string" },
-          value: { type: ["string", "null"] },
-          description: { type: ["string", "null"] }
-        },
-        required: ["type", "value", "description"]
-      }
-    },
-    discogs_data_quality: { type: ["string", "null"] }
+    barcode: { type: ["string", "null"] }
   },
   required: [
-    "mbid",
-    "discogs_release_id",
-    "discogs_master_id",
-    "discogs_url",
-    "discogs_resource_url",
     "title",
     "artist",
     "year",
-    "first_release_year",
-    "release_year",
-    "first_release_date",
-    "release_date",
     "format",
     "label",
     "catalog_number",
     "country",
-    "barcode",
-    "cover_image_url",
-    "thumbnail_url",
-    "back_cover_image_url",
-    "back_cover_text",
-    "release_notes",
-    "genres",
-    "styles",
-    "companies",
-    "tracklist",
-    "identifiers",
-    "discogs_data_quality"
+    "barcode"
   ]
 } as const;
 
