@@ -49,8 +49,7 @@ export class OpenAIAlbumRecognition implements RecognitionPort {
           schema: recognitionSchema,
           strict: true
         }
-      },
-      max_output_tokens: 1500
+      }
     });
 
     return parseRecognitionOutput(response.output_text);
@@ -58,11 +57,33 @@ export class OpenAIAlbumRecognition implements RecognitionPort {
 }
 
 export function parseRecognitionOutput(outputText: string): RecognitionResult {
-  const parsed = JSON.parse(outputText) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outputText) as unknown;
+  } catch (error) {
+    throw new RecognitionOutputError(
+      "OpenAI response was not valid JSON.",
+      outputText.length,
+      error);
+  }
+
   if (!isRecognitionResult(parsed)) {
-    throw new Error("OpenAI response did not match the recognition contract.");
+    throw new RecognitionOutputError(
+      "OpenAI response did not match the recognition contract.",
+      outputText.length);
   }
   return parsed;
+}
+
+export class RecognitionOutputError extends Error {
+  constructor(
+    message: string,
+    readonly outputLength: number,
+    cause?: unknown
+  ) {
+    super(message, { cause });
+    this.name = "RecognitionOutputError";
+  }
 }
 
 function isRecognitionResult(value: unknown): value is RecognitionResult {

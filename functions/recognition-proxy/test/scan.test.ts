@@ -96,6 +96,25 @@ test("scan handler returns enriched result within enrichment budget", async () =
   assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
 });
 
+test("scan handler logs recognition failures with request diagnostics", async () => {
+  const errors: unknown[] = [];
+  const handler = createScanHandler(
+    {
+      recognize: async () => {
+        throw new Error("OpenAI request failed");
+      }
+    },
+    undefined);
+
+  const response = await handler(fakeMultipartRequest(), fakeContext([], errors));
+
+  assert.equal(response.status, 502);
+  assert.equal(response.jsonBody?.error?.code, "recognition_failed");
+  assert.match(String(errors[0]), /Album recognition failed/);
+  assert.match(String(errors[0]), /OpenAI request failed/);
+  assert.match(String(errors[0]), /requestId/);
+});
+
 class StubRecognition {
   constructor(private readonly result: RecognitionResult) {}
 
@@ -138,10 +157,10 @@ function fakeMultipartRequest(): HttpRequest {
   } as HttpRequest;
 }
 
-function fakeContext(warnings: unknown[]): InvocationContext {
+function fakeContext(warnings: unknown[], errors: unknown[] = []): InvocationContext {
   return {
     log: () => {},
     warn: (...args: unknown[]) => warnings.push(args.join(" ")),
-    error: () => {}
+    error: (...args: unknown[]) => errors.push(args.map((arg) => JSON.stringify(arg)).join(" "))
   } as unknown as InvocationContext;
 }

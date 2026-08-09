@@ -4,6 +4,7 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/fu
 import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
+import { RecognitionOutputError } from "./openaiRecognition.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
 
 type ScanHandlerOptions = {
@@ -61,7 +62,7 @@ export function createScanHandler(
         return errorResponse(error.status, error.code, error.message, error.retryable, requestId);
       }
 
-      context.error("Album recognition failed.", error);
+      context.error("Album recognition failed.", errorDetails(error, requestId));
       return errorResponse(
         502,
         "recognition_failed",
@@ -78,6 +79,31 @@ function validTimeoutMs(value: number | undefined, fallback: number): number {
 
 function elapsedSince(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
+}
+
+function errorDetails(error: unknown, requestId: string): Record<string, unknown> {
+  if (error instanceof RecognitionOutputError) {
+    return {
+      requestId,
+      name: error.name,
+      message: error.message,
+      outputLength: error.outputLength
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      requestId,
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return {
+    requestId,
+    message: String(error)
+  };
 }
 
 async function enrichRecognitionResult(
