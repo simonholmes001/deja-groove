@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
+import { AmbiguousAlbumEnrichmentError } from "./discogs.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
 import { RecognitionOutputError } from "./openaiRecognition.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
@@ -31,10 +32,11 @@ export function createScanHandler(
       const recognitionStartedAt = performance.now();
       const result = await recognition.recognize(image);
       const recognitionMs = elapsedSince(recognitionStartedAt);
+      context.log("Album recognition result.", recognitionLogDetails(result, requestId));
 
       const enrichmentStartedAt = performance.now();
       const enrichmentResult = enrichment
-        ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs)
+        ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs, requestId)
         : { result, timedOut: false };
       const enrichmentMs = elapsedSince(enrichmentStartedAt);
       const timings: ScanTimings = {
@@ -70,6 +72,26 @@ export function createScanHandler(
         true,
         requestId);
     }
+  };
+}
+
+function recognitionLogDetails(result: RecognitionResult, requestId: string): Record<string, unknown> {
+  const album = result.album;
+  return {
+    requestId,
+    status: result.status,
+    confidence: result.confidence,
+    album: album ? {
+      artist: album.artist,
+      title: album.title,
+      year: album.year ?? null,
+      format: album.format ?? null,
+      label: album.label ?? null,
+      catalog_number: album.catalog_number ?? null,
+      country: album.country ?? null,
+      barcode_present: Boolean(album.barcode)
+    } : null,
+    candidate_count: result.candidates?.length ?? 0
   };
 }
 
@@ -110,20 +132,49 @@ async function enrichRecognitionResult(
   result: RecognitionResult,
   enrichment: AlbumEnrichmentPort,
   context: InvocationContext,
-  timeoutMs: number
+  timeoutMs: number,
+  requestId: string
 ): Promise<{ result: RecognitionResult; timedOut: boolean }> {
   try {
     const enriched = await withTimeout(
-      async (): Promise<RecognitionResult> => ({
-        ...result,
-        album: result.album ? await enrichment.enrich(result.album) : result.album,
-        candidates: result.candidates
+      async (): Promise<RecognitionResult> => {
+        const album = result.album ? await enrichment.enrich(result.album) : result.album;
+        const candidates = result.candidates
           ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate)))
-          : result.candidates
-      }),
+          : result.candidates;
+
+        context.log("Album enrichment result.", {
+          requestId,
+          album: album ? enrichmentLogDetails(album) : null,
+          candidate_count: candidates?.length ?? 0
+        });
+
+        return {
+          ...result,
+          album,
+          candidates
+        };
+      },
       timeoutMs);
     return { result: enriched, timedOut: false };
   } catch (error) {
+    if (error instanceof AmbiguousAlbumEnrichmentError) {
+      context.warn("Album enrichment found multiple plausible Discogs releases; returning ambiguous scan result.", {
+        requestId,
+        candidate_count: error.candidates.length,
+        candidates: error.candidates.map(enrichmentLogDetails)
+      });
+      return {
+        result: {
+          status: "ambiguous",
+          confidence: result.confidence,
+          album: null,
+          candidates: error.candidates
+        },
+        timedOut: false
+      };
+    }
+
     if (error instanceof EnrichmentTimeoutError) {
       context.warn(`Album metadata enrichment exceeded ${timeoutMs}ms; returning recognition-only result.`);
       return { result, timedOut: true };
@@ -131,6 +182,23 @@ async function enrichRecognitionResult(
     context.warn("Album metadata enrichment failed; returning recognition-only result.", error);
     return { result, timedOut: false };
   }
+}
+
+function enrichmentLogDetails(album: RecognitionResult["album"]): Record<string, unknown> | null {
+  if (!album) return null;
+  return {
+    artist: album.artist,
+    title: album.title,
+    year: album.year ?? null,
+    release_year: album.release_year ?? null,
+    label: album.label ?? null,
+    catalog_number: album.catalog_number ?? null,
+    country: album.country ?? null,
+    format: album.format ?? null,
+    discogs_release_id: album.discogs_release_id ?? null,
+    discogs_master_id: album.discogs_master_id ?? null,
+    cover_image_present: Boolean(album.cover_image_url || album.thumbnail_url)
+  };
 }
 
 async function withTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T> {
