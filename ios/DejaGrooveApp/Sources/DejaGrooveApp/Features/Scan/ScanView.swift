@@ -16,76 +16,119 @@ public struct ScanView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Scan")
-                .font(.largeTitle.bold())
-            Text(viewModel.guidance)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        DejaGrooveScreen {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Scan")
+                            .font(.system(size: 44, weight: .black, design: .rounded))
+                        Text(viewModel.guidance)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
-            Button {
-                inputCoordinator.handlePrimaryAction()
-            } label: {
-                Text("Pick or Capture Cover")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-            .buttonStyle(.plain)
-            .confirmationDialog("Scan Source", isPresented: $inputCoordinator.isSourceDialogPresented) {
-                if inputCoordinator.isCameraAvailable {
-                    Button("Take Photo") {
-                        inputCoordinator.chooseCamera()
+                    Button {
+                        inputCoordinator.handlePrimaryAction()
+                    } label: {
+                        Label("Pick or Capture Cover", systemImage: "camera.viewfinder")
                     }
-                }
-                Button("Choose from Library") {
-                    inputCoordinator.choosePhotoLibrary()
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .photosPicker(isPresented: $inputCoordinator.isPhotoLibraryPresented, selection: $selectedItem, matching: .images)
-            .onChange(of: selectedItem) { _, newItem in
-                Task {
-                    guard let item = newItem,
-                          let data = try? await item.loadTransferable(type: Data.self),
-                          let preparedData = PhotoLibraryScanImagePreparer.prepareForUpload(data) else {
-                        await viewModel.handleSelectedImagePreparationFailure()
-                        return
+                    .buttonStyle(DejaGroovePrimaryButtonStyle())
+                    .confirmationDialog("Scan Source", isPresented: $inputCoordinator.isSourceDialogPresented) {
+                        if inputCoordinator.isCameraAvailable {
+                            Button("Take Photo") {
+                                inputCoordinator.chooseCamera()
+                            }
+                        }
+                        Button("Choose from Library") {
+                            inputCoordinator.choosePhotoLibrary()
+                        }
+                        Button("Cancel", role: .cancel) {}
                     }
-                    await viewModel.submitScan(imageData: preparedData)
-                }
-            }
-            .sheet(isPresented: $inputCoordinator.isCameraPresented) {
-                CameraCaptureView(
-                    onImageCaptured: { data in
-                        inputCoordinator.dismissCamera()
-                        Task { await viewModel.submitScan(imageData: data) }
-                    },
-                    onCancel: {
-                        inputCoordinator.dismissCamera()
+                    .photosPicker(isPresented: $inputCoordinator.isPhotoLibraryPresented, selection: $selectedItem, matching: .images)
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            guard let item = newItem,
+                                  let data = try? await item.loadTransferable(type: Data.self),
+                                  let preparedData = PhotoLibraryScanImagePreparer.prepareForUpload(data) else {
+                                await viewModel.handleSelectedImagePreparationFailure()
+                                return
+                            }
+                            await viewModel.submitScan(imageData: preparedData)
+                        }
                     }
-                )
-                .ignoresSafeArea()
-            }
+                    .sheet(isPresented: $inputCoordinator.isCameraPresented) {
+                        CameraCaptureView(
+                            onImageCaptured: { data in
+                                inputCoordinator.dismissCamera()
+                                Task { await viewModel.submitScan(imageData: data) }
+                            },
+                            onCancel: {
+                                inputCoordinator.dismissCamera()
+                            }
+                        )
+                        .ignoresSafeArea()
+                    }
 
-            switch viewModel.state {
-            case .idle:
-                Text("Take a clear photo to start.")
-                qualityGuidance
-            case .loading(let progress):
-                ProgressView(progress.message)
-            case .error(let message):
+                    content
+
+                    if let collectionMessage = viewModel.collectionMessage {
+                        Text(collectionMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 110)
+            }
+        }
+        .sheet(isPresented: detailAlbumBinding) {
+            if let detailAlbum {
+                NavigationStack {
+                    ScanAlbumDetailView(album: detailAlbum, canAddToCrate: currentResultCanAddToCollection) {
+                        Task {
+                            await viewModel.addResultToCollection()
+                            self.detailAlbum = nil
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.state {
+        case .idle:
+            DejaGroovePanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: "record.circle")
+                        .font(.system(size: 36, weight: .semibold))
+                        .foregroundStyle(DejaGrooveStyle.blue)
+                    Text("Take a clear photo to start.")
+                        .font(.headline)
+                    qualityGuidance
+                }
+            }
+        case .loading(let progress):
+            ScanLoadingView(progress: progress)
+        case .error(let message):
+            DejaGroovePanel {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(message).foregroundStyle(.red)
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
                     if viewModel.isLastErrorRetryable {
                         Button("Retry Scan") {
                             Task { await viewModel.retryLastScan() }
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
-            case .result(let response):
+            }
+        case .result(let response):
+            DejaGroovePanel {
                 ScanResultView(
                     response: response,
                     selectedCandidateIndex: $selectedCandidateIndex,
@@ -98,32 +141,12 @@ public struct ScanView: View {
                             selectedCandidateIndex = nil
                         }
                     })
-                if response.canAddToCollection {
-                    Button("Add To My Crate") {
-                        Task { await viewModel.addResultToCollection() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
             }
-            if let collectionMessage = viewModel.collectionMessage {
-                Text(collectionMessage)
-                    .foregroundStyle(.secondary)
-                    .font(.footnote)
-            }
-
-            Spacer()
-        }
-        .padding()
-        .sheet(isPresented: detailAlbumBinding) {
-            if let detailAlbum {
-                NavigationStack {
-                    ScanAlbumDetailView(album: detailAlbum, canAddToCrate: currentResultCanAddToCollection) {
-                        Task {
-                            await viewModel.addResultToCollection()
-                            self.detailAlbum = nil
-                        }
-                    }
+            if response.canAddToCollection {
+                Button("Add To My Crate") {
+                    Task { await viewModel.addResultToCollection() }
                 }
+                .buttonStyle(DejaGroovePrimaryButtonStyle())
             }
         }
     }
@@ -156,6 +179,59 @@ public struct ScanView: View {
     }
 }
 
+private struct ScanLoadingView: View {
+    let progress: ScanProgress
+    @State private var isAnimating = false
+
+    var body: some View {
+        DejaGroovePanel {
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle()
+                        .fill(DejaGrooveStyle.ink)
+                        .frame(width: 132, height: 132)
+                        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+
+                    ForEach(0..<5, id: \.self) { index in
+                        Circle()
+                            .stroke(.white.opacity(0.10), lineWidth: 1)
+                            .frame(width: 42 + CGFloat(index * 18), height: 42 + CGFloat(index * 18))
+                    }
+
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [DejaGrooveStyle.blue, DejaGrooveStyle.coral],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing))
+                        .frame(width: 40, height: 40)
+
+                    Rectangle()
+                        .fill(.white.opacity(0.72))
+                        .frame(width: 4, height: 62)
+                        .offset(y: -34)
+                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                }
+                .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                .animation(.linear(duration: 1.4).repeatForever(autoreverses: false), value: isAnimating)
+                .onAppear { isAnimating = true }
+
+                VStack(spacing: 6) {
+                    Text(progress.title)
+                        .font(.headline)
+                    Text(progress.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
 private struct ScanResultView: View {
     let response: ScanResponse
     @Binding var selectedCandidateIndex: Int?
@@ -170,6 +246,9 @@ private struct ScanResultView: View {
                 Text(statusLabel)
                     .font(.headline.bold())
                     .foregroundStyle(statusColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.12), in: Capsule())
             }
             if let album = response.album {
                 Button {
@@ -192,9 +271,12 @@ private struct ScanResultView: View {
                         }
                     } label: {
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text(candidate.artist)
-                                Text(candidate.title).foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(candidate.artist) - \(candidate.title)")
+                                    .font(.subheadline.bold())
+                                Text(candidateSubtitle(candidate))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: selectedCandidateIndex == response.candidates.firstIndex(of: candidate) ? "checkmark.circle.fill" : "circle")
@@ -210,6 +292,7 @@ private struct ScanResultView: View {
                     onResolve(response.candidates[selectedCandidateIndex])
                 }
                 .disabled(selectedCandidateIndex == nil || !response.candidates.indices.contains(selectedCandidateIndex ?? -1))
+                .buttonStyle(.borderedProminent)
             }
         }
         .onChange(of: response.requestId) { _, _ in
@@ -245,6 +328,20 @@ private struct ScanResultView: View {
         default:
             return .secondary
         }
+    }
+
+    private func candidateSubtitle(_ candidate: Album) -> String {
+        [
+            candidate.releaseYear.map(String.init) ?? candidate.year.map(String.init),
+            candidate.label,
+            candidate.catalogNumber,
+            candidate.format,
+            candidate.country,
+            candidate.discogsReleaseId.map { "Discogs \($0)" }
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: " • ")
     }
 }
 
@@ -426,6 +523,7 @@ private struct ScanAlbumSummary: View {
                 }
             }
         }
+        .contentShape(Rectangle())
     }
 }
 
@@ -461,6 +559,30 @@ private struct AlbumArtwork: View {
                 .fill(.secondary.opacity(0.12))
             Image(systemName: "record.circle")
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension ScanProgress {
+    var title: String {
+        switch self {
+        case .uploading:
+            return "Preparing cover"
+        case .recognizing:
+            return "Listening for the record"
+        case .resolving:
+            return "Locking in release"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .uploading:
+            return "Preparing the cover image for a clean match."
+        case .recognizing:
+            return "Matching the cover artwork and visible text."
+        case .resolving:
+            return "Applying the selected release to the scan result."
         }
     }
 }
