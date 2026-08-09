@@ -24,6 +24,8 @@ jobs:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL: ${{ secrets.DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL }}
+          DEJA_GROOVE_RECOGNITION_PROXY_KEY: ${{ secrets.DEJA_GROOVE_RECOGNITION_PROXY_KEY }}
           DEJA_GROOVE_XCODE_PROJECT: ${{ secrets.DEJA_GROOVE_XCODE_PROJECT }}
           DEJA_GROOVE_XCODE_WORKSPACE: ${{ secrets.DEJA_GROOVE_XCODE_WORKSPACE }}
           DEJA_GROOVE_XCODE_SCHEME: ${{ secrets.DEJA_GROOVE_XCODE_SCHEME }}
@@ -37,6 +39,8 @@ jobs:
             MATCH_PASSWORD
             APP_STORE_CONNECT_API_KEY_ID
             APP_STORE_CONNECT_API_ISSUER_ID
+            DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL
+            DEJA_GROOVE_RECOGNITION_PROXY_KEY
             DEJA_GROOVE_XCODE_SCHEME
           )
           for key in "${required[@]}"; do
@@ -53,6 +57,13 @@ jobs:
             echo "Either DEJA_GROOVE_XCODE_PROJECT or DEJA_GROOVE_XCODE_WORKSPACE is required" >&2
             exit 1
           fi
+
+      - name: Write Release app configuration
+        shell: bash
+        env:
+          DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL: ${{ secrets.DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL }}
+          DEJA_GROOVE_RECOGNITION_PROXY_KEY: ${{ secrets.DEJA_GROOVE_RECOGNITION_PROXY_KEY }}
+        run: bash .github/scripts/write-ios-release-config.sh
 
       - name: Decode App Store Connect API key
         shell: bash
@@ -96,6 +107,7 @@ jobs:
           DEJA_GROOVE_XCODE_PROJECT: ${{ secrets.DEJA_GROOVE_XCODE_PROJECT }}
           DEJA_GROOVE_XCODE_WORKSPACE: ${{ secrets.DEJA_GROOVE_XCODE_WORKSPACE }}
           DEJA_GROOVE_XCODE_SCHEME: ${{ secrets.DEJA_GROOVE_XCODE_SCHEME }}
+          DEJA_GROOVE_BUILD_NUMBER: ${{ github.run_number }}
         run: bundle exec fastlane ios upload_internal_testflight
 
       - name: Cleanup App Store Connect API key

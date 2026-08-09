@@ -93,12 +93,39 @@ Application Insights resource uses 30-day retention.
   runs when `minimal-function.bicep` exists.
 - `infrastructure-deploy-dev.yaml`: push-to-main and manual dev deployment
   using `infrastructure/scripts/deploy.sh dev`; deploys infrastructure and publishes Function code after validation.
+- `ios-testflight.yml`: manual internal TestFlight upload. The workflow writes
+  `ios/DejaGroove/Config/Release.local.xcconfig` from GitHub secrets before
+  archiving so Release builds use the live Function proxy URL and key without
+  committing secrets.
 
 Flex Consumption code publish uses One Deploy. The deploy script uploads the
 ready-to-run package to the configured deployment blob container as
 `released-package.zip`, invokes the `Microsoft.Web/sites/extensions/onedeploy`
 resource, then verifies `GET /health` and the protected `POST /v1/scan`
 without a function key.
+
+## TestFlight
+
+Run the **iOS TestFlight** workflow manually from GitHub Actions after these
+repository secrets are configured:
+
+- `DEJA_GROOVE_APP_IDENTIFIER`
+- `DEJA_GROOVE_APPLE_ID`
+- `DEJA_GROOVE_ITC_TEAM_ID`
+- `DEJA_GROOVE_TEAM_ID`
+- `MATCH_GIT_URL`
+- `MATCH_PASSWORD`
+- `APP_STORE_CONNECT_API_KEY_ID`
+- `APP_STORE_CONNECT_API_ISSUER_ID`
+- `APP_STORE_CONNECT_API_KEY_BASE64`
+- `DEJA_GROOVE_XCODE_PROJECT` (`ios/DejaGroove.xcodeproj`)
+- `DEJA_GROOVE_XCODE_SCHEME` (`DejaGroove`)
+- `DEJA_GROOVE_RECOGNITION_PROXY_BASE_URL`
+- `DEJA_GROOVE_RECOGNITION_PROXY_KEY`
+
+Set either `DEJA_GROOVE_XCODE_PROJECT` or `DEJA_GROOVE_XCODE_WORKSPACE`, not
+both. The workflow uses the GitHub run number as the TestFlight build number so
+repeated uploads do not reuse `CFBundleVersion`.
 
 ## Local Usage
 
