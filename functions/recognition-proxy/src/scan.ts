@@ -9,6 +9,7 @@ import type { RecognitionPort } from "./openaiRecognition.js";
 
 type ScanHandlerOptions = {
   enrichmentTimeoutMs?: number;
+  includeTimings?: boolean;
 };
 
 const defaultEnrichmentTimeoutMs = 4000;
@@ -19,6 +20,7 @@ export function createScanHandler(
   options: ScanHandlerOptions = {}
 ) {
   const enrichmentTimeoutMs = validTimeoutMs(options.enrichmentTimeoutMs, defaultEnrichmentTimeoutMs);
+  const includeTimings = options.includeTimings === true;
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
     const scanStartedAt = performance.now();
@@ -54,7 +56,7 @@ export function createScanHandler(
 
       return {
         status: 200,
-        jsonBody: toScanResponse(enrichmentResult.result, requestId, timings),
+        jsonBody: toScanResponse(enrichmentResult.result, requestId, includeTimings ? timings : undefined),
         headers: noStoreHeaders()
       };
     } catch (error) {
@@ -114,11 +116,11 @@ async function enrichRecognitionResult(
 ): Promise<{ result: RecognitionResult; timedOut: boolean }> {
   try {
     const enriched = await withTimeout(
-      async (): Promise<RecognitionResult> => ({
+      async (signal): Promise<RecognitionResult> => ({
         ...result,
-        album: result.album ? await enrichment.enrich(result.album) : result.album,
+        album: result.album ? await enrichment.enrich(result.album, { signal }) : result.album,
         candidates: result.candidates
-          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate)))
+          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate, { signal })))
           : result.candidates
       }),
       timeoutMs);
@@ -133,15 +135,19 @@ async function enrichRecognitionResult(
   }
 }
 
-async function withTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T> {
-  if (timeoutMs <= 0) return await operation();
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  if (timeoutMs <= 0) return await operation(controller.signal);
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      operation(),
+      operation(controller.signal),
       new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => reject(new EnrichmentTimeoutError()), timeoutMs);
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new EnrichmentTimeoutError());
+        }, timeoutMs);
       })
     ]);
   } finally {

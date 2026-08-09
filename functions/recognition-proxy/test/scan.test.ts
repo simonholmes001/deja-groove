@@ -69,7 +69,7 @@ test("scan handler returns recognition-only result when enrichment times out", a
     {
       enrich: async () => await new Promise<Album>(() => {})
     },
-    { enrichmentTimeoutMs: 1 });
+    { enrichmentTimeoutMs: 1, includeTimings: true });
 
   const response = await handler(fakeMultipartRequest(), fakeContext(warnings));
 
@@ -81,7 +81,43 @@ test("scan handler returns recognition-only result when enrichment times out", a
   assert.match(String(warnings[0]), /enrichment exceeded 1ms/);
 });
 
+test("scan handler aborts enrichment provider work when enrichment times out", async () => {
+  let abortObserved = false;
+  const handler = createScanHandler(
+    new StubRecognition(baseResult()),
+    {
+      enrich: async (_album, options) => await new Promise<Album>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => {
+          abortObserved = true;
+          reject(options.signal?.reason ?? new Error("aborted"));
+        });
+      })
+    },
+    { enrichmentTimeoutMs: 1, includeTimings: true });
+
+  const response = await handler(fakeMultipartRequest(), fakeContext([]));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, true);
+  assert.equal(abortObserved, true);
+});
+
 test("scan handler returns enriched result within enrichment budget", async () => {
+  const handler = createScanHandler(
+    new StubRecognition(baseResult()),
+    {
+      enrich: async (album) => ({ ...album, label: "Impulse!" })
+    },
+    { enrichmentTimeoutMs: 100, includeTimings: true });
+
+  const response = await handler(fakeMultipartRequest(), fakeContext([]));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.jsonBody?.album?.label, "Impulse!");
+  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
+});
+
+test("scan handler omits timings unless diagnostics are enabled", async () => {
   const handler = createScanHandler(
     new StubRecognition(baseResult()),
     {
@@ -92,8 +128,7 @@ test("scan handler returns enriched result within enrichment budget", async () =
   const response = await handler(fakeMultipartRequest(), fakeContext([]));
 
   assert.equal(response.status, 200);
-  assert.equal(response.jsonBody?.album?.label, "Impulse!");
-  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
+  assert.equal(response.jsonBody?.timings, undefined);
 });
 
 test("scan handler logs recognition failures with request diagnostics", async () => {

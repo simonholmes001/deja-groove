@@ -19,6 +19,9 @@ param openAiModel string
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
 param scanEnrichmentTimeoutMs int
 
+@description('Emit detailed scan timing diagnostics in /v1/scan responses. Intended for dev/test diagnostics only.')
+param scanIncludeTimings bool
+
 @description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool
 
@@ -179,6 +182,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         {
           name: 'SCAN_ENRICHMENT_TIMEOUT_MS'
           value: string(scanEnrichmentTimeoutMs)
+        }
+        {
+          name: 'SCAN_INCLUDE_TIMINGS'
+          value: string(scanIncludeTimings)
         }
         {
           name: 'ENRICHMENT_CACHE_TTL_MS'

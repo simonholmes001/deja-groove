@@ -28,6 +28,9 @@ param openAiModel string = 'gpt-5-mini'
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
 param scanEnrichmentTimeoutMs int = 4000
 
+@description('Emit detailed scan timing diagnostics in /v1/scan responses. Intended for dev/test diagnostics only.')
+param scanIncludeTimings bool = false
+
 @description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool = false
 
@@ -55,6 +58,7 @@ module recognitionProxy 'recognition-function.bicep' = {
     deploymentPrincipalObjectId: deploymentPrincipalObjectId
     openAiModel: openAiModel
     scanEnrichmentTimeoutMs: scanEnrichmentTimeoutMs
+    scanIncludeTimings: scanIncludeTimings
     enableApplicationInsights: enableApplicationInsights
     tags: tags
   }

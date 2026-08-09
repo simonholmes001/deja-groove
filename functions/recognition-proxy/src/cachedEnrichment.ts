@@ -1,5 +1,5 @@
 import type { Album } from "./contracts.js";
-import type { AlbumEnrichmentPort } from "./discogs.js";
+import type { AlbumEnrichmentOptions, AlbumEnrichmentPort } from "./discogs.js";
 
 type CachedAlbumEnrichmentConfig = {
   inner: AlbumEnrichmentPort;
@@ -31,19 +31,25 @@ export class CachedAlbumEnrichment implements AlbumEnrichmentPort {
     this.now = config.now || Date.now;
   }
 
-  async enrich(album: Album): Promise<Album> {
+  async enrich(album: Album, options: AlbumEnrichmentOptions = {}): Promise<Album> {
     const key = cacheKey(album);
     if (!key || this.ttlMs <= 0 || this.maxEntries <= 0) {
-      return await this.inner.enrich(album);
+      return await this.inner.enrich(album, options);
     }
 
     const cached = this.get(key);
     if (cached) return cached;
 
+    if (options.signal) {
+      const enriched = await this.inner.enrich(album, options);
+      this.set(key, enriched);
+      return enriched;
+    }
+
     const existing = this.pending.get(key);
     if (existing) return await existing;
 
-    const operation = this.inner.enrich(album)
+    const operation = this.inner.enrich(album, options)
       .then((enriched) => {
         this.set(key, enriched);
         return enriched;

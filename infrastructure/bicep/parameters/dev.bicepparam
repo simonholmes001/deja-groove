@@ -5,5 +5,6 @@ param location = 'swedencentral'
 param resourceGroupName = 'rg-deja-groove-dev-recognition'
 param appBaseName = 'deja-recognition-dev'
 param openAiModel = 'gpt-5-mini'
+param scanIncludeTimings = true
 param enableApplicationInsights = true
 param openAiKey = 'validation-placeholder'

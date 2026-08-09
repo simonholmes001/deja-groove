@@ -1,8 +1,12 @@
 import type { Album, ReleaseIdentifier, Track } from "./contracts.js";
 
 export interface AlbumEnrichmentPort {
-  enrich(album: Album): Promise<Album>;
+  enrich(album: Album, options?: AlbumEnrichmentOptions): Promise<Album>;
 }
+
+export type AlbumEnrichmentOptions = {
+  signal?: AbortSignal;
+};
 
 type DiscogsConfig = {
   token: string;
@@ -69,20 +73,20 @@ export class DiscogsAlbumEnrichment implements AlbumEnrichmentPort {
     this.fetchImpl = config.fetchImpl || fetch;
   }
 
-  async enrich(album: Album): Promise<Album> {
+  async enrich(album: Album, options: AlbumEnrichmentOptions = {}): Promise<Album> {
     const searchResult = album.discogs_release_id
       ? null
-      : await this.search(album);
+      : await this.search(album, options);
     const releaseId = album.discogs_release_id || searchResult?.id?.toString();
     if (!releaseId) {
       return searchResult ? mergeSearchResult(album, searchResult) : album;
     }
 
-    const release = await this.getRelease(releaseId);
+    const release = await this.getRelease(releaseId, options);
     return mergeRelease(mergeSearchResult(album, searchResult), release);
   }
 
-  private async search(album: Album): Promise<DiscogsSearchResult | null> {
+  private async search(album: Album, options: AlbumEnrichmentOptions): Promise<DiscogsSearchResult | null> {
     const params = new URLSearchParams({
       type: "release",
       per_page: "5"
@@ -96,16 +100,17 @@ export class DiscogsAlbumEnrichment implements AlbumEnrichmentPort {
     append(params, "catno", album.catalog_number);
     append(params, "barcode", album.barcode);
 
-    const response = await this.request<DiscogsSearchResponse>(`/database/search?${params.toString()}`);
+    const response = await this.request<DiscogsSearchResponse>(`/database/search?${params.toString()}`, options);
     return response.results?.find((result) => result.id) ?? null;
   }
 
-  private async getRelease(releaseId: string): Promise<DiscogsRelease> {
-    return this.request<DiscogsRelease>(`/releases/${encodeURIComponent(releaseId)}`);
+  private async getRelease(releaseId: string, options: AlbumEnrichmentOptions): Promise<DiscogsRelease> {
+    return this.request<DiscogsRelease>(`/releases/${encodeURIComponent(releaseId)}`, options);
   }
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(path: string, options: AlbumEnrichmentOptions): Promise<T> {
     const response = await this.fetchImpl(`${this.baseURL}${path}`, {
+      signal: options.signal,
       headers: {
         "Authorization": `Discogs token=${this.token}`,
         "User-Agent": this.userAgent,
