@@ -4,6 +4,7 @@ import SwiftUI
 public struct CollectionView: View {
     @ObservedObject private var viewModel: CollectionViewModel
     @State private var editingRecord: CollectionRecord?
+    @State private var assigningCollectionsRecord: CollectionRecord?
     @State private var selectedRecordId: UUID?
 
     public init(viewModel: CollectionViewModel) {
@@ -55,6 +56,9 @@ public struct CollectionView: View {
                     }
                 }
             }
+            .sheet(item: $assigningCollectionsRecord) { record in
+                CollectionAssignmentView(record: viewModel.record(id: record.id) ?? record, viewModel: viewModel)
+            }
         }
     }
 
@@ -95,7 +99,7 @@ public struct CollectionView: View {
                 VStack(spacing: 10) {
                     filterMenu(title: "Collection", systemImage: "folder", value: selectedCollectionName) {
                         Picker("Collection", selection: collectionSelection) {
-                            Text("All My Crate").tag(UUID?.none)
+                            Text("All").tag(UUID?.none)
                             ForEach(viewModel.crateCollections) { collection in
                                 Text(collection.name).tag(Optional(collection.id))
                             }
@@ -137,7 +141,7 @@ public struct CollectionView: View {
                     detail: "Adjust the filters or scan albums into My Crate.")
             } else {
                 ForEach(viewModel.visibleRecords, id: \.id) { record in
-                    SwipeActionCard {
+                    SwipeActionCard(actionCount: 3) {
                         Button {
                             selectedRecordId = record.id
                         } label: {
@@ -149,6 +153,9 @@ public struct CollectionView: View {
                     } actions: {
                         SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
                             editingRecord = record
+                        }
+                        SwipeActionButton(title: "Collection", systemImage: "folder", color: DejaGrooveStyle.ink) {
+                            assigningCollectionsRecord = record
                         }
                         SwipeActionButton(title: "Delete", systemImage: "trash", color: DejaGrooveStyle.coral) {
                             Task { await viewModel.deleteRecord(id: record.id) }
@@ -168,7 +175,7 @@ public struct CollectionView: View {
     private var selectedCollectionName: String {
         guard let selectedCollectionId = viewModel.selectedCollectionId,
               let collection = viewModel.crateCollections.first(where: { $0.id == selectedCollectionId }) else {
-            return "All My Crate"
+            return "All"
         }
         return collection.name
     }
@@ -654,7 +661,7 @@ private struct CollectionRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            CollectionArtworkStack(records: records)
+            CollectionInitialsTile(name: collection.name)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(collection.name)
@@ -680,20 +687,15 @@ private struct CollectionRow: View {
 }
 
 private struct CollectionArtworkStack: View {
+    let collectionName: String
     let records: [CollectionRecord]
 
     var body: some View {
         ZStack {
-            if records.isEmpty {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(DejaGrooveStyle.blue.opacity(0.12))
-                    .overlay {
-                        Image(systemName: "folder.fill")
-                            .font(.title2)
-                            .foregroundStyle(DejaGrooveStyle.blue)
-                    }
+            if artworkRecords.isEmpty {
+                CollectionInitialsTile(name: collectionName)
             } else {
-                ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
+                ForEach(Array(artworkRecords.prefix(3).enumerated()), id: \.element.id) { index, record in
                     AlbumArtwork(
                         urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl,
                         size: 52)
@@ -704,6 +706,41 @@ private struct CollectionArtworkStack: View {
             }
         }
         .frame(width: 78, height: 62)
+    }
+
+    private var artworkRecords: [CollectionRecord] {
+        records.filter { record in
+            record.album.thumbnailUrl != nil || record.album.coverImageUrl != nil
+        }
+    }
+}
+
+private struct CollectionInitialsTile: View {
+    let name: String
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [DejaGrooveStyle.blue.opacity(0.85), DejaGrooveStyle.coral.opacity(0.85)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing))
+            .overlay {
+                Text(initials)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 58, height: 58)
+            .shadow(color: DejaGrooveStyle.blue.opacity(0.18), radius: 10, y: 6)
+    }
+
+    private var initials: String {
+        let words = name
+            .split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first }
+        let value = String(words).uppercased()
+        return value.isEmpty ? "#" : value
     }
 }
 
@@ -717,7 +754,9 @@ private struct CollectionDetailView: View {
     @ObservedObject var viewModel: CollectionViewModel
     @State private var draftName: String
     @State private var editingRecord: CollectionRecord?
+    @State private var assigningCollectionsRecord: CollectionRecord?
     @State private var selectedRecordId: UUID?
+    @State private var isAddingAlbums = false
 
     init(collection: CrateCollection, viewModel: CollectionViewModel) {
         self.collection = collection
@@ -731,6 +770,7 @@ private struct CollectionDetailView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     detailHeader
                     renamePanel
+                    addAlbumsPanel
                     recordsPanel
                 }
                 .padding(.horizontal, 20)
@@ -741,6 +781,13 @@ private struct CollectionDetailView: View {
         .navigationTitle(currentCollection.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isAddingAlbums = true
+                } label: {
+                    Label("Add Albums", systemImage: "plus")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     Task {
@@ -751,6 +798,9 @@ private struct CollectionDetailView: View {
                     Label("Delete", systemImage: "trash")
                 }
             }
+        }
+        .sheet(isPresented: $isAddingAlbums) {
+            AddAlbumsToCollectionView(collection: currentCollection, viewModel: viewModel)
         }
         .navigationDestination(item: $selectedRecordId) { recordId in
             if let record = viewModel.record(id: recordId) {
@@ -764,6 +814,9 @@ private struct CollectionDetailView: View {
                     editingRecord = nil
                 }
             }
+        }
+        .sheet(item: $assigningCollectionsRecord) { record in
+            CollectionAssignmentView(record: viewModel.record(id: record.id) ?? record, viewModel: viewModel)
         }
     }
 
@@ -779,7 +832,7 @@ private struct CollectionDetailView: View {
         DejaGroovePanel {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 16) {
-                    CollectionArtworkStack(records: currentRecords)
+                    CollectionArtworkStack(collectionName: currentCollection.name, records: currentRecords)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(currentCollection.name)
@@ -830,6 +883,44 @@ private struct CollectionDetailView: View {
         }
     }
 
+    private var addAlbumsPanel: some View {
+        Button {
+            isAddingAlbums = true
+        } label: {
+            DejaGroovePanel {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [DejaGrooveStyle.blue, DejaGrooveStyle.coral],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing))
+                        Image(systemName: "plus")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 48, height: 48)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Add Albums")
+                            .font(.headline)
+                        Text("Choose from My Crate")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var recordsPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             DejaGrooveSectionHeader(
@@ -840,10 +931,10 @@ private struct CollectionDetailView: View {
                 DejaGrooveEmptyState(
                     title: "No Albums",
                     systemImage: "square.stack.3d.up",
-                    detail: "Add albums to this collection from an album detail screen.")
+                    detail: "Tap Add Albums to choose records from My Crate.")
             } else {
                 ForEach(currentRecords, id: \.id) { record in
-                    SwipeActionCard {
+                    SwipeActionCard(actionCount: 3) {
                         Button {
                             selectedRecordId = record.id
                         } label: {
@@ -856,6 +947,9 @@ private struct CollectionDetailView: View {
                         SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
                             editingRecord = record
                         }
+                        SwipeActionButton(title: "Collection", systemImage: "folder", color: DejaGrooveStyle.ink) {
+                            assigningCollectionsRecord = record
+                        }
                         SwipeActionButton(title: "Remove", systemImage: "minus.circle", color: DejaGrooveStyle.coral) {
                             Task {
                                 await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: false)
@@ -865,6 +959,194 @@ private struct CollectionDetailView: View {
                 }
             }
         }
+    }
+}
+
+private struct CollectionAssignmentView: View {
+    @Environment(\.dismiss) private var dismiss
+    let record: CollectionRecord
+    @ObservedObject var viewModel: CollectionViewModel
+
+    var body: some View {
+        NavigationStack {
+            DejaGrooveScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        DejaGroovePanel {
+                            HStack(spacing: 14) {
+                                AlbumArtwork(urlString: currentRecord.album.thumbnailUrl ?? currentRecord.album.coverImageUrl, size: 64)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(currentRecord.album.artist)
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                    Text(currentRecord.album.title)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            DejaGrooveSectionHeader(
+                                title: "Collections",
+                                detail: "\(viewModel.crateCollections.count) total")
+
+                            if viewModel.crateCollections.isEmpty {
+                                DejaGrooveEmptyState(
+                                    title: "No Collections",
+                                    systemImage: "folder.badge.plus",
+                                    detail: "Create a collection first, then assign this album.")
+                            } else {
+                                ForEach(viewModel.crateCollections) { collection in
+                                    Button {
+                                        Task {
+                                            await viewModel.setRecord(
+                                                currentRecord.id,
+                                                in: collection.id,
+                                                isIncluded: !viewModel.isRecord(currentRecord.id, in: collection.id))
+                                        }
+                                    } label: {
+                                        DejaGroovePanel {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: viewModel.isRecord(currentRecord.id, in: collection.id) ? "checkmark.circle.fill" : "circle")
+                                                    .font(.title3)
+                                                    .foregroundStyle(viewModel.isRecord(currentRecord.id, in: collection.id) ? DejaGrooveStyle.blue : .secondary)
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(collection.name)
+                                                        .font(.headline)
+                                                    Text(albumCountLabel(collection.recordIds.count))
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Spacer()
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 44)
+                }
+            }
+            .navigationTitle("Collections")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var currentRecord: CollectionRecord {
+        viewModel.record(id: record.id) ?? record
+    }
+}
+
+private struct AddAlbumsToCollectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    let collection: CrateCollection
+    @ObservedObject var viewModel: CollectionViewModel
+    @State private var search = ""
+
+    var body: some View {
+        NavigationStack {
+            DejaGrooveScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        DejaGroovePanel {
+                            HStack(spacing: 14) {
+                                CollectionArtworkStack(collectionName: currentCollection.name, records: viewModel.records(in: currentCollection))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(currentCollection.name)
+                                        .font(.title3.bold())
+                                        .lineLimit(2)
+                                    Text("Add albums from My Crate")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            DejaGrooveSectionHeader(
+                                title: "Available Albums",
+                                detail: "\(availableRecords.count) shown")
+
+                            if availableRecords.isEmpty {
+                                DejaGrooveEmptyState(
+                                    title: "No Albums",
+                                    systemImage: "checkmark.circle",
+                                    detail: "Every matching My Crate album is already in this collection.")
+                            } else {
+                                ForEach(availableRecords) { record in
+                                    DejaGroovePanel {
+                                        HStack(spacing: 12) {
+                                            AlbumArtwork(urlString: record.album.thumbnailUrl ?? record.album.coverImageUrl, size: 58)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(record.album.artist)
+                                                    .font(.headline)
+                                                    .lineLimit(1)
+                                                Text(record.album.title)
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(2)
+                                            }
+                                            Spacer()
+                                            Button {
+                                                Task {
+                                                    await viewModel.setRecord(record.id, in: currentCollection.id, isIncluded: true)
+                                                }
+                                            } label: {
+                                                Image(systemName: "plus")
+                                                    .font(.headline.weight(.bold))
+                                                    .frame(width: 42, height: 42)
+                                            }
+                                            .foregroundStyle(.white)
+                                            .background(DejaGrooveStyle.blue, in: Circle())
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 44)
+                }
+            }
+            .searchable(text: $search)
+            .navigationTitle("Add Albums")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var currentCollection: CrateCollection {
+        viewModel.crateCollections.first(where: { $0.id == collection.id }) ?? collection
+    }
+
+    private var availableRecords: [CollectionRecord] {
+        viewModel.records
+            .filter { !currentCollection.recordIds.contains($0.id) }
+            .filter { record in
+                let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !query.isEmpty else { return true }
+                return [record.album.artist, record.album.title, record.album.format, record.album.label]
+                    .compactMap { $0 }
+                    .contains { $0.localizedCaseInsensitiveContains(query) }
+            }
     }
 }
 
