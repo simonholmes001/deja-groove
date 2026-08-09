@@ -39,7 +39,9 @@ const body = {
             "Identify the vinyl record album from the cover image.",
             "Return JSON only, using the supplied schema.",
             "Set safe_to_buy for one strong match, ambiguous for multiple plausible matches, or no_match if unrecognizable.",
-            "Prefer visible cover evidence. Use null for unknown years, labels, catalog numbers, countries, formats, and barcodes.",
+            "Prefer exact visible cover evidence over general music knowledge.",
+            "Transcribe exact visible title, artist, label, catalog number, spine text, format/media type, country/language hints, and barcode if present.",
+            "Use null for unknown years, labels, catalog numbers, countries, formats, barcodes, or visible text.",
             "Do not return Discogs, MusicBrainz, artwork, tracklist, identifier, or release-note metadata.",
             "Only identify the likely album; external enrichment will fill detailed release metadata."
           ].join("\n")

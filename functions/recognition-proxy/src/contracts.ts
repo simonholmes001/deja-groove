@@ -16,6 +16,11 @@ export type Album = {
   catalog_number?: string | null;
   country?: string | null;
   barcode?: string | null;
+  visible_title?: string | null;
+  visible_artist?: string | null;
+  visible_spine_text?: string | null;
+  visible_text?: string | null;
+  media_type_hint?: string | null;
   cover_image_url?: string | null;
   thumbnail_url?: string | null;
   back_cover_image_url?: string | null;

@@ -89,7 +89,12 @@ function recognitionLogDetails(result: RecognitionResult, requestId: string): Re
       label: album.label ?? null,
       catalog_number: album.catalog_number ?? null,
       country: album.country ?? null,
-      barcode_present: Boolean(album.barcode)
+      barcode_present: Boolean(album.barcode),
+      visible_title: album.visible_title ?? null,
+      visible_artist: album.visible_artist ?? null,
+      visible_spine_text: album.visible_spine_text ?? null,
+      visible_text_present: Boolean(album.visible_text),
+      media_type_hint: album.media_type_hint ?? null
     } : null,
     candidate_count: result.candidates?.length ?? 0
   };
@@ -195,6 +200,7 @@ function enrichmentLogDetails(album: RecognitionResult["album"]): Record<string,
     catalog_number: album.catalog_number ?? null,
     country: album.country ?? null,
     format: album.format ?? null,
+    media_type_hint: album.media_type_hint ?? null,
     discogs_release_id: album.discogs_release_id ?? null,
     discogs_master_id: album.discogs_master_id ?? null,
     cover_image_present: Boolean(album.cover_image_url || album.thumbnail_url)

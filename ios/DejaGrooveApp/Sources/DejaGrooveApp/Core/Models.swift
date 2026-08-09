@@ -18,6 +18,11 @@ public struct Album: Codable, Equatable, Sendable {
     public let catalogNumber: String?
     public let country: String?
     public let barcode: String?
+    public let visibleTitle: String?
+    public let visibleArtist: String?
+    public let visibleSpineText: String?
+    public let visibleText: String?
+    public let mediaTypeHint: String?
     public let coverImageUrl: String?
     public let thumbnailUrl: String?
     public let backCoverImageUrl: String?
@@ -48,6 +53,11 @@ public struct Album: Codable, Equatable, Sendable {
         catalogNumber: String? = nil,
         country: String? = nil,
         barcode: String? = nil,
+        visibleTitle: String? = nil,
+        visibleArtist: String? = nil,
+        visibleSpineText: String? = nil,
+        visibleText: String? = nil,
+        mediaTypeHint: String? = nil,
         coverImageUrl: String? = nil,
         thumbnailUrl: String? = nil,
         backCoverImageUrl: String? = nil,
@@ -77,6 +87,11 @@ public struct Album: Codable, Equatable, Sendable {
         self.catalogNumber = catalogNumber
         self.country = country
         self.barcode = barcode
+        self.visibleTitle = visibleTitle
+        self.visibleArtist = visibleArtist
+        self.visibleSpineText = visibleSpineText
+        self.visibleText = visibleText
+        self.mediaTypeHint = mediaTypeHint
         self.coverImageUrl = coverImageUrl
         self.thumbnailUrl = thumbnailUrl
         self.backCoverImageUrl = backCoverImageUrl
@@ -108,6 +123,11 @@ public struct Album: Codable, Equatable, Sendable {
         case catalogNumber = "catalog_number"
         case country
         case barcode
+        case visibleTitle = "visible_title"
+        case visibleArtist = "visible_artist"
+        case visibleSpineText = "visible_spine_text"
+        case visibleText = "visible_text"
+        case mediaTypeHint = "media_type_hint"
         case coverImageUrl = "cover_image_url"
         case thumbnailUrl = "thumbnail_url"
         case backCoverImageUrl = "back_cover_image_url"
@@ -141,6 +161,11 @@ public struct Album: Codable, Equatable, Sendable {
             catalogNumber: try container.decodeIfPresent(String.self, forKey: .catalogNumber),
             country: try container.decodeIfPresent(String.self, forKey: .country),
             barcode: try container.decodeIfPresent(String.self, forKey: .barcode),
+            visibleTitle: try container.decodeIfPresent(String.self, forKey: .visibleTitle),
+            visibleArtist: try container.decodeIfPresent(String.self, forKey: .visibleArtist),
+            visibleSpineText: try container.decodeIfPresent(String.self, forKey: .visibleSpineText),
+            visibleText: try container.decodeIfPresent(String.self, forKey: .visibleText),
+            mediaTypeHint: try container.decodeIfPresent(String.self, forKey: .mediaTypeHint),
             coverImageUrl: try container.decodeIfPresent(String.self, forKey: .coverImageUrl),
             thumbnailUrl: try container.decodeIfPresent(String.self, forKey: .thumbnailUrl),
             backCoverImageUrl: try container.decodeIfPresent(String.self, forKey: .backCoverImageUrl),
@@ -173,6 +198,11 @@ public struct Album: Codable, Equatable, Sendable {
         try container.encodeIfPresent(catalogNumber, forKey: .catalogNumber)
         try container.encodeIfPresent(country, forKey: .country)
         try container.encodeIfPresent(barcode, forKey: .barcode)
+        try container.encodeIfPresent(visibleTitle, forKey: .visibleTitle)
+        try container.encodeIfPresent(visibleArtist, forKey: .visibleArtist)
+        try container.encodeIfPresent(visibleSpineText, forKey: .visibleSpineText)
+        try container.encodeIfPresent(visibleText, forKey: .visibleText)
+        try container.encodeIfPresent(mediaTypeHint, forKey: .mediaTypeHint)
         try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
         try container.encodeIfPresent(thumbnailUrl, forKey: .thumbnailUrl)
         try container.encodeIfPresent(backCoverImageUrl, forKey: .backCoverImageUrl)

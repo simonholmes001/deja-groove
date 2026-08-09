@@ -165,12 +165,17 @@ function scoreSearchResult(album: Album, result: DiscogsSearchResult): number {
 
   score += textScore(album.artist, parsedTitle.artist || result.title, 4);
   score += textScore(album.title, parsedTitle.title || result.title, 5);
+  score += textScore(album.visible_artist, parsedTitle.artist || result.title, 3);
+  score += textScore(album.visible_title, parsedTitle.title || result.title, 3);
 
   if (album.year && parseYear(result.year) === album.year) score += 2;
   if (sameText(album.label, joinList(result.label))) score += 2;
   if (sameText(album.catalog_number, result.catno)) score += 5;
   if (sameText(album.country, result.country)) score += 1;
   if (album.format && joinList(result.format)?.toLowerCase().includes(album.format.toLowerCase())) score += 1;
+  if (album.media_type_hint && joinList(result.format)?.toLowerCase().includes(album.media_type_hint.toLowerCase())) score += 2;
+  if (containsNormalized(album.visible_spine_text, result.catno)) score += 3;
+  if (containsNormalized(album.visible_text, result.catno)) score += 3;
   if (album.barcode && result.barcode?.some((value) => sameText(album.barcode, value))) score += 6;
 
   return score;
@@ -198,6 +203,12 @@ function sameText(left: string | undefined | null, right: string | undefined | n
   const leftValue = normalize(left);
   const rightValue = normalize(right);
   return Boolean(leftValue && rightValue && leftValue === rightValue);
+}
+
+function containsNormalized(haystack: string | undefined | null, needle: string | undefined | null): boolean {
+  const haystackValue = normalize(haystack);
+  const needleValue = normalize(needle);
+  return Boolean(haystackValue && needleValue && haystackValue.includes(needleValue));
 }
 
 function normalize(value: string | undefined | null): string | null {

@@ -15,7 +15,9 @@ const defaultPrompt = [
   "Identify the vinyl record album from the cover image.",
   "Return JSON only, using the supplied schema.",
   "Set safe_to_buy for one strong match, ambiguous for multiple plausible matches, or no_match if unrecognizable.",
-  "Prefer visible cover evidence. Use null for unknown years, labels, catalog numbers, countries, formats, and barcodes.",
+  "Prefer exact visible cover evidence over general music knowledge.",
+  "Transcribe exact visible title, artist, label, catalog number, spine text, format/media type, country/language hints, and barcode if present.",
+  "Use null for unknown years, labels, catalog numbers, countries, formats, barcodes, or visible text.",
   "Do not return Discogs, MusicBrainz, artwork, tracklist, identifier, or release-note metadata.",
   "Only identify the likely album; external enrichment will fill detailed release metadata."
 ].join("\n");
@@ -106,6 +108,11 @@ function isAlbum(value: unknown): value is Album {
     && optionalString(value.label)
     && optionalString(value.catalog_number)
     && optionalString(value.country)
+    && optionalString(value.visible_title)
+    && optionalString(value.visible_artist)
+    && optionalString(value.visible_spine_text)
+    && optionalString(value.visible_text)
+    && optionalString(value.media_type_hint)
     && optionalString(value.back_cover_text)
     && optionalString(value.release_notes)
     && optionalString(value.mbid)
@@ -171,7 +178,12 @@ const albumSchema = {
     label: { type: ["string", "null"] },
     catalog_number: { type: ["string", "null"] },
     country: { type: ["string", "null"] },
-    barcode: { type: ["string", "null"] }
+    barcode: { type: ["string", "null"] },
+    visible_title: { type: ["string", "null"] },
+    visible_artist: { type: ["string", "null"] },
+    visible_spine_text: { type: ["string", "null"] },
+    visible_text: { type: ["string", "null"] },
+    media_type_hint: { type: ["string", "null"] }
   },
   required: [
     "title",
@@ -181,7 +193,12 @@ const albumSchema = {
     "label",
     "catalog_number",
     "country",
-    "barcode"
+    "barcode",
+    "visible_title",
+    "visible_artist",
+    "visible_spine_text",
+    "visible_text",
+    "media_type_hint"
   ]
 } as const;
 
