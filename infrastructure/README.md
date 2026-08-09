@@ -115,6 +115,7 @@ repository secrets are configured:
 - `DEJA_GROOVE_TEAM_ID`
 - `MATCH_GIT_URL`
 - `MATCH_PASSWORD`
+- `MATCH_GIT_BASIC_AUTHORIZATION`
 - `APP_STORE_CONNECT_API_KEY_ID`
 - `APP_STORE_CONNECT_API_ISSUER_ID`
 - `APP_STORE_CONNECT_API_KEY_BASE64`
@@ -126,6 +127,11 @@ repository secrets are configured:
 Set either `DEJA_GROOVE_XCODE_PROJECT` or `DEJA_GROOVE_XCODE_WORKSPACE`, not
 both. The workflow uses the GitHub run number as the TestFlight build number so
 repeated uploads do not reuse `CFBundleVersion`.
+
+`MATCH_PASSWORD` decrypts the Fastlane Match signing repository contents.
+`MATCH_GIT_BASIC_AUTHORIZATION` authenticates GitHub Actions to clone that
+private signing repository when `MATCH_GIT_URL` uses HTTPS. Set it to the base64
+encoding of `<github-username>:<fine-grained-token-with-repo-read-access>`.
 
 ## Local Usage
 
