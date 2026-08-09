@@ -192,17 +192,9 @@ private struct ScanResultView: View {
                         }
                     } label: {
                         HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(candidateDisplayTitle(candidate))
-                                    .font(.subheadline.weight(.semibold))
-                                Text(candidateDisplaySubtitle(candidate))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                if let detail = candidateReleaseDetail(candidate) {
-                                    Text(detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                            VStack(alignment: .leading) {
+                                Text(candidate.artist)
+                                Text(candidate.title).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: selectedCandidateIndex == response.candidates.firstIndex(of: candidate) ? "checkmark.circle.fill" : "circle")
@@ -253,34 +245,6 @@ private struct ScanResultView: View {
         default:
             return .secondary
         }
-    }
-
-    private func candidateDisplayTitle(_ album: Album) -> String {
-        [album.artist, album.title]
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: " - ")
-    }
-
-    private func candidateDisplaySubtitle(_ album: Album) -> String {
-        [
-            album.releaseYear.map(String.init) ?? album.year.map(String.init),
-            album.label,
-            album.catalogNumber
-        ]
-            .compactMap { $0 }
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: " • ")
-    }
-
-    private func candidateReleaseDetail(_ album: Album) -> String? {
-        let values = [
-            album.format,
-            album.country,
-            album.discogsReleaseId.map { "Discogs \($0)" }
-        ]
-            .compactMap { $0 }
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return values.isEmpty ? nil : values.joined(separator: " • ")
     }
 }
 

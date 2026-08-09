@@ -97,7 +97,7 @@ export class DiscogsAlbumEnrichment implements AlbumEnrichmentPort {
     append(params, "barcode", album.barcode);
 
     const response = await this.request<DiscogsSearchResponse>(`/database/search?${params.toString()}`);
-    return selectSearchResult(album, response.results || []);
+    return response.results?.find((result) => result.id) ?? null;
   }
 
   private async getRelease(releaseId: string): Promise<DiscogsRelease> {
@@ -124,100 +124,6 @@ export class NoopAlbumEnrichment implements AlbumEnrichmentPort {
   async enrich(album: Album): Promise<Album> {
     return album;
   }
-}
-
-export class AmbiguousAlbumEnrichmentError extends Error {
-  constructor(readonly candidates: Album[]) {
-    super("Discogs returned multiple plausible release matches.");
-    this.name = "AmbiguousAlbumEnrichmentError";
-  }
-}
-
-function selectSearchResult(album: Album, results: DiscogsSearchResult[]): DiscogsSearchResult | null {
-  const scored = results
-    .filter((result) => result.id)
-    .map((result) => ({
-      result,
-      score: scoreSearchResult(album, result)
-    }))
-    .filter((entry) => entry.score >= 4)
-    .sort((left, right) => right.score - left.score);
-
-  const best = scored[0];
-  if (!best) return null;
-
-  const closeMatches = scored.filter((entry) => best.score - entry.score <= 2);
-  if (closeMatches.length > 1 && !hasStrongReleaseEvidence(album)) {
-    throw new AmbiguousAlbumEnrichmentError(
-      closeMatches.slice(0, 5).map((entry) => mergeSearchResult(album, entry.result)));
-  }
-
-  return best.result;
-}
-
-function hasStrongReleaseEvidence(album: Album): boolean {
-  return Boolean(clean(album.barcode) || clean(album.catalog_number));
-}
-
-function scoreSearchResult(album: Album, result: DiscogsSearchResult): number {
-  const parsedTitle = parseDiscogsTitle(result.title);
-  let score = 0;
-
-  score += textScore(album.artist, parsedTitle.artist || result.title, 4);
-  score += textScore(album.title, parsedTitle.title || result.title, 5);
-  score += textScore(album.visible_artist, parsedTitle.artist || result.title, 3);
-  score += textScore(album.visible_title, parsedTitle.title || result.title, 3);
-
-  if (album.year && parseYear(result.year) === album.year) score += 2;
-  if (sameText(album.label, joinList(result.label))) score += 2;
-  if (sameText(album.catalog_number, result.catno)) score += 5;
-  if (sameText(album.country, result.country)) score += 1;
-  if (album.format && joinList(result.format)?.toLowerCase().includes(album.format.toLowerCase())) score += 1;
-  if (album.media_type_hint && joinList(result.format)?.toLowerCase().includes(album.media_type_hint.toLowerCase())) score += 2;
-  if (containsNormalized(album.visible_spine_text, result.catno)) score += 3;
-  if (containsNormalized(album.visible_text, result.catno)) score += 3;
-  if (album.barcode && result.barcode?.some((value) => sameText(album.barcode, value))) score += 6;
-
-  return score;
-}
-
-function parseDiscogsTitle(value: string | undefined): { artist: string | null; title: string | null } {
-  const parts = value?.split(" - ");
-  if (!parts || parts.length < 2) return { artist: null, title: clean(value) };
-  return {
-    artist: clean(parts[0]),
-    title: clean(parts.slice(1).join(" - "))
-  };
-}
-
-function textScore(expected: string | undefined | null, actual: string | undefined | null, exactScore: number): number {
-  const expectedValue = normalize(expected);
-  const actualValue = normalize(actual);
-  if (!expectedValue || !actualValue) return 0;
-  if (expectedValue === actualValue) return exactScore;
-  if (actualValue.includes(expectedValue) || expectedValue.includes(actualValue)) return Math.max(1, exactScore - 2);
-  return 0;
-}
-
-function sameText(left: string | undefined | null, right: string | undefined | null): boolean {
-  const leftValue = normalize(left);
-  const rightValue = normalize(right);
-  return Boolean(leftValue && rightValue && leftValue === rightValue);
-}
-
-function containsNormalized(haystack: string | undefined | null, needle: string | undefined | null): boolean {
-  const haystackValue = normalize(haystack);
-  const needleValue = normalize(needle);
-  return Boolean(haystackValue && needleValue && haystackValue.includes(needleValue));
-}
-
-function normalize(value: string | undefined | null): string | null {
-  const cleaned = clean(value)
-    ?.toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  return cleaned || null;
 }
 
 function mergeSearchResult(album: Album, result: DiscogsSearchResult | null): Album {

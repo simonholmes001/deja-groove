@@ -59,12 +59,7 @@ test("parseRecognitionOutput accepts the reduced scan-time recognition contract"
       label: "Impulse!",
       catalog_number: "AS-77",
       country: "US",
-      barcode: null,
-      visible_title: "A Love Supreme",
-      visible_artist: "John Coltrane",
-      visible_spine_text: "AS-77 John Coltrane A Love Supreme",
-      visible_text: "Impulse! AS-77 Stereo",
-      media_type_hint: "Vinyl"
+      barcode: null
     },
     candidates: []
   }));
@@ -72,7 +67,6 @@ test("parseRecognitionOutput accepts the reduced scan-time recognition contract"
   assert.equal(result.album?.title, "A Love Supreme");
   assert.equal(result.album?.artist, "John Coltrane");
   assert.equal(result.album?.label, "Impulse!");
-  assert.equal(result.album?.visible_spine_text, "AS-77 John Coltrane A Love Supreme");
   assert.equal(result.album?.tracklist, undefined);
 });
 

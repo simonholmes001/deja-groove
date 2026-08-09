@@ -3,7 +3,6 @@ import test from "node:test";
 import { createScanHandler, toScanResponse } from "../src/scan.js";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
 import type { Album, RecognitionResult } from "../src/contracts.js";
-import { AmbiguousAlbumEnrichmentError } from "../src/discogs.js";
 
 test("toScanResponse returns one album for strong matches", () => {
   const response = toScanResponse({
@@ -95,30 +94,6 @@ test("scan handler returns enriched result within enrichment budget", async () =
   assert.equal(response.status, 200);
   assert.equal(response.jsonBody?.album?.label, "Impulse!");
   assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
-});
-
-test("scan handler returns ambiguous result when enrichment has multiple plausible releases", async () => {
-  const warnings: unknown[] = [];
-  const handler = createScanHandler(
-    new StubRecognition(baseResult()),
-    {
-      enrich: async () => {
-        throw new AmbiguousAlbumEnrichmentError([
-          { ...baseResult().album!, discogs_release_id: "release-1" },
-          { ...baseResult().album!, discogs_release_id: "release-2" }
-        ]);
-      }
-    },
-    { enrichmentTimeoutMs: 100 });
-
-  const response = await handler(fakeMultipartRequest(), fakeContext(warnings));
-
-  assert.equal(response.status, 200);
-  assert.equal(response.jsonBody?.status, "ambiguous");
-  assert.equal(response.jsonBody?.album, null);
-  assert.equal(response.jsonBody?.candidates.length, 2);
-  assert.equal(response.jsonBody?.candidates[0]?.discogs_release_id, "release-1");
-  assert.match(String(warnings[0]), /multiple plausible Discogs releases/);
 });
 
 test("scan handler logs recognition failures with request diagnostics", async () => {
