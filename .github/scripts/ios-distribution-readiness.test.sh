@@ -86,6 +86,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
         with:
+          ruby-version: '3.1'
           bundler: '2.5.23'
       - env:
           MATCH_GIT_BASIC_AUTHORIZATION: secret
@@ -144,6 +145,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6
         with:
+          ruby-version: '3.1'
           bundler: '2.5.23'
       - env:
           MATCH_GIT_BASIC_AUTHORIZATION: secret
