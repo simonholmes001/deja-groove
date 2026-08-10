@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ruby <<'RUBY'
-require "fileutils"
 require "tmpdir"
+require "xcodeproj"
 
 module UI
   def self.user_error!(message)
@@ -34,11 +34,25 @@ ENV["DEJA_GROOVE_APP_IDENTIFIER"] = "com.dejagroove.app"
 ENV["DEJA_GROOVE_TEAM_ID"] = "TEAM123"
 ENV["DEJA_GROOVE_BUILD_NUMBER"] = "42"
 
-def write_project_pbxproj(project_text)
+def write_project(signable_targets:, test_bundle_identifier: nil)
   project_dir = Dir.mktmpdir
   xcodeproj_path = File.join(project_dir, "DejaGroove.xcodeproj")
-  FileUtils.mkdir_p(xcodeproj_path)
-  File.write(File.join(xcodeproj_path, "project.pbxproj"), project_text)
+  project = Xcodeproj::Project.new(xcodeproj_path)
+  signable_targets.each do |target_name, bundle_identifier|
+    target = project.new_target(:application, target_name, :ios, "17.0")
+    target.build_configurations.each do |configuration|
+      configuration.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = bundle_identifier
+    end
+  end
+
+  unless test_bundle_identifier.nil?
+    test_target = project.new_target(:unit_test_bundle, "DejaGrooveTests", :ios, "17.0")
+    test_target.build_configurations.each do |configuration|
+      configuration.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = test_bundle_identifier
+    end
+  end
+
+  project.save
   ENV["DEJA_GROOVE_XCODE_PROJECT"] = xcodeproj_path
 end
 
@@ -47,11 +61,10 @@ def reset_signing_state
   ENV.delete("sigh_com.dejagroove.app_appstore_profile-name")
 end
 
-single_target_project = <<~PBX
-  productType = "com.apple.product-type.application";
-  PRODUCT_BUNDLE_IDENTIFIER = com.dejagroove.app;
-PBX
-write_project_pbxproj(single_target_project)
+write_project(
+  signable_targets: { "DejaGroove" => "com.dejagroove.app" },
+  test_bundle_identifier: "com.dejagroove.app.tests"
+)
 
 reset_signing_state
 expected_mapping = {
@@ -96,13 +109,13 @@ rescue RuntimeError => error
   raise error unless error.message.include?("does not include com.dejagroove.app")
 end
 
-multi_target_project = <<~PBX
-  productType = "com.apple.product-type.application";
-  productType = "com.apple.product-type.app-extension";
-  PRODUCT_BUNDLE_IDENTIFIER = com.dejagroove.app;
-  PRODUCT_BUNDLE_IDENTIFIER = com.dejagroove.app.Widget;
-PBX
-write_project_pbxproj(multi_target_project)
+write_project(
+  signable_targets: {
+    "DejaGroove" => "com.dejagroove.app",
+    "DejaGrooveOther" => "com.dejagroove.other"
+  },
+  test_bundle_identifier: "com.dejagroove.app.tests"
+)
 begin
   assert_single_appstore_archive_target!
   raise "multi-target project should fail single-bundle validation"

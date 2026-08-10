@@ -1,4 +1,5 @@
 require "shellwords"
+require "xcodeproj"
 
 SIGNABLE_PRODUCT_TYPES = %w[
   com.apple.product-type.application
@@ -108,24 +109,23 @@ def assert_single_appstore_archive_target!
   project_path = xcode_container_path("DEJA_GROOVE_XCODE_PROJECT")
   UI.user_error!("DEJA_GROOVE_XCODE_PROJECT is required for manual App Store archive signing.") if project_path.nil?
 
-  pbxproj_path = File.join(project_path, "project.pbxproj")
-  UI.user_error!("Xcode project file not found at #{pbxproj_path}") unless File.exist?(pbxproj_path)
-
-  project_text = File.read(pbxproj_path)
-  signable_product_types = project_text
-                           .scan(/productType = "([^"]+)";/)
-                           .flatten
-                           .select { |product_type| SIGNABLE_PRODUCT_TYPES.include?(product_type) }
-  bundle_identifiers = project_text
-                       .scan(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/)
-                       .flatten
-                       .map { |bundle_identifier| bundle_identifier.delete('"').strip }
+  project = Xcodeproj::Project.open(project_path)
+  signable_targets = project.native_targets.select do |target|
+    SIGNABLE_PRODUCT_TYPES.include?(target.product_type)
+  end
+  bundle_identifiers = signable_targets
+                       .flat_map do |target|
+                         target.build_configurations.map do |configuration|
+                           configuration.resolve_build_setting("PRODUCT_BUNDLE_IDENTIFIER").to_s.strip
+                         end
+                       end
+                       .reject(&:empty?)
                        .uniq
 
-  if signable_product_types.length != 1 || bundle_identifiers != [app_identifier]
+  if signable_targets.length != 1 || bundle_identifiers != [app_identifier]
     UI.user_error!(
       "Manual App Store archive signing is configured for a single bundle only. " \
-      "Found signable product types: #{signable_product_types.join(', ')}; " \
+      "Found signable targets: #{signable_targets.map(&:name).join(', ')}; " \
       "bundle identifiers: #{bundle_identifiers.join(', ')}. " \
       "Add Match profiles for every signable target before extending this lane."
     )
