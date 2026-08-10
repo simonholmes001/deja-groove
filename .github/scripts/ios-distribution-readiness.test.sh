@@ -62,7 +62,18 @@ end
 
 platform :ios do
   lane :verify_distribution_env do
-    puts "ok"
+    %w[
+      DEJA_GROOVE_APP_IDENTIFIER
+      DEJA_GROOVE_APPLE_ID
+      DEJA_GROOVE_ITC_TEAM_ID
+      DEJA_GROOVE_TEAM_ID
+      MATCH_GIT_URL
+      MATCH_PASSWORD
+      APP_STORE_CONNECT_API_KEY_ID
+      APP_STORE_CONNECT_API_ISSUER_ID
+      APP_STORE_CONNECT_API_KEY_PATH
+      DEJA_GROOVE_XCODE_SCHEME
+    ].each { |key| ENV.fetch(key) }
   end
 
   lane :prepare_signing do
@@ -143,6 +154,18 @@ end
 
 platform :ios do
   lane :verify_distribution_env do
+    %w[
+      DEJA_GROOVE_APP_IDENTIFIER
+      DEJA_GROOVE_APPLE_ID
+      DEJA_GROOVE_ITC_TEAM_ID
+      DEJA_GROOVE_TEAM_ID
+      MATCH_GIT_URL
+      MATCH_PASSWORD
+      APP_STORE_CONNECT_API_KEY_ID
+      APP_STORE_CONNECT_API_ISSUER_ID
+      APP_STORE_CONNECT_API_KEY_PATH
+      DEJA_GROOVE_XCODE_SCHEME
+    ].each { |key| ENV.fetch(key) }
   end
   lane :prepare_signing do
     sync_code_signing(type: "appstore", readonly: true, keychain_name: "ci.keychain", keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"])

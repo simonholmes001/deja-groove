@@ -33,6 +33,10 @@ grep -q 'create_keychain(' ios/fastlane/Fastfile || { echo "Fastfile missing CI 
 grep -q 'delete_keychain(' ios/fastlane/Fastfile || { echo "Fastfile missing CI keychain cleanup" >&2; exit 1; }
 grep -q 'keychain_name' ios/fastlane/Fastfile || { echo "Fastfile missing Match keychain name forwarding" >&2; exit 1; }
 grep -q 'keychain_password' ios/fastlane/Fastfile || { echo "Fastfile missing Match keychain password forwarding" >&2; exit 1; }
+if awk '/lane :verify_distribution_env/,/].each/' ios/fastlane/Fastfile | grep -q 'MATCH_KEYCHAIN_PASSWORD'; then
+  echo "Fastfile must not require MATCH_KEYCHAIN_PASSWORD for standalone signing lanes" >&2
+  exit 1
+fi
 
 grep -q 'force_legacy_encryption(true)' ios/fastlane/Matchfile || { echo "Matchfile missing legacy encryption compatibility setting" >&2; exit 1; }
 
