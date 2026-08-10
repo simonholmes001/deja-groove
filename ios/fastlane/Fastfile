@@ -1,4 +1,13 @@
 require "shellwords"
+require "xcodeproj"
+
+SIGNABLE_PRODUCT_TYPES = %w[
+  com.apple.product-type.application
+  com.apple.product-type.app-extension
+  com.apple.product-type.messages-extension
+  com.apple.product-type.watchkit2-app
+  com.apple.product-type.watchkit2-extension
+].freeze
 
 def validated_string!(key)
   value = ENV[key]
@@ -96,11 +105,39 @@ def appstore_profile_mapping
   mapping
 end
 
+def assert_single_appstore_archive_target!
+  project_path = xcode_container_path("DEJA_GROOVE_XCODE_PROJECT")
+  UI.user_error!("DEJA_GROOVE_XCODE_PROJECT is required for manual App Store archive signing.") if project_path.nil?
+
+  project = Xcodeproj::Project.open(project_path)
+  signable_targets = project.native_targets.select do |target|
+    SIGNABLE_PRODUCT_TYPES.include?(target.product_type)
+  end
+  bundle_identifiers = signable_targets
+                       .flat_map do |target|
+                         target.build_configurations.map do |configuration|
+                           configuration.resolve_build_setting("PRODUCT_BUNDLE_IDENTIFIER").to_s.strip
+                         end
+                       end
+                       .reject(&:empty?)
+                       .uniq
+
+  if signable_targets.length != 1 || bundle_identifiers != [app_identifier]
+    UI.user_error!(
+      "Manual App Store archive signing is configured for a single bundle only. " \
+      "Found signable targets: #{signable_targets.map(&:name).join(', ')}; " \
+      "bundle identifiers: #{bundle_identifiers.join(', ')}. " \
+      "Add Match profiles for every signable target before extending this lane."
+    )
+  end
+end
+
 def appstore_xcargs
   [
     "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
     "CODE_SIGN_STYLE=Manual",
     "DEVELOPMENT_TEAM=#{ENV.fetch("DEJA_GROOVE_TEAM_ID")}",
+    "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(appstore_profile_name)}",
     "CODE_SIGN_IDENTITY=#{Shellwords.escape("Apple Distribution")}"
   ].join(" ")
 end
@@ -141,6 +178,7 @@ platform :ios do
   lane :upload_internal_testflight do
     verify_distribution_env
     prepare_signing
+    assert_single_appstore_archive_target!
     api_key = app_store_connect_api_key(
       key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
       issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
