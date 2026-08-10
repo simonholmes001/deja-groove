@@ -80,12 +80,27 @@ def appstore_profile_name
   mapping[app_identifier] || ENV["sigh_#{app_identifier}_appstore_profile-name"] || "match AppStore #{app_identifier}"
 end
 
+def appstore_profile_mapping
+  mapping = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
+  if mapping.empty?
+    return { app_identifier => appstore_profile_name }
+  end
+
+  unless mapping.key?(app_identifier)
+    UI.user_error!(
+      "Match App Store profile mapping does not include #{app_identifier}. " \
+      "Found: #{mapping.keys.join(', ')}"
+    )
+  end
+
+  mapping
+end
+
 def appstore_xcargs
   [
     "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
     "CODE_SIGN_STYLE=Manual",
     "DEVELOPMENT_TEAM=#{ENV.fetch("DEJA_GROOVE_TEAM_ID")}",
-    "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(appstore_profile_name)}",
     "CODE_SIGN_IDENTITY=#{Shellwords.escape("Apple Distribution")}"
   ].join(" ")
 end
@@ -94,9 +109,7 @@ def appstore_export_options
   {
     signingStyle: "manual",
     teamID: ENV.fetch("DEJA_GROOVE_TEAM_ID"),
-    provisioningProfiles: {
-      app_identifier => appstore_profile_name
-    }
+    provisioningProfiles: appstore_profile_mapping
   }
 end
 
