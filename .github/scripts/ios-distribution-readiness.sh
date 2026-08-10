@@ -24,10 +24,15 @@ fi
 grep -q 'lane :verify_distribution_env' ios/fastlane/Fastfile || { echo "Missing Fastlane lane: verify_distribution_env" >&2; exit 1; }
 grep -q 'lane :prepare_signing' ios/fastlane/Fastfile || { echo "Missing Fastlane lane: prepare_signing" >&2; exit 1; }
 grep -q 'lane :upload_internal_testflight' ios/fastlane/Fastfile || { echo "Missing Fastlane lane: upload_internal_testflight" >&2; exit 1; }
-grep -q 'sync_code_signing(type: "appstore"' ios/fastlane/Fastfile || { echo "Missing App Store signing sync in Fastfile" >&2; exit 1; }
+grep -q 'sync_code_signing(' ios/fastlane/Fastfile || { echo "Missing App Store signing sync in Fastfile" >&2; exit 1; }
+grep -q 'type: "appstore"' ios/fastlane/Fastfile || { echo "Fastfile signing sync is not scoped to App Store" >&2; exit 1; }
 grep -q 'app_store_connect_api_key(' ios/fastlane/Fastfile || { echo "Missing explicit App Store Connect API key setup in Fastfile" >&2; exit 1; }
 grep -q 'upload_to_testflight(' ios/fastlane/Fastfile || { echo "Missing TestFlight upload in Fastfile" >&2; exit 1; }
 grep -q 'def xcode_container_path' ios/fastlane/Fastfile || { echo "Fastfile missing xcode container path normalization" >&2; exit 1; }
+grep -q 'create_keychain(' ios/fastlane/Fastfile || { echo "Fastfile missing CI keychain creation" >&2; exit 1; }
+grep -q 'delete_keychain(' ios/fastlane/Fastfile || { echo "Fastfile missing CI keychain cleanup" >&2; exit 1; }
+grep -q 'keychain_name' ios/fastlane/Fastfile || { echo "Fastfile missing Match keychain name forwarding" >&2; exit 1; }
+grep -q 'keychain_password' ios/fastlane/Fastfile || { echo "Fastfile missing Match keychain password forwarding" >&2; exit 1; }
 
 grep -q 'force_legacy_encryption(true)' ios/fastlane/Matchfile || { echo "Matchfile missing legacy encryption compatibility setting" >&2; exit 1; }
 
@@ -41,6 +46,7 @@ grep -Fq 'mktemp /tmp/deja-groove-authkey' .github/workflows/ios-testflight.yml 
 grep -Fq 'chmod 600 "$key_path"' .github/workflows/ios-testflight.yml || { echo "Workflow missing API key permission hardening" >&2; exit 1; }
 grep -Fq 'rm -f "${APP_STORE_CONNECT_API_KEY_PATH:-}"' .github/workflows/ios-testflight.yml || { echo "Workflow missing API key cleanup" >&2; exit 1; }
 grep -q 'MATCH_GIT_BASIC_AUTHORIZATION' .github/workflows/ios-testflight.yml || { echo "Workflow missing Match git authentication secret" >&2; exit 1; }
+grep -q 'MATCH_KEYCHAIN_PASSWORD' .github/workflows/ios-testflight.yml || { echo "Workflow missing CI keychain password secret" >&2; exit 1; }
 
 grep -q 'run: bash .github/scripts/validate-ios-project.sh' .github/workflows/ios-testflight.yml || { echo "Workflow missing executable iOS project validation step" >&2; exit 1; }
 

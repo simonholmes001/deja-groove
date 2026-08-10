@@ -13,6 +13,7 @@ This runbook covers issue scope for #95, #96, and #97.
   - `DEJA_GROOVE_TEAM_ID`
   - `MATCH_GIT_URL`
   - `MATCH_PASSWORD`
+  - `MATCH_KEYCHAIN_PASSWORD`
   - `MATCH_GIT_BASIC_AUTHORIZATION`
   - `APP_STORE_CONNECT_API_KEY_ID`
   - `APP_STORE_CONNECT_API_ISSUER_ID`
@@ -54,9 +55,11 @@ bundle exec fastlane ios prepare_signing
 ```
 
 This lane uses `match` in read-only mode and fails fast when required environment values are missing.
-`MATCH_PASSWORD` decrypts the signing repository. If the signing repository is
-private and CI clones it over HTTPS, set `MATCH_GIT_BASIC_AUTHORIZATION` to the
-base64 encoding of `<github-username>:<fine-grained-token-with-repo-read-access>`.
+`MATCH_PASSWORD` decrypts the signing repository. `MATCH_KEYCHAIN_PASSWORD`
+unlocks the temporary macOS keychain used for importing certificates in CI. If
+the signing repository is private and CI clones it over HTTPS, set
+`MATCH_GIT_BASIC_AUTHORIZATION` to the base64 encoding of
+`<github-username>:<fine-grained-token-with-repo-read-access>`.
 
 ## Internal TestFlight Upload (#97)
 

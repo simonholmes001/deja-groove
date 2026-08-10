@@ -52,13 +52,21 @@ def xcode_container_path(key)
   ENV[key]
 end
 
+def create_ci_keychain
+  create_keychain(name: "ci.keychain", password: ENV["MATCH_KEYCHAIN_PASSWORD"])
+end
+
+def delete_ci_keychain
+  delete_keychain(name: "ci.keychain")
+end
+
 platform :ios do
   lane :verify_distribution_env do
     puts "ok"
   end
 
   lane :prepare_signing do
-    sync_code_signing(type: "appstore", readonly: true)
+    sync_code_signing(type: "appstore", readonly: true, keychain_name: "ci.keychain", keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"])
   end
 
   lane :upload_internal_testflight do
@@ -94,6 +102,7 @@ jobs:
           bundler: '2.5.23'
       - env:
           MATCH_GIT_BASIC_AUTHORIZATION: secret
+          MATCH_KEYCHAIN_PASSWORD: secret
         run: echo "$MATCH_GIT_BASIC_AUTHORIZATION" > /dev/null
       - run: |
           key_path="$(mktemp /tmp/deja-groove-authkey.XXXXXX.p8)"
@@ -124,11 +133,19 @@ def xcode_container_path(key)
   ENV[key]
 end
 
+def create_ci_keychain
+  create_keychain(name: "ci.keychain", password: ENV["MATCH_KEYCHAIN_PASSWORD"])
+end
+
+def delete_ci_keychain
+  delete_keychain(name: "ci.keychain")
+end
+
 platform :ios do
   lane :verify_distribution_env do
   end
   lane :prepare_signing do
-    sync_code_signing(type: "appstore", readonly: true)
+    sync_code_signing(type: "appstore", readonly: true, keychain_name: "ci.keychain", keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"])
   end
   lane :upload_internal_testflight do
     api_key = app_store_connect_api_key(key_id: "x", issuer_id: "x", key_filepath: "/tmp/x")
@@ -157,6 +174,7 @@ jobs:
           bundler: '2.5.23'
       - env:
           MATCH_GIT_BASIC_AUTHORIZATION: secret
+          MATCH_KEYCHAIN_PASSWORD: secret
         run: echo "$MATCH_GIT_BASIC_AUTHORIZATION" > /dev/null
       - run: |
           key_path="$(mktemp /tmp/deja-groove-authkey.XXXXXX.p8)"

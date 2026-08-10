@@ -24,6 +24,47 @@ def xcode_container_path(key)
   resolved_path
 end
 
+def ci_keychain_name
+  ENV["MATCH_KEYCHAIN_NAME"] || "deja-groove-ci-signing.keychain"
+end
+
+def ci_keychain_password
+  ENV["MATCH_KEYCHAIN_PASSWORD"]
+end
+
+def using_ci_keychain?
+  !ci_keychain_password.nil? && !ci_keychain_password.strip.empty?
+end
+
+def create_ci_keychain
+  return unless using_ci_keychain?
+
+  create_keychain(
+    name: ci_keychain_name,
+    password: ci_keychain_password,
+    default_keychain: true,
+    unlock: true,
+    timeout: 3600,
+    lock_when_sleeps: false
+  )
+end
+
+def delete_ci_keychain
+  return unless using_ci_keychain?
+
+  delete_keychain(name: ci_keychain_name)
+end
+
+def sync_appstore_signing
+  options = { type: "appstore", readonly: true }
+  if using_ci_keychain?
+    options[:keychain_name] = ci_keychain_name
+    options[:keychain_password] = ci_keychain_password
+  end
+
+  sync_code_signing(**options)
+end
+
 platform :ios do
   desc "Verify required App Store/TestFlight environment configuration"
   lane :verify_distribution_env do
@@ -34,6 +75,7 @@ platform :ios do
       DEJA_GROOVE_TEAM_ID
       MATCH_GIT_URL
       MATCH_PASSWORD
+      MATCH_KEYCHAIN_PASSWORD
       APP_STORE_CONNECT_API_KEY_ID
       APP_STORE_CONNECT_API_ISSUER_ID
       APP_STORE_CONNECT_API_KEY_PATH
@@ -44,7 +86,8 @@ platform :ios do
   desc "Sync App Store distribution certificates and provisioning profiles"
   lane :prepare_signing do
     verify_distribution_env
-    sync_code_signing(type: "appstore", readonly: true)
+    create_ci_keychain
+    sync_appstore_signing
   end
 
   desc "Build and upload a TestFlight build for internal testing"
@@ -72,5 +115,7 @@ platform :ios do
       distribute_external: false,
       groups: ["Internal"]
     )
+  ensure
+    delete_ci_keychain
   end
 end
