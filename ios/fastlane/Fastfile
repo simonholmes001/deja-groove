@@ -17,7 +17,11 @@ def xcode_container_path(key)
 
   configured_path = value.strip
   candidates = [configured_path]
-  candidates << File.join("..", configured_path) unless configured_path.start_with?("/")
+  unless configured_path.start_with?("/")
+    candidates << File.join("..", configured_path)
+    candidates << File.join("..", "..", configured_path)
+  end
+  candidates = candidates.map { |path| File.expand_path(path) }.uniq
   resolved_path = candidates.find { |path| File.exist?(path) }
 
   UI.user_error!("Configured #{key} not found. Checked: #{candidates.join(', ')}") if resolved_path.nil?

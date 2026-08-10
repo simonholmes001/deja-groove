@@ -23,5 +23,6 @@ grep -q 'uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' "$WORK
 grep -q 'uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6' "$WORKFLOW" || fail "missing immutable ruby setup pin"
 grep -q "ruby-version: '3.1'" "$WORKFLOW" || fail "missing Ruby version compatible with locked Fastlane dependencies"
 grep -q "bundler: '2.5.23'" "$WORKFLOW" || fail "missing Ruby 3-compatible Bundler pin"
+grep -q 'working-directory: ios' "$WORKFLOW" || fail "missing Fastlane iOS working directory"
 
 echo "ios-testflight workflow tests passed."
