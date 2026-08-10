@@ -50,6 +50,7 @@ jobs:
           bash .github/scripts/changeset-check.test.sh
           bash .github/scripts/ios-distribution-readiness.test.sh
           bash .github/scripts/validate-ios-project.test.sh
+          bash .github/scripts/fastlane-appstore-signing.test.sh
           bash .github/scripts/fastlane-xcode-path-resolution.test.sh
           bash .github/scripts/ios-testflight-workflow.test.sh
           bash .github/scripts/gitignore-ios-artifacts.test.sh

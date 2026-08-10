@@ -1,3 +1,5 @@
+require "shellwords"
+
 def validated_string!(key)
   value = ENV[key]
   UI.user_error!("Missing required environment variable: #{key}") if value.nil? || value.strip.empty?
@@ -69,6 +71,48 @@ def sync_appstore_signing
   sync_code_signing(**options)
 end
 
+def app_identifier
+  ENV.fetch("DEJA_GROOVE_APP_IDENTIFIER")
+end
+
+def appstore_profile_name
+  mapping = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
+  mapping[app_identifier] || ENV["sigh_#{app_identifier}_appstore_profile-name"] || "match AppStore #{app_identifier}"
+end
+
+def appstore_profile_mapping
+  mapping = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
+  if mapping.empty?
+    return { app_identifier => appstore_profile_name }
+  end
+
+  unless mapping.key?(app_identifier)
+    UI.user_error!(
+      "Match App Store profile mapping does not include #{app_identifier}. " \
+      "Found: #{mapping.keys.join(', ')}"
+    )
+  end
+
+  mapping
+end
+
+def appstore_xcargs
+  [
+    "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
+    "CODE_SIGN_STYLE=Manual",
+    "DEVELOPMENT_TEAM=#{ENV.fetch("DEJA_GROOVE_TEAM_ID")}",
+    "CODE_SIGN_IDENTITY=#{Shellwords.escape("Apple Distribution")}"
+  ].join(" ")
+end
+
+def appstore_export_options
+  {
+    signingStyle: "manual",
+    teamID: ENV.fetch("DEJA_GROOVE_TEAM_ID"),
+    provisioningProfiles: appstore_profile_mapping
+  }
+end
+
 platform :ios do
   desc "Verify required App Store/TestFlight environment configuration"
   lane :verify_distribution_env do
@@ -105,9 +149,12 @@ platform :ios do
 
     build_app(
       scheme: ENV.fetch("DEJA_GROOVE_XCODE_SCHEME"),
+      configuration: "Release",
       export_method: "app-store",
+      export_options: appstore_export_options,
+      skip_profile_detection: true,
       clean: true,
-      xcargs: "CURRENT_PROJECT_VERSION=#{testflight_build_number}",
+      xcargs: appstore_xcargs,
       project: xcode_container_path("DEJA_GROOVE_XCODE_PROJECT"),
       workspace: xcode_container_path("DEJA_GROOVE_XCODE_WORKSPACE")
     )
