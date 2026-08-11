@@ -381,7 +381,7 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual("Authentication is required.", message)
     }
 
-    func testScanViewModelClearsResultAfterSuccessfulAddToCollection() async {
+    func testScanViewModelKeepsAddedResultVisibleAfterSuccessfulAddToCollection() async {
         let response = ScanResponse(
             status: "safe_to_buy",
             confidence: 0.9,
@@ -396,7 +396,12 @@ final class ViewModelTests: XCTestCase {
 
         let state = await sut.state
         let message = await sut.collectionMessage
-        XCTAssertEqual(.idle, state)
+        if case .result(let added) = state {
+            XCTAssertEqual("owned", added.status)
+            XCTAssertEqual(response.album, added.album)
+        } else {
+            XCTFail("Expected added result to remain visible")
+        }
         XCTAssertEqual("Added to My Crate.", message)
     }
 

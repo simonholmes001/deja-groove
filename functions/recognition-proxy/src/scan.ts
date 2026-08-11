@@ -16,7 +16,7 @@ type ScanHandlerOptions = {
   includeDebugDetails?: boolean;
 };
 
-const defaultEnrichmentTimeoutMs = 4000;
+export const defaultEnrichmentTimeoutMs = 12000;
 
 export function createScanHandler(
   recognition: RecognitionPort,

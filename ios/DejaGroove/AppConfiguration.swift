@@ -1,4 +1,5 @@
 import Foundation
+import DejaGrooveApp
 
 enum DejaGrooveRuntimeMode: String, Equatable {
     case localProxy = "local_proxy"
@@ -34,12 +35,18 @@ enum AppConfiguration {
               let recognitionProxyKey = bundle.object(forInfoDictionaryKey: "DEJA_GROOVE_RECOGNITION_PROXY_KEY") as? String else {
             return .failure(.missingRequiredKeys)
         }
-        guard recognitionProxyBaseURL.scheme?.lowercased() == "https" else {
-            return .failure(.recognitionProxyBaseUrlMustUseHttps)
-        }
-        guard !recognitionProxyKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !recognitionProxyKey.hasPrefix("REPLACE_") else {
-            return .failure(.placeholderRecognitionProxyKey)
+        if let validationError = RecognitionProxyConfiguration.validate(
+            baseURL: recognitionProxyBaseURL,
+            functionKey: recognitionProxyKey)
+        {
+            switch validationError {
+            case .baseURLMustUseHttps:
+                return .failure(.recognitionProxyBaseUrlMustUseHttps)
+            case .placeholderBaseURL:
+                return .failure(.placeholderRecognitionProxyBaseURL)
+            case .placeholderFunctionKey:
+                return .failure(.placeholderRecognitionProxyKey)
+            }
         }
 
         return .success(LoadedAppConfiguration(
@@ -57,6 +64,7 @@ enum AppConfigurationError: Error, LocalizedError {
     case missingRequiredKeys
     case invalidRuntimeMode
     case recognitionProxyBaseUrlMustUseHttps
+    case placeholderRecognitionProxyBaseURL
     case placeholderRecognitionProxyKey
 
     var errorDescription: String? {
@@ -67,6 +75,8 @@ enum AppConfigurationError: Error, LocalizedError {
             return "Runtime mode must be local_proxy."
         case .recognitionProxyBaseUrlMustUseHttps:
             return "Recognition proxy base URL must use HTTPS."
+        case .placeholderRecognitionProxyBaseURL:
+            return "Recognition proxy base URL is still set to the example host."
         case .placeholderRecognitionProxyKey:
             return "Recognition proxy function key is not configured for this build."
         }

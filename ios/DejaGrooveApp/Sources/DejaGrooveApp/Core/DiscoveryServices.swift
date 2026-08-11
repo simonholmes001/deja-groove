@@ -266,7 +266,7 @@ public final class ShazamKitAudioDiscoveryService: NSObject, AudioDiscoveryServi
     private var continuation: CheckedContinuation<AudioDiscoveryTrack, Error>?
     private var timeoutTask: Task<Void, Never>?
 
-    public init(timeoutSeconds: TimeInterval = 12) {
+    public init(timeoutSeconds: TimeInterval = 25) {
         self.timeoutNanoseconds = UInt64(timeoutSeconds * 1_000_000_000)
         super.init()
         session.delegate = self

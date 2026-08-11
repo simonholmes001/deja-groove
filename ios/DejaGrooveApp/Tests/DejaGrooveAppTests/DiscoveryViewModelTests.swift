@@ -19,6 +19,26 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertNil(sut.message)
     }
 
+    func testListeningVisualStateFollowsAudioDiscoveryLoading() async {
+        let gate = AudioDiscoveryGate()
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            discoveryStore: DiscoveryStoreSpy(),
+            audioDiscovery: GatedAudioDiscoveryService(gate: gate),
+            candidateResolver: AlbumCandidateResolverStub(),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        let task = Task { await sut.identifyPlayingAudio() }
+        await gate.waitUntilStarted()
+
+        XCTAssertTrue(sut.shouldShowListeningActivity)
+
+        await gate.finish()
+        await task.value
+
+        XCTAssertFalse(sut.shouldShowListeningActivity)
+    }
+
     func testPrepareMusicAccessExplainsDeniedAccessWithoutBlockingDiscovery() async {
         let authorization = MusicAuthorizationControllerStub(status: .denied)
         let sut = DiscoveryViewModel(
@@ -115,6 +135,49 @@ private struct AudioDiscoveryServiceStub: AudioDiscoveryService {
             throw error
         }
         return track
+    }
+}
+
+private struct GatedAudioDiscoveryService: AudioDiscoveryService {
+    let gate: AudioDiscoveryGate
+
+    func identifyCurrentAudio() async throws -> AudioDiscoveryTrack {
+        await gate.markStarted()
+        await gate.waitUntilFinished()
+        return AudioDiscoveryTrack(title: "Track", artist: "Artist", matchedAt: "2026-01-01T00:00:00Z")
+    }
+}
+
+private actor AudioDiscoveryGate {
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var finishContinuation: CheckedContinuation<Void, Never>?
+    private var hasStarted = false
+    private var hasFinished = false
+
+    func markStarted() {
+        hasStarted = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+    }
+
+    func waitUntilStarted() async {
+        if hasStarted { return }
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func waitUntilFinished() async {
+        if hasFinished { return }
+        await withCheckedContinuation { continuation in
+            finishContinuation = continuation
+        }
+    }
+
+    func finish() {
+        hasFinished = true
+        finishContinuation?.resume()
+        finishContinuation = nil
     }
 }
 

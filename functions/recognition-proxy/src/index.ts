@@ -5,6 +5,7 @@ import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
 import { health } from "./health.js";
+import { scanEnrichmentTimeoutMs } from "./runtimeConfig.js";
 
 const apiKey = process.env.OPENAI_KEY;
 if (!apiKey) {
@@ -41,7 +42,7 @@ app.http("scan", {
   authLevel: "function",
   route: "v1/scan",
   handler: createScanHandler(recognition, enrichment, {
-    enrichmentTimeoutMs: Number.parseInt(process.env.SCAN_ENRICHMENT_TIMEOUT_MS || "4000", 10),
+    enrichmentTimeoutMs: scanEnrichmentTimeoutMs(),
     includeTimings: process.env.SCAN_INCLUDE_TIMINGS === "true",
     includeDebugDetails: process.env.SCAN_INCLUDE_DEBUG === "true"
   })

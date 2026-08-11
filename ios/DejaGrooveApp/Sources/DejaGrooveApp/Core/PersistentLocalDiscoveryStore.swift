@@ -86,7 +86,7 @@ public actor PersistentLocalDiscoveryStore: LocalDiscoveryStore {
     public func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry] {
         try documentStore.load().entries
             .filter { LocalDiscoveryRules.matchesSearch($0, search: search) }
-            .sorted { $0.createdAt > $1.createdAt }
+            .sorted { LocalDiscoveryRules.compareEntries($0, $1) }
     }
 
     public func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry {
@@ -129,6 +129,16 @@ public actor PersistentLocalDiscoveryStore: LocalDiscoveryStore {
 }
 
 public enum LocalDiscoveryRules {
+    public static func compareEntries(_ lhs: DiscoveryEntry, _ rhs: DiscoveryEntry) -> Bool {
+        let lhsAlbum = sortableAlbum(for: lhs)
+        let rhsAlbum = sortableAlbum(for: rhs)
+        return LocalCollectionRules.compareAlbumsByArtistFamilyName(
+            lhsAlbum,
+            rhsAlbum,
+            lhsTieBreaker: lhs.id.uuidString,
+            rhsTieBreaker: rhs.id.uuidString)
+    }
+
     public static func matchesSearch(_ entry: DiscoveryEntry, search: String?) -> Bool {
         guard let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return true
@@ -146,5 +156,29 @@ public enum LocalDiscoveryRules {
         return fields.compactMap { $0 }.contains {
             LocalCollectionRules.normalized($0).contains(query)
         }
+    }
+
+    private static func sortableAlbum(for entry: DiscoveryEntry) -> Album {
+        if let album = entry.album {
+            return album
+        }
+        if let track = entry.track {
+            return Album(
+                mbid: nil,
+                discogsReleaseId: nil,
+                title: track.title,
+                artist: track.artist,
+                year: nil,
+                format: nil,
+                coverImageUrl: track.artworkUrl,
+                thumbnailUrl: track.artworkUrl)
+        }
+        return Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: entry.createdAt,
+            artist: entry.source,
+            year: nil,
+            format: nil)
     }
 }

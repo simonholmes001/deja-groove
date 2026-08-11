@@ -69,7 +69,7 @@ public final class ScanViewModel: ObservableObject {
         do {
             _ = try await api.addToCollection(album: album, notes: nil, addAnyway: false)
             collectionMessage = "Added to My Crate."
-            state = .idle
+            state = .result(response.withStatus("owned"))
         } catch let error as ApiClientError {
             switch error {
             case .httpError(_, let apiError?):

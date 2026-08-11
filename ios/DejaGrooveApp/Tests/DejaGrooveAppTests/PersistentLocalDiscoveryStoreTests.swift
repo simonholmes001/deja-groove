@@ -31,6 +31,38 @@ final class PersistentLocalDiscoveryStoreTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
+    func testFetchDiscoveriesSortsByArtistFamilyNameThenTitle() async throws {
+        let store = PersistentLocalDiscoveryStore(
+            fileURL: temporaryDiscoveryURL(),
+            idProvider: DiscoveryFixedUUIDProvider(ids: [
+                UUID(uuidString: "00000000-0000-0000-0000-000000000711")!,
+                UUID(uuidString: "00000000-0000-0000-0000-000000000712")!,
+                UUID(uuidString: "00000000-0000-0000-0000-000000000713")!
+            ]),
+            clock: DiscoveryFixedISO8601Clock(instants: [
+                "2026-01-03T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "2026-01-01T00:00:00Z"
+            ]))
+
+        _ = try await store.addDiscovery(
+            source: "audio",
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Saxophone Colossus", artist: "Sonny Rollins", year: 1956, format: "LP"),
+            track: nil)
+        _ = try await store.addDiscovery(
+            source: "audio",
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: "LP"),
+            track: nil)
+        _ = try await store.addDiscovery(
+            source: "audio",
+            album: nil,
+            track: AudioDiscoveryTrack(title: "Goodbye Pork Pie Hat", artist: "Charles Mingus", matchedAt: "2026-01-01T00:00:00Z"))
+
+        let entries = try await store.fetchDiscoveries(search: nil)
+
+        XCTAssertEqual(["Blue Train", "Goodbye Pork Pie Hat", "Saxophone Colossus"], entries.map { $0.album?.title ?? $0.track?.title ?? "" })
+    }
+
     private func temporaryDiscoveryURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("dejagroove-discovery-\(UUID().uuidString)", isDirectory: true)

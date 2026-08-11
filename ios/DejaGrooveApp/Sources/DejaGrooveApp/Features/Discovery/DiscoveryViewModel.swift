@@ -34,6 +34,10 @@ public final class DiscoveryViewModel: ObservableObject {
         history.filter { LocalDiscoveryRules.matchesSearch($0, search: search) }
     }
 
+    public var shouldShowListeningActivity: Bool {
+        isLoading
+    }
+
     public func load() async {
         do {
             history = try await discoveryStore.fetchDiscoveries(search: nil)

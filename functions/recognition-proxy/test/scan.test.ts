@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createScanHandler, toScanResponse } from "../src/scan.js";
+import { createScanHandler, defaultEnrichmentTimeoutMs, toScanResponse } from "../src/scan.js";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
 import type { Album, RecognitionResult } from "../src/contracts.js";
 
@@ -62,6 +62,59 @@ test("toScanResponse returns candidates for ambiguous matches", () => {
   assert.equal(response.candidates.length, 1);
 });
 
+test("toScanResponse preserves enriched album metadata for the app contract", () => {
+  const response = toScanResponse({
+    status: "safe_to_buy",
+    confidence: 0.96,
+    album: {
+      mbid: "mbid-1",
+      discogs_release_id: "249504",
+      discogs_master_id: "38276",
+      discogs_url: "https://www.discogs.com/release/249504",
+      discogs_resource_url: "https://api.discogs.com/releases/249504",
+      title: "Cosmic Music",
+      artist: "John Coltrane & Alice Coltrane",
+      year: 1968,
+      first_release_year: 1968,
+      release_year: 1968,
+      first_release_date: "1968",
+      release_date: "1968",
+      format: "Vinyl, LP",
+      label: "Impulse!",
+      catalog_number: "AS-9148",
+      country: "US",
+      barcode: "0123456789",
+      cover_image_url: "https://example.com/front.jpg",
+      thumbnail_url: "https://example.com/thumb.jpg",
+      back_cover_image_url: "https://example.com/back.jpg",
+      back_cover_text: "Recorded in New York.",
+      release_notes: "Gatefold pressing.",
+      genres: ["Jazz"],
+      styles: ["Free Jazz"],
+      companies: ["ABC Records"],
+      tracklist: [{ position: "A1", title: "Manifestation", duration: "11:37" }],
+      identifiers: [{ type: "Matrix / Runout", value: "AS-9148-A", description: "Side A" }],
+      discogs_data_quality: "Correct",
+      listening_links: [{
+        provider: "Apple Music",
+        url: "https://music.apple.com/album/1",
+        catalog_id: "1",
+        preview_url: "https://example.com/preview.m4a"
+      }]
+    },
+    candidates: []
+  }, "00000000-0000-4000-8000-000000000003");
+
+  assert.equal(response.album?.label, "Impulse!");
+  assert.equal(response.album?.catalog_number, "AS-9148");
+  assert.equal(response.album?.country, "US");
+  assert.equal(response.album?.release_notes, "Gatefold pressing.");
+  assert.deepEqual(response.album?.genres, ["Jazz"]);
+  assert.equal(response.album?.tracklist?.[0]?.title, "Manifestation");
+  assert.equal(response.album?.identifiers?.[0]?.type, "Matrix / Runout");
+  assert.equal(response.album?.listening_links?.[0]?.provider, "Apple Music");
+});
+
 test("scan handler returns recognition-only result when enrichment times out", async () => {
   const warnings: unknown[] = [];
   const handler = createScanHandler(
@@ -114,6 +167,34 @@ test("scan handler returns enriched result within enrichment budget", async () =
 
   assert.equal(response.status, 200);
   assert.equal(response.jsonBody?.album?.label, "Impulse!");
+  assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
+});
+
+test("scan handler default enrichment budget allows richer Discogs metadata", async () => {
+  assert.equal(defaultEnrichmentTimeoutMs, 12000);
+
+  const handler = createScanHandler(
+    new StubRecognition(baseResult()),
+    {
+      enrich: async (album) => ({
+        ...album,
+        label: "Impulse!",
+        catalog_number: "AS-9148",
+        country: "US",
+        genres: ["Jazz"],
+        styles: ["Free Jazz"],
+        tracklist: [{ position: "A1", title: "Manifestation", duration: "11:37" }]
+      })
+    },
+    { includeTimings: true });
+
+  const response = await handler(fakeMultipartRequest(), fakeContext([]));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.jsonBody?.album?.label, "Impulse!");
+  assert.equal(response.jsonBody?.album?.catalog_number, "AS-9148");
+  assert.deepEqual(response.jsonBody?.album?.genres, ["Jazz"]);
+  assert.equal(response.jsonBody?.album?.tracklist?.[0]?.title, "Manifestation");
   assert.equal(response.jsonBody?.timings?.enrichment_timed_out, false);
 });
 
