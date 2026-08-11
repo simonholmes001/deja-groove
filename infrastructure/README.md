@@ -4,10 +4,10 @@ The legacy .NET backend, APIM, App Service container, PostgreSQL, Key Vault,
 and VNet infrastructure has been retired from the active repository.
 
 The active target is a minimum-cost Azure Function recognition proxy. Key Vault
-holds the project OpenAI API key and Discogs token, and the Function reads them
-via Key Vault references. The Function performs OpenAI album recognition and
-optional Discogs metadata enrichment. The iOS app owns collection state, scan
-state, duplicate detection, and local persistence.
+holds the project OpenAI API key and the optional Discogs token, and the Function
+reads configured secrets via Key Vault references. The Function performs OpenAI
+album recognition and optional Discogs metadata enrichment. The iOS app owns
+collection state, scan state, duplicate detection, and local persistence.
 
 ## Scope
 
@@ -18,7 +18,7 @@ state, duplicate detection, and local persistence.
 - Azure resource access: Function system-assigned managed identity
 - Observability: minimal Application Insights for Function request/error/timing diagnostics
 - Required pipeline secret: `OPENAI_KEY`
-- Required Key Vault secret for Discogs enrichment: `DISCOGS-TOKEN`
+- Optional pipeline secret for Discogs enrichment: `DISCOGS_TOKEN`
 - `POST /v1/scan` requires an Azure Functions key; `GET /health` is anonymous.
 - Out of scope: hosted collection API, PostgreSQL, APIM, App Service
   containers, container registry, Entra-backed API auth, and private network
@@ -54,16 +54,16 @@ For GitHub OIDC login:
 For Function App configuration:
 
 - `OPENAI_KEY` (pipeline secret, written into Key Vault during deployment)
-- `DISCOGS-TOKEN` (Key Vault secret, manually created in the vault; exposed to the Function as `DISCOGS_TOKEN`)
+- `DISCOGS_TOKEN` (optional pipeline secret; when present it is written into Key Vault as `DISCOGS-TOKEN` and exposed to the Function as `DISCOGS_TOKEN`)
 - `SCAN_ENRICHMENT_TIMEOUT_MS` defaults to `4000`.
-- `ENRICHMENT_CACHE_TTL_MS` defaults to `86400000` for a 24-hour warm-instance metadata/artwork cache.
+- `ENRICHMENT_CACHE_TTL_MS` defaults to `86400000` for a 24-hour warm-instance metadata/artwork cache. The cache is in-memory per Function instance; cold starts and parallel instances do not share cached entries.
 - `ENRICHMENT_CACHE_MAX_ENTRIES` defaults to `500`.
 - `enableApplicationInsights` is enabled for dev to capture request status,
   Function errors, scan timings, and recognition failure diagnostics.
 
 Managed identity and RBAC:
 
-- Function identity reads `openai-key` and `DISCOGS-TOKEN` from Key Vault via `Key Vault Secrets User`.
+- Function identity reads `openai-key` and, when configured, `DISCOGS-TOKEN` from Key Vault via `Key Vault Secrets User`.
 - Function identity accesses host/deployment storage via Storage Blob Data Owner, Storage Queue Data Contributor, and Storage Table Data Contributor.
 - Storage shared key access is disabled; Function storage uses identity-based settings.
 

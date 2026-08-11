@@ -267,7 +267,7 @@ Local app configuration is controlled through Xcode `.xcconfig` files:
 The Azure Function reads:
 
 - `OPENAI_KEY` from Key Vault as `openai-key`
-- `DISCOGS-TOKEN` from Key Vault as `DISCOGS_TOKEN`
+- optional `DISCOGS_TOKEN`, provisioned into Key Vault as `DISCOGS-TOKEN`
 - optional scan/enrichment timeout and cache settings
 
 Never commit API keys, Function keys, Apple signing secrets, Match passwords, or App Store Connect private keys.

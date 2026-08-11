@@ -148,6 +148,24 @@ test("scan handler logs recognition failures with request diagnostics", async ()
   assert.match(String(errors[0]), /Album recognition failed/);
   assert.match(String(errors[0]), /OpenAI request failed/);
   assert.match(String(errors[0]), /requestId/);
+  assert.doesNotMatch(String(errors[0]), /stack/);
+});
+
+test("scan handler includes stack traces only when debug diagnostics are enabled", async () => {
+  const errors: unknown[] = [];
+  const handler = createScanHandler(
+    {
+      recognize: async () => {
+        throw new Error("OpenAI request failed");
+      }
+    },
+    undefined,
+    { includeDebugDetails: true });
+
+  const response = await handler(fakeMultipartRequest(), fakeContext([], errors));
+
+  assert.equal(response.status, 502);
+  assert.match(String(errors[0]), /stack/);
 });
 
 class StubRecognition {

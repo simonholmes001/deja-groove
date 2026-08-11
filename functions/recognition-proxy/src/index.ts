@@ -42,6 +42,7 @@ app.http("scan", {
   route: "v1/scan",
   handler: createScanHandler(recognition, enrichment, {
     enrichmentTimeoutMs: Number.parseInt(process.env.SCAN_ENRICHMENT_TIMEOUT_MS || "4000", 10),
-    includeTimings: process.env.SCAN_INCLUDE_TIMINGS === "true"
+    includeTimings: process.env.SCAN_INCLUDE_TIMINGS === "true",
+    includeDebugDetails: process.env.SCAN_INCLUDE_DEBUG === "true"
   })
 });

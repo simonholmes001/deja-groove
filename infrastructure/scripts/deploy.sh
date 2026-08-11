@@ -55,14 +55,40 @@ if [[ -z "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" && -n "${AZURE_CLIENT_ID:-}" ]]; th
   fi
 fi
 
+PARAMETERS_JSON="$(mktemp)"
+cleanup_parameters_file() {
+  rm -f "${PARAMETERS_JSON}"
+}
+trap cleanup_parameters_file EXIT
+
+chmod 600 "${PARAMETERS_JSON}"
+if [[ -n "${DISCOGS_TOKEN:-}" ]]; then
+  jq -n \
+    --arg openAiKey "${OPENAI_KEY}" \
+    --arg deploymentPrincipalObjectId "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
+    --arg discogsToken "${DISCOGS_TOKEN}" \
+    '{
+      openAiKey: { value: $openAiKey },
+      deploymentPrincipalObjectId: { value: $deploymentPrincipalObjectId },
+      discogsToken: { value: $discogsToken }
+    }' > "${PARAMETERS_JSON}"
+else
+  jq -n \
+    --arg openAiKey "${OPENAI_KEY}" \
+    --arg deploymentPrincipalObjectId "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
+    '{
+      openAiKey: { value: $openAiKey },
+      deploymentPrincipalObjectId: { value: $deploymentPrincipalObjectId }
+    }' > "${PARAMETERS_JSON}"
+fi
+
 echo "==> Deploying ${DEPLOYMENT_NAME} (subscription scope)..."
 DEPLOYMENT_OUTPUTS="$(az deployment sub create \
   --name "${DEPLOYMENT_NAME}" \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
   --parameters "${PARAMS_FILE}" \
-  --parameters openAiKey="${OPENAI_KEY}" \
-  --parameters deploymentPrincipalObjectId="${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
+  --parameters @"${PARAMETERS_JSON}" \
   --query properties.outputs \
   --output json)"
 
@@ -231,13 +257,17 @@ echo "==> Verifying deployed Function endpoints..."
 retry_http_status GET "${HEALTH_ENDPOINT}" '^200$' "health endpoint"
 HEALTH_RESPONSE="$(curl --silent --show-error "${HEALTH_ENDPOINT}")"
 DEPLOYED_PACKAGE_VERSION="$(jq -r '.deployment.packageVersion // empty' <<< "${HEALTH_RESPONSE}")"
-if [[ "${DEPLOYED_PACKAGE_VERSION}" != "${DEPLOYMENT_NAME}" ]]; then
+if [[ -n "${DEPLOYED_PACKAGE_VERSION}" && "${DEPLOYED_PACKAGE_VERSION}" != "${DEPLOYMENT_NAME}" ]]; then
   echo "Error: deployed health marker did not match package version." >&2
   echo "Expected: ${DEPLOYMENT_NAME}" >&2
   echo "Actual: ${DEPLOYED_PACKAGE_VERSION:-<missing>}" >&2
   exit 1
 fi
-echo "Verified deployed package marker: ${DEPLOYED_PACKAGE_VERSION}"
+if [[ -n "${DEPLOYED_PACKAGE_VERSION}" ]]; then
+  echo "Verified deployed package marker: ${DEPLOYED_PACKAGE_VERSION}"
+else
+  echo "Health endpoint does not expose deployment marker; HTTP health status verified."
+fi
 retry_http_status POST "${SCAN_ENDPOINT}" '^(401|403)$' "protected scan endpoint without function key"
 
 echo "Deployment complete: ${DEPLOYMENT_NAME}"

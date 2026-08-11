@@ -63,6 +63,16 @@ echo "==> Building minimal Function Bicep..."
 az bicep build --file "${MINIMAL_TEMPLATE}" --outfile /dev/null
 az bicep build --file "${ONE_DEPLOY_TEMPLATE}" --outfile /dev/null
 
+PARAMETERS_JSON="$(mktemp)"
+cleanup_parameters_file() {
+  rm -f "${PARAMETERS_JSON}"
+}
+trap cleanup_parameters_file EXIT
+chmod 600 "${PARAMETERS_JSON}"
+jq -n \
+  --arg openAiKey "${VALIDATION_OPENAI_KEY}" \
+  '{ openAiKey: { value: $openAiKey } }' > "${PARAMETERS_JSON}"
+
 if [[ "${MODE}" == "--lint-only" ]]; then
   echo "Lint/build complete for environment: ${ENVIRONMENT}"
   exit 0
@@ -73,7 +83,7 @@ az deployment sub validate \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
   --parameters "${PARAMS_FILE}" \
-  --parameters openAiKey="${VALIDATION_OPENAI_KEY}" \
+  --parameters @"${PARAMETERS_JSON}" \
   --output none
 
 if [[ "${MODE}" == "--what-if" ]]; then
@@ -83,7 +93,7 @@ if [[ "${MODE}" == "--what-if" ]]; then
     --location "${DEPLOY_LOCATION}" \
     --template-file "${MINIMAL_TEMPLATE}" \
     --parameters "${PARAMS_FILE}" \
-    --parameters openAiKey="${VALIDATION_OPENAI_KEY}" \
+    --parameters @"${PARAMETERS_JSON}" \
     --result-format ResourceIdOnly \
     --no-pretty-print \
     --output none

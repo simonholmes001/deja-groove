@@ -108,8 +108,7 @@ testing should target `local_proxy` mode once the Function endpoint exists.
 Use this path for direct testing from Xcode on a physical iPhone. No Azure CLI
 commands are required.
 
-1. In the Azure Portal, open the Function App
-   `func-deja-recognition-dev-yzoqh3gf`.
+1. In the Azure Portal, open the deployed dev recognition Function App.
 2. Open **App keys** and copy the `default` function key.
 3. In the repository, copy
    `ios/DejaGroove/Config/Debug.local.example.xcconfig` to

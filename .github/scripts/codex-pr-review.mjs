@@ -3,10 +3,10 @@
 import fs from 'fs';
 import process from 'process';
 import {
-  buildFallbackReviewBody,
   buildSystemPrompt,
   buildUserPrompt,
   extractReviewBodyFromOpenAiPayload,
+  isStructurallyValidReviewBody,
   isChangesetReleasePr,
   isDependabotPr,
   loadSkillRubrics,
@@ -137,9 +137,12 @@ if (!openAiResponse.ok) {
 const openAiPayload = await openAiResponse.json();
 const extractedReviewBody = extractReviewBodyFromOpenAiPayload(openAiPayload);
 if (!extractedReviewBody) {
-  console.warn('OpenAI response did not include a parseable review body. Posting fallback review.');
+  throw new Error('OpenAI response did not include a parseable review body.');
 }
-const reviewBody = extractedReviewBody || buildFallbackReviewBody(openAiPayload);
+if (!isStructurallyValidReviewBody(extractedReviewBody)) {
+  throw new Error('OpenAI review body did not match the required review output contract.');
+}
+const reviewBody = extractedReviewBody;
 
 const taggedBody = `${codexReviewMarker}\n${reviewBody}`;
 
