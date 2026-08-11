@@ -220,7 +220,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     public let requestId: UUID
 
     public init(status: String, confidence: Float, album: Album?, candidates: [Album], timings: ScanTimings? = nil, requestId: UUID) {
-        self.status = Self.normalizeStatus(status)
+        self.status = status
         self.confidence = confidence
         self.album = album
         self.candidates = candidates
@@ -253,8 +253,15 @@ public struct ScanResponse: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let status = try container.decode(String.self, forKey: .status)
+        guard Self.canonicalStatuses.contains(status) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .status,
+                in: container,
+                debugDescription: "Scan status must be one of \(Self.canonicalStatuses.sorted().joined(separator: ", ")).")
+        }
         self.init(
-            status: try container.decode(String.self, forKey: .status),
+            status: status,
             confidence: try container.decode(Float.self, forKey: .confidence),
             album: try container.decodeIfPresent(Album.self, forKey: .album),
             candidates: try container.decode([Album].self, forKey: .candidates),
@@ -263,27 +270,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         )
     }
 
-    private static func normalizeStatus(_ status: String) -> String {
-        let collapsed = status
-            .unicodeScalars
-            .filter(CharacterSet.alphanumerics.contains)
-            .map(String.init)
-            .joined()
-            .lowercased()
-
-        switch collapsed {
-        case "owned":
-            return "owned"
-        case "safetobuy":
-            return "safe_to_buy"
-        case "ambiguous":
-            return "ambiguous"
-        case "nomatch":
-            return "no_match"
-        default:
-            return status.lowercased()
-        }
-    }
+    private static let canonicalStatuses: Set<String> = ["safe_to_buy", "ambiguous", "no_match", "owned"]
 }
 
 public struct ScanTimings: Codable, Equatable, Sendable {

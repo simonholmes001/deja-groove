@@ -99,9 +99,8 @@ The target runtime is:
 - A minimal Azure Function holds `OPENAI_KEY`.
 - The Function performs only OpenAI album recognition and returns normalized candidates.
 
-Until the minimal Function is implemented, keep the app in `hosted` mode only
-for comparison against existing deployed environments. New iPhone-first
-testing should target `local_proxy` mode once the Function endpoint exists.
+The iOS app now supports `local_proxy` as its active runtime mode. Hosted auth
+and API runtime wiring are no longer part of the user-facing app path.
 
 ## Local Xcode User Testing
 

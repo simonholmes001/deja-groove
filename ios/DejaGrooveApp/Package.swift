@@ -7,15 +7,9 @@ let package = Package(
     products: [
         .library(name: "DejaGrooveApp", targets: ["DejaGrooveApp"])
     ],
-    dependencies: [
-        .package(path: "../DejaGrooveAuth")
-    ],
     targets: [
         .target(
-            name: "DejaGrooveApp",
-            dependencies: [
-                .product(name: "DejaGrooveAuth", package: "DejaGrooveAuth")
-            ]
+            name: "DejaGrooveApp"
         ),
         .testTarget(
             name: "DejaGrooveAppTests",

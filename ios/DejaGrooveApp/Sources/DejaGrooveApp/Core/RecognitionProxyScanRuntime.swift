@@ -39,14 +39,13 @@ public final class RecognitionProxyScanRuntime: LocalScanRuntime, @unchecked Sen
         return try await send(request)
     }
 
-    public func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
-        throw ApiClientError.httpError(
-            501,
-            ApiError(
-                code: "local_resolution_not_configured",
-                message: "Local scan resolution is not configured yet.",
-                retryable: false,
-                requestId: requestId))
+    public func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse {
+        ScanResponse(
+            status: "safe_to_buy",
+            confidence: 1,
+            album: selectedAlbum,
+            candidates: [],
+            requestId: requestId)
     }
 
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {

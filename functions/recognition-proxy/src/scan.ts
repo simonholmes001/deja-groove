@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import type { ApiError, RecognitionResult, ScanResponse, ScanTimings } from "./contracts.js";
 import { readScanImage, RequestError } from "./http.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
 import { RecognitionOutputError } from "./openaiRecognition.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
+import { elapsedSince, runScanPipeline } from "./scanPipeline.js";
+import { errorResponse, noStoreHeaders, toScanResponse } from "./scanResponse.js";
+
+export { toScanResponse } from "./scanResponse.js";
 
 type ScanHandlerOptions = {
   enrichmentTimeoutMs?: number;
@@ -31,34 +34,18 @@ export function createScanHandler(
       const imageReadStartedAt = performance.now();
       const image = await readScanImage(request);
       const imageReadMs = elapsedSince(imageReadStartedAt);
-
-      const recognitionStartedAt = performance.now();
-      const result = await recognition.recognize(image);
-      const recognitionMs = elapsedSince(recognitionStartedAt);
-
-      const enrichmentStartedAt = performance.now();
-      const enrichmentResult = enrichment
-        ? await enrichRecognitionResult(result, enrichment, context, enrichmentTimeoutMs)
-        : { result, timedOut: false };
-      const enrichmentMs = elapsedSince(enrichmentStartedAt);
-      const timings: ScanTimings = {
-        total_ms: elapsedSince(scanStartedAt),
-        image_read_ms: imageReadMs,
-        recognition_ms: recognitionMs,
-        enrichment_ms: enrichmentMs,
-        image_bytes: image.data.length,
-        enrichment_timed_out: enrichmentResult.timedOut
-      };
+      const pipeline = await runScanPipeline(image, recognition, enrichment, context, enrichmentTimeoutMs, scanStartedAt);
+      const timings = { ...pipeline.timings, image_read_ms: imageReadMs };
 
       context.log("Album scan completed.", {
         requestId,
-        status: enrichmentResult.result.status,
+        status: pipeline.result.status,
         timings
       });
 
       return {
         status: 200,
-        jsonBody: toScanResponse(enrichmentResult.result, requestId, includeTimings ? timings : undefined),
+        jsonBody: toScanResponse(pipeline.result, requestId, includeTimings ? timings : undefined),
         headers: noStoreHeaders()
       };
     } catch (error) {
@@ -79,10 +66,6 @@ export function createScanHandler(
 
 function validTimeoutMs(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function elapsedSince(startedAt: number): number {
-  return Math.round(performance.now() - startedAt);
 }
 
 function errorDetails(error: unknown, requestId: string, includeDebugDetails: boolean): Record<string, unknown> {
@@ -107,99 +90,5 @@ function errorDetails(error: unknown, requestId: string, includeDebugDetails: bo
   return {
     requestId,
     message: String(error)
-  };
-}
-
-async function enrichRecognitionResult(
-  result: RecognitionResult,
-  enrichment: AlbumEnrichmentPort,
-  context: InvocationContext,
-  timeoutMs: number
-): Promise<{ result: RecognitionResult; timedOut: boolean }> {
-  try {
-    const enriched = await withTimeout(
-      async (signal): Promise<RecognitionResult> => ({
-        ...result,
-        album: result.album ? await enrichment.enrich(result.album, { signal, logger: context }) : result.album,
-        candidates: result.candidates
-          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate, { signal, logger: context })))
-          : result.candidates
-      }),
-      timeoutMs);
-    return { result: enriched, timedOut: false };
-  } catch (error) {
-    if (error instanceof EnrichmentTimeoutError) {
-      context.warn(`Album metadata enrichment exceeded ${timeoutMs}ms; returning recognition-only result.`);
-      return { result, timedOut: true };
-    }
-    context.warn("Album metadata enrichment failed; returning recognition-only result.", error);
-    return { result, timedOut: false };
-  }
-}
-
-async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
-  const controller = new AbortController();
-  if (timeoutMs <= 0) return await operation(controller.signal);
-
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation(controller.signal),
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => {
-          controller.abort();
-          reject(new EnrichmentTimeoutError());
-        }, timeoutMs);
-      })
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-class EnrichmentTimeoutError extends Error {}
-
-export function toScanResponse(result: RecognitionResult, requestId: string, timings?: ScanTimings): ScanResponse {
-  return {
-    status: result.status,
-    confidence: clampConfidence(result.confidence),
-    album: result.status === "safe_to_buy" ? result.album ?? null : null,
-    candidates: result.status === "ambiguous" ? result.candidates ?? [] : [],
-    timings,
-    request_id: requestId
-  };
-}
-
-function clampConfidence(confidence: number): number {
-  if (Number.isNaN(confidence)) return 0;
-  return Math.max(0, Math.min(1, confidence));
-}
-
-function errorResponse(
-  status: number,
-  code: string,
-  message: string,
-  retryable: boolean,
-  requestId: string
-): HttpResponseInit {
-  const body: ApiError = {
-    error: {
-      code,
-      message,
-      retryable,
-      request_id: requestId
-    }
-  };
-
-  return {
-    status,
-    jsonBody: body,
-    headers: noStoreHeaders()
-  };
-}
-
-function noStoreHeaders(): Record<string, string> {
-  return {
-    "Cache-Control": "no-store"
   };
 }

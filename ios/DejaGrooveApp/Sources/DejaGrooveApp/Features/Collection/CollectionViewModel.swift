@@ -6,21 +6,15 @@ public final class CollectionViewModel: ObservableObject {
     @Published public private(set) var crateCollections: [CrateCollection] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var errorMessage: String?
-    @Published public private(set) var requiresAuthentication = false
     @Published public var search: String = ""
     @Published public var selectedArtist: String = ""
     @Published public var selectedFormat: String = ""
     @Published public var selectedCollectionId: UUID?
 
     private let api: ApiClient
-    private let onAuthenticationRequired: @Sendable () async -> Void
 
-    public init(
-        api: ApiClient,
-        onAuthenticationRequired: @escaping @Sendable () async -> Void = {}
-    ) {
+    public init(api: ApiClient) {
         self.api = api
-        self.onAuthenticationRequired = onAuthenticationRequired
     }
 
     public var visibleRecords: [CollectionRecord] {
@@ -30,9 +24,7 @@ public final class CollectionViewModel: ObservableObject {
                 && matchesFormat(record)
                 && matchesCollection(record)
         }
-        .sorted {
-            Self.compareByArtistFamilyName($0, $1)
-        }
+        .sorted { LocalCollectionRules.compareByArtistFamilyName($0, $1) }
     }
 
     public var availableArtists: [String] {
@@ -50,7 +42,7 @@ public final class CollectionViewModel: ObservableObject {
     public func records(in collection: CrateCollection) -> [CollectionRecord] {
         records
             .filter { collection.recordIds.contains($0.id) }
-            .sorted { Self.compareByArtistFamilyName($0, $1) }
+            .sorted { LocalCollectionRules.compareByArtistFamilyName($0, $1) }
     }
 
     public func record(id: UUID) -> CollectionRecord? {
@@ -64,21 +56,12 @@ public final class CollectionViewModel: ObservableObject {
     public func load() async {
         isLoading = true
         errorMessage = nil
-        requiresAuthentication = false
         do {
             let response = try await api.fetchCollection(search: search.isEmpty ? nil : search)
             records = response.items
             crateCollections = try await api.fetchCrateCollections(search: nil)
         } catch let error as ApiClientError {
-            if Self.isAuthenticationError(error) {
-                records = []
-                crateCollections = []
-                requiresAuthentication = true
-                errorMessage = "Sign in to view My Crate."
-                await onAuthenticationRequired()
-            } else {
-                errorMessage = Self.message(for: error)
-            }
+            errorMessage = Self.message(for: error)
         } catch {
             errorMessage = "Unexpected error."
         }
@@ -183,34 +166,8 @@ public final class CollectionViewModel: ObservableObject {
         }
     }
 
-    private static func isAuthenticationError(_ error: ApiClientError) -> Bool {
-        switch error {
-        case .httpError(let status, _):
-            return status == 401 || status == 403
-        default:
-            return false
-        }
-    }
-
     private func matchesSearch(_ record: CollectionRecord) -> Bool {
-        let cleanSearch = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanSearch.isEmpty else { return true }
-        let query = Self.normalized(cleanSearch)
-        let searchable = [
-            record.album.artist,
-            record.album.title,
-            record.album.format,
-            record.album.label,
-            record.album.catalogNumber,
-            record.album.country,
-            record.album.backCoverText,
-            record.album.releaseNotes,
-            record.notes,
-            record.album.year.map(String.init),
-            record.album.firstReleaseYear.map(String.init),
-            record.album.releaseYear.map(String.init)
-        ].compactMap { $0 }
-        return searchable.contains { Self.normalized($0).contains(query) }
+        LocalCollectionRules.matchesSearch(record, search: search)
     }
 
     private func matchesArtist(_ record: CollectionRecord) -> Bool {
@@ -231,52 +188,6 @@ public final class CollectionViewModel: ObservableObject {
 
     private func uniqueSorted(_ values: [String]) -> [String] {
         Array(Set(values.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
-            .sorted { Self.normalized($0) < Self.normalized($1) }
-    }
-
-    private static func compareByArtistFamilyName(_ lhs: CollectionRecord, _ rhs: CollectionRecord) -> Bool {
-        let lhsArtist = artistSortKey(lhs.album.artist)
-        let rhsArtist = artistSortKey(rhs.album.artist)
-        if lhsArtist != rhsArtist {
-            return lhsArtist < rhsArtist
-        }
-        let lhsTitle = titleSortKey(lhs.album.title)
-        let rhsTitle = titleSortKey(rhs.album.title)
-        if lhsTitle != rhsTitle {
-            return lhsTitle < rhsTitle
-        }
-        return lhs.id.uuidString < rhs.id.uuidString
-    }
-
-    private static func artistSortKey(_ artist: String) -> String {
-        let cleanArtist = normalized(artist)
-        if cleanArtist.contains(",")
-            || cleanArtist.contains("&")
-            || cleanArtist.hasPrefix("the ")
-            || cleanArtist.hasSuffix(" band")
-            || cleanArtist.hasSuffix(" quartet")
-            || cleanArtist.hasSuffix(" quintet")
-            || cleanArtist.hasSuffix(" trio") {
-            return cleanArtist
-        }
-        let parts = cleanArtist.split(separator: " ").map(String.init)
-        guard parts.count >= 2 else { return cleanArtist }
-        return "\(parts.last!) \(parts.dropLast().joined(separator: " "))"
-    }
-
-    private static func titleSortKey(_ title: String) -> String {
-        let cleanTitle = normalized(title)
-        for article in ["the ", "a ", "an "] where cleanTitle.hasPrefix(article) {
-            return String(cleanTitle.dropFirst(article.count))
-        }
-        return cleanTitle
-    }
-
-    private static func normalized(_ value: String) -> String {
-        value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .lowercased()
+            .sorted { LocalCollectionRules.normalized($0) < LocalCollectionRules.normalized($1) }
     }
 }
