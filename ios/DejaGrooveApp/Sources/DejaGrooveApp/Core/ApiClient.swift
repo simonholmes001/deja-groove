@@ -177,7 +177,7 @@ public final class LiveApiClient: ApiClient, @unchecked Sendable {
             501,
             ApiError(
                 code: "local_collection_management_only",
-                message: "Collection management is available in local runtime mode.",
+                message: "Collection management is only implemented by the local runtime client.",
                 retryable: false,
                 requestId: UUID()))
     }

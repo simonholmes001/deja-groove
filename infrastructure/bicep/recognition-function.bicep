@@ -10,6 +10,10 @@ param appBaseName string
 @description('OpenAI API key. This is stored in Key Vault and referenced by the Function App.')
 param openAiKey string
 
+@secure()
+@description('Optional Discogs API token. When supplied, this is stored in Key Vault and referenced by the Function App.')
+param discogsToken string = ''
+
 @description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
 param deploymentPrincipalObjectId string = ''
 
@@ -87,7 +91,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enabledForTemplateDeployment: false
     enableSoftDelete: true
-    softDeleteRetentionInDays: 7
+    softDeleteRetentionInDays: 30
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -97,6 +101,14 @@ resource openAiSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'openai-key'
   properties: {
     value: openAiKey
+  }
+}
+
+resource discogsSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(discogsToken)) {
+  parent: keyVault
+  name: 'DISCOGS-TOKEN'
+  properties: {
+    value: discogsToken
   }
 }
 
@@ -158,7 +170,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       }
     }
     siteConfig: {
-      appSettings: union([
+      appSettings: union(union([
         {
           name: 'AzureWebJobsStorage__accountName'
           value: storageAccount.name
@@ -195,11 +207,12 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           name: 'ENRICHMENT_CACHE_MAX_ENTRIES'
           value: '500'
         }
+      ], !empty(discogsToken) ? [
         {
           name: 'DISCOGS_TOKEN'
-          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=DISCOGS-TOKEN)'
+          value: '@Microsoft.KeyVault(SecretUri=${discogsSecret!.properties.secretUriWithVersion})'
         }
-      ], enableApplicationInsights ? [
+      ] : []), enableApplicationInsights ? [
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights!.properties.ConnectionString

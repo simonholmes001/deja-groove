@@ -19,6 +19,10 @@ param appBaseName string = 'deja-recognition-${environment}'
 @description('OpenAI API key. This is stored as a Function App setting.')
 param openAiKey string
 
+@secure()
+@description('Optional Discogs API token. When supplied, it is stored in Key Vault and exposed to the Function as DISCOGS_TOKEN.')
+param discogsToken string = ''
+
 @description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
 param deploymentPrincipalObjectId string = ''
 
@@ -55,6 +59,7 @@ module recognitionProxy 'recognition-function.bicep' = {
     location: location
     appBaseName: appBaseName
     openAiKey: openAiKey
+    discogsToken: discogsToken
     deploymentPrincipalObjectId: deploymentPrincipalObjectId
     openAiModel: openAiModel
     scanEnrichmentTimeoutMs: scanEnrichmentTimeoutMs

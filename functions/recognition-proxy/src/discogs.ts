@@ -6,6 +6,9 @@ export interface AlbumEnrichmentPort {
 
 export type AlbumEnrichmentOptions = {
   signal?: AbortSignal;
+  logger?: {
+    warn: (...args: unknown[]) => void;
+  };
 };
 
 type DiscogsConfig = {

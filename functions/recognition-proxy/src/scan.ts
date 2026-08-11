@@ -10,6 +10,7 @@ import type { RecognitionPort } from "./openaiRecognition.js";
 type ScanHandlerOptions = {
   enrichmentTimeoutMs?: number;
   includeTimings?: boolean;
+  includeDebugDetails?: boolean;
 };
 
 const defaultEnrichmentTimeoutMs = 4000;
@@ -21,6 +22,7 @@ export function createScanHandler(
 ) {
   const enrichmentTimeoutMs = validTimeoutMs(options.enrichmentTimeoutMs, defaultEnrichmentTimeoutMs);
   const includeTimings = options.includeTimings === true;
+  const includeDebugDetails = options.includeDebugDetails === true;
   return async function scan(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     const requestId = randomUUID();
     const scanStartedAt = performance.now();
@@ -64,7 +66,7 @@ export function createScanHandler(
         return errorResponse(error.status, error.code, error.message, error.retryable, requestId);
       }
 
-      context.error("Album recognition failed.", errorDetails(error, requestId));
+      context.error("Album recognition failed.", errorDetails(error, requestId, includeDebugDetails));
       return errorResponse(
         502,
         "recognition_failed",
@@ -83,7 +85,7 @@ function elapsedSince(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
 }
 
-function errorDetails(error: unknown, requestId: string): Record<string, unknown> {
+function errorDetails(error: unknown, requestId: string, includeDebugDetails: boolean): Record<string, unknown> {
   if (error instanceof RecognitionOutputError) {
     return {
       requestId,
@@ -98,7 +100,7 @@ function errorDetails(error: unknown, requestId: string): Record<string, unknown
       requestId,
       name: error.name,
       message: error.message,
-      stack: error.stack
+      ...(includeDebugDetails ? { stack: error.stack } : {})
     };
   }
 
@@ -118,9 +120,9 @@ async function enrichRecognitionResult(
     const enriched = await withTimeout(
       async (signal): Promise<RecognitionResult> => ({
         ...result,
-        album: result.album ? await enrichment.enrich(result.album, { signal }) : result.album,
+        album: result.album ? await enrichment.enrich(result.album, { signal, logger: context }) : result.album,
         candidates: result.candidates
-          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate, { signal })))
+          ? await Promise.all(result.candidates.map((candidate) => enrichment.enrich(candidate, { signal, logger: context })))
           : result.candidates
       }),
       timeoutMs);

@@ -9,7 +9,7 @@ MINIMAL_TEMPLATE="${BICEP_DIR}/minimal-function.bicep"
 ONE_DEPLOY_TEMPLATE="${BICEP_DIR}/function-onedeploy.bicep"
 PARAMS_FILE="${BICEP_DIR}/parameters/${ENVIRONMENT}.bicepparam"
 DEPLOY_LOCATION="${AZURE_LOCATION:-swedencentral}"
-VALIDATION_OPENAI_KEY="${OPENAI_KEY:-validation-placeholder}"
+EFFECTIVE_PARAMS_FILE=""
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev> [--lint-only|--what-if]" >&2
@@ -63,6 +63,34 @@ echo "==> Building minimal Function Bicep..."
 az bicep build --file "${MINIMAL_TEMPLATE}" --outfile /dev/null
 az bicep build --file "${ONE_DEPLOY_TEMPLATE}" --outfile /dev/null
 
+create_effective_params_file() {
+  EFFECTIVE_PARAMS_FILE="$(mktemp "${BICEP_DIR}/parameters/.${ENVIRONMENT}.XXXXXX.bicepparam")"
+  chmod 600 "${EFFECTIVE_PARAMS_FILE}"
+
+  cat > "${EFFECTIVE_PARAMS_FILE}" <<'PARAMS'
+using '../minimal-function.bicep'
+
+param environment = 'dev'
+param location = 'swedencentral'
+param resourceGroupName = 'rg-deja-groove-dev-recognition'
+param appBaseName = 'deja-recognition-dev'
+param openAiModel = 'gpt-5-mini'
+param scanIncludeTimings = true
+param enableApplicationInsights = true
+param openAiKey = readEnvironmentVariable('OPENAI_KEY', 'validation-placeholder')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
+PARAMS
+}
+
+cleanup_effective_params_file() {
+  if [[ -n "${EFFECTIVE_PARAMS_FILE}" ]]; then
+    rm -f "${EFFECTIVE_PARAMS_FILE}"
+  fi
+}
+trap cleanup_effective_params_file EXIT
+create_effective_params_file
+
 if [[ "${MODE}" == "--lint-only" ]]; then
   echo "Lint/build complete for environment: ${ENVIRONMENT}"
   exit 0
@@ -72,8 +100,7 @@ echo "==> Subscription-scope validate..."
 az deployment sub validate \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
-  --parameters "${PARAMS_FILE}" \
-  --parameters openAiKey="${VALIDATION_OPENAI_KEY}" \
+  --parameters "${EFFECTIVE_PARAMS_FILE}" \
   --output none
 
 if [[ "${MODE}" == "--what-if" ]]; then
@@ -82,8 +109,7 @@ if [[ "${MODE}" == "--what-if" ]]; then
     --name "deja-minimal-function-${ENVIRONMENT}-whatif-$(date -u +%Y%m%dT%H%M%SZ)" \
     --location "${DEPLOY_LOCATION}" \
     --template-file "${MINIMAL_TEMPLATE}" \
-    --parameters "${PARAMS_FILE}" \
-    --parameters openAiKey="${VALIDATION_OPENAI_KEY}" \
+    --parameters "${EFFECTIVE_PARAMS_FILE}" \
     --result-format ResourceIdOnly \
     --no-pretty-print \
     --output none

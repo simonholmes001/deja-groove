@@ -20,14 +20,15 @@ async function loadDeploymentMarker(): Promise<DeploymentMarker> {
 }
 
 export async function health(): Promise<HttpResponseInit> {
-  const deployment = await loadDeploymentMarker();
+  const includeDeployment = process.env.HEALTH_INCLUDE_DEPLOYMENT === "true";
+  const deployment = includeDeployment ? await loadDeploymentMarker() : undefined;
 
   return {
     status: 200,
     jsonBody: {
       status: "Healthy",
       runtime: "recognition-proxy",
-      deployment
+      ...(deployment ? { deployment } : {})
     },
     headers: {
       "Cache-Control": "no-store"

@@ -13,6 +13,7 @@ TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEPLOYMENT_NAME="deja-minimal-function-${ENVIRONMENT:-unknown}-${TIMESTAMP}"
 PACKAGE_BLOB_NAME="released-package.zip"
 DEPLOYMENT_PRINCIPAL_OBJECT_ID="${AZURE_CLIENT_OBJECT_ID:-}"
+EFFECTIVE_PARAMS_FILE=""
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev>" >&2
@@ -55,14 +56,42 @@ if [[ -z "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" && -n "${AZURE_CLIENT_ID:-}" ]]; th
   fi
 fi
 
+export DEPLOYMENT_PRINCIPAL_OBJECT_ID
+
+create_effective_params_file() {
+  EFFECTIVE_PARAMS_FILE="$(mktemp "${BICEP_DIR}/parameters/.${ENVIRONMENT}.XXXXXX.bicepparam")"
+  chmod 600 "${EFFECTIVE_PARAMS_FILE}"
+
+  cat > "${EFFECTIVE_PARAMS_FILE}" <<'PARAMS'
+using '../minimal-function.bicep'
+
+param environment = 'dev'
+param location = 'swedencentral'
+param resourceGroupName = 'rg-deja-groove-dev-recognition'
+param appBaseName = 'deja-recognition-dev'
+param openAiModel = 'gpt-5-mini'
+param scanIncludeTimings = true
+param enableApplicationInsights = true
+param openAiKey = readEnvironmentVariable('OPENAI_KEY')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
+PARAMS
+}
+
+cleanup_effective_params_file() {
+  if [[ -n "${EFFECTIVE_PARAMS_FILE}" ]]; then
+    rm -f "${EFFECTIVE_PARAMS_FILE}"
+  fi
+}
+trap cleanup_effective_params_file EXIT
+create_effective_params_file
+
 echo "==> Deploying ${DEPLOYMENT_NAME} (subscription scope)..."
 DEPLOYMENT_OUTPUTS="$(az deployment sub create \
   --name "${DEPLOYMENT_NAME}" \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
-  --parameters "${PARAMS_FILE}" \
-  --parameters openAiKey="${OPENAI_KEY}" \
-  --parameters deploymentPrincipalObjectId="${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
+  --parameters "${EFFECTIVE_PARAMS_FILE}" \
   --query properties.outputs \
   --output json)"
 
@@ -231,13 +260,17 @@ echo "==> Verifying deployed Function endpoints..."
 retry_http_status GET "${HEALTH_ENDPOINT}" '^200$' "health endpoint"
 HEALTH_RESPONSE="$(curl --silent --show-error "${HEALTH_ENDPOINT}")"
 DEPLOYED_PACKAGE_VERSION="$(jq -r '.deployment.packageVersion // empty' <<< "${HEALTH_RESPONSE}")"
-if [[ "${DEPLOYED_PACKAGE_VERSION}" != "${DEPLOYMENT_NAME}" ]]; then
+if [[ -n "${DEPLOYED_PACKAGE_VERSION}" && "${DEPLOYED_PACKAGE_VERSION}" != "${DEPLOYMENT_NAME}" ]]; then
   echo "Error: deployed health marker did not match package version." >&2
   echo "Expected: ${DEPLOYMENT_NAME}" >&2
   echo "Actual: ${DEPLOYED_PACKAGE_VERSION:-<missing>}" >&2
   exit 1
 fi
-echo "Verified deployed package marker: ${DEPLOYED_PACKAGE_VERSION}"
+if [[ -n "${DEPLOYED_PACKAGE_VERSION}" ]]; then
+  echo "Verified deployed package marker: ${DEPLOYED_PACKAGE_VERSION}"
+else
+  echo "Health endpoint does not expose deployment marker; HTTP health status verified."
+fi
 retry_http_status POST "${SCAN_ENDPOINT}" '^(401|403)$' "protected scan endpoint without function key"
 
 echo "Deployment complete: ${DEPLOYMENT_NAME}"

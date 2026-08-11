@@ -67,7 +67,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     try {
       return await this.applyCoverArtArchive(album, options);
     } catch (error) {
-      logFallbackFailure("Cover Art Archive", error);
+      logFallbackFailure("Cover Art Archive", error, options);
       return album;
     }
   }
@@ -76,7 +76,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     try {
       return await this.applyITunes(album, options);
     } catch (error) {
-      logFallbackFailure("iTunes Search", error);
+      logFallbackFailure("iTunes Search", error, options);
       return album;
     }
   }
@@ -108,7 +108,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
     });
     if (response.status === 404) return null;
     if (!response.ok) {
-      console.warn(`Artwork fallback provider Cover Art Archive returned HTTP ${response.status}.`);
+      logFallbackNonOkResponse("Cover Art Archive", response.status, options);
       return null;
     }
 
@@ -152,7 +152,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
       headers: { "Accept": "application/json" }
     });
     if (!response.ok) {
-      console.warn(`Artwork fallback provider iTunes Search returned HTTP ${response.status}.`);
+      logFallbackNonOkResponse("iTunes Search", response.status, options);
       return null;
     }
 
@@ -229,7 +229,11 @@ function clean(value: string | undefined | null): string | null {
   return trimmed ? trimmed : null;
 }
 
-function logFallbackFailure(provider: string, error: unknown): void {
+function logFallbackFailure(provider: string, error: unknown, options: AlbumEnrichmentOptions): void {
   const message = error instanceof Error ? error.message : String(error);
-  console.warn(`Artwork fallback provider ${provider} failed: ${message}`);
+  options.logger?.warn(`Artwork fallback provider ${provider} failed: ${message}`);
+}
+
+function logFallbackNonOkResponse(provider: string, status: number, options: AlbumEnrichmentOptions): void {
+  options.logger?.warn(`Artwork fallback provider ${provider} returned HTTP ${status}.`);
 }
