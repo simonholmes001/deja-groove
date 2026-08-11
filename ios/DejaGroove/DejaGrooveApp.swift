@@ -1,51 +1,20 @@
 import SwiftUI
 import DejaGrooveApp
-import DejaGrooveAuth
 
 @main
 struct DejaGrooveMobileApp: App {
-    @StateObject private var coordinator: AppAuthCoordinator
     private let apiClient: ApiClient
-    private let runtimeMode: DejaGrooveRuntimeMode
     private let startupError: String?
 
     init() {
         switch AppConfiguration.load() {
         case .success(let config):
-            let authManager: AuthSessionManager
-            switch config.runtimeMode {
-            case .hosted:
-                guard let entra = config.entra, let apiBaseURL = config.apiBaseURL else {
-                    authManager = Self.disabledAuthManager()
-                    _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
-                    apiClient = DisabledApiClient()
-                    runtimeMode = .hosted
-                    startupError = AppConfigurationError.missingRequiredKeys.errorDescription
-                    return
-                }
-                let tokenProvider = EntraTokenProvider(
-                    config: entra,
-                    transport: URLSessionTokenTransport(),
-                    authorizer: DeferredWebAuthenticationAuthorizer())
-                authManager = AuthSessionManager(
-                    tokenProvider: tokenProvider,
-                    store: KeychainSessionStore())
-                _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
-                apiClient = AuthenticatedApiClientFactory.make(baseUrl: apiBaseURL, authManager: authManager)
-            case .localProxy:
-                authManager = Self.disabledAuthManager()
-                _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
-                apiClient = LocalProxyApiClientFactory.make(
-                    recognitionProxyBaseURL: config.recognitionProxyBaseURL,
-                    recognitionProxyKey: config.recognitionProxyKey)
-            }
-            runtimeMode = config.runtimeMode
+            apiClient = LocalProxyApiClientFactory.make(
+                recognitionProxyBaseURL: config.recognitionProxyBaseURL,
+                recognitionProxyKey: config.recognitionProxyKey)
             startupError = nil
         case .failure(let error):
-            let authManager = Self.disabledAuthManager()
-            _coordinator = StateObject(wrappedValue: AppAuthCoordinator(authManager: authManager))
             apiClient = DisabledApiClient()
-            runtimeMode = .hosted
             startupError = error.errorDescription
         }
     }
@@ -54,26 +23,10 @@ struct DejaGrooveMobileApp: App {
         WindowGroup {
             if let startupError {
                 StartupConfigurationErrorView(message: startupError)
-            } else if runtimeMode == .hosted {
-                AuthGateView(coordinator: coordinator) {
-                    DejaGrooveRootView(
-                        api: apiClient,
-                        onAuthenticationRequired: {
-                            await MainActor.run {
-                                coordinator.invalidateSession()
-                            }
-                        })
-                }
             } else {
                 DejaGrooveRootView(api: apiClient)
             }
         }
-    }
-
-    private static func disabledAuthManager() -> AuthSessionManager {
-        AuthSessionManager(
-            tokenProvider: DisabledInteractiveTokenProvider(),
-            store: KeychainSessionStore())
     }
 }
 
@@ -101,7 +54,7 @@ private struct DisabledApiClient: ApiClient {
         throw ApiClientError.encodingFailure
     }
 
-    func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
+    func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse {
         throw ApiClientError.encodingFailure
     }
 
@@ -147,19 +100,5 @@ private struct DisabledApiClient: ApiClient {
 
     func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
         throw ApiClientError.encodingFailure
-    }
-}
-
-private final class DisabledInteractiveTokenProvider: InteractiveAuthTokenProvider, @unchecked Sendable {
-    func signIn(username: String, password: String) async throws -> AuthSession {
-        throw AuthOnboardingError.providerConfiguration
-    }
-
-    func signInInteractively() async throws -> AuthSession {
-        throw AuthOnboardingError.providerConfiguration
-    }
-
-    func refresh(using refreshToken: String) async throws -> AuthSession {
-        throw AuthOnboardingError.providerConfiguration
     }
 }

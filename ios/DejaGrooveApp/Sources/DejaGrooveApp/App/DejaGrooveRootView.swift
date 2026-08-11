@@ -3,23 +3,16 @@ import SwiftUI
 #if os(iOS)
 public struct DejaGrooveRootView: View {
     private let api: ApiClient
-    private let onAuthenticationRequired: @Sendable () async -> Void
     @StateObject private var collectionViewModel: CollectionViewModel
 
-    public init(
-        api: ApiClient,
-        onAuthenticationRequired: @escaping @Sendable () async -> Void = {}
-    ) {
+    public init(api: ApiClient) {
         self.api = api
-        self.onAuthenticationRequired = onAuthenticationRequired
-        _collectionViewModel = StateObject(wrappedValue: CollectionViewModel(
-            api: api,
-            onAuthenticationRequired: onAuthenticationRequired))
+        _collectionViewModel = StateObject(wrappedValue: CollectionViewModel(api: api))
     }
 
     public var body: some View {
         TabView {
-            ScanView(viewModel: ScanViewModel(api: api, onAuthenticationRequired: onAuthenticationRequired))
+            ScanView(viewModel: ScanViewModel(api: api))
                 .tabItem { Label("Scan", systemImage: "camera") }
 
             CollectionView(viewModel: collectionViewModel)

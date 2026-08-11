@@ -2,7 +2,7 @@ import Foundation
 
 public protocol LocalScanRuntime: Sendable {
     func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse
-    func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse
+    func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse
 }
 
 public protocol LocalCollectionStore: Sendable {
@@ -46,11 +46,20 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
             requestId: response.requestId)
     }
 
-    public func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
-        try await scanRuntime.resolve(
+    public func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse {
+        let response = try await scanRuntime.resolve(
             requestId: requestId,
-            selectedMbid: selectedMbid,
-            selectedDiscogsReleaseId: selectedDiscogsReleaseId)
+            selectedAlbum: selectedAlbum)
+        guard let album = response.album, try await collectionStore.contains(album: album) else {
+            return response
+        }
+        return ScanResponse(
+            status: "owned",
+            confidence: response.confidence,
+            album: album,
+            candidates: response.candidates,
+            timings: response.timings,
+            requestId: response.requestId)
     }
 
     public func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
@@ -128,7 +137,7 @@ private struct UnconfiguredLocalScanRuntime: LocalScanRuntime {
         throw unconfiguredError(message: "Local scan runtime is not configured yet.")
     }
 
-    func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
+    func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse {
         throw unconfiguredError(message: "Local scan resolution is not configured yet.")
     }
 

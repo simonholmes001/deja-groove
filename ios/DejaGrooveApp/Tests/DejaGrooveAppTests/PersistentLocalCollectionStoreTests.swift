@@ -370,6 +370,42 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertTrue(collections.isEmpty)
     }
 
+    func testSavesVersionedCollectionDocumentEnvelope() async throws {
+        let fileURL = temporaryStoreURL()
+        let store = PersistentLocalCollectionStore(
+            fileURL: fileURL,
+            idProvider: FixedUUIDProvider(ids: [UUID(uuidString: "00000000-0000-0000-0000-000000000451")!]),
+            clock: FixedISO8601Clock(instants: ["2026-01-01T00:00:00Z"]),
+            duplicateRequestIdProvider: FixedUUIDProvider(ids: []))
+
+        _ = try await store.addToCollection(
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "LP"),
+            notes: nil,
+            addAnyway: false)
+
+        let data = try Data(contentsOf: fileURL)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(1, json?["schema_version"] as? Int)
+        XCTAssertNotNil(json?["records"])
+        XCTAssertNotNil(json?["collections"])
+    }
+
+    func testCorruptCollectionFileIsQuarantinedAndStartsWithEmptyStore() async throws {
+        let fileURL = temporaryStoreURL()
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{not valid json".utf8).write(to: fileURL)
+
+        let store = PersistentLocalCollectionStore(fileURL: fileURL)
+        let records = try await store.fetchCollection(search: nil)
+
+        XCTAssertTrue(records.items.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        let quarantinedFiles = try FileManager.default.contentsOfDirectory(
+            atPath: fileURL.deletingLastPathComponent().path)
+            .filter { $0.hasPrefix("collection.json.corrupt-") }
+        XCTAssertEqual(1, quarantinedFiles.count)
+    }
+
     private func makeStore(ids: [UUID], instants: [String]) throws -> PersistentLocalCollectionStore {
         PersistentLocalCollectionStore(
             fileURL: temporaryStoreURL(),

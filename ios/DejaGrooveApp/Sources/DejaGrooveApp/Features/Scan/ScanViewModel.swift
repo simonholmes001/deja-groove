@@ -8,15 +8,10 @@ public final class ScanViewModel: ObservableObject {
     @Published public private(set) var collectionMessage: String?
 
     private let api: ApiClient
-    private let onAuthenticationRequired: @Sendable () async -> Void
     private var lastSubmittedImageData: Data?
 
-    public init(
-        api: ApiClient,
-        onAuthenticationRequired: @escaping @Sendable () async -> Void = {}
-    ) {
+    public init(api: ApiClient) {
         self.api = api
-        self.onAuthenticationRequired = onAuthenticationRequired
     }
 
     public func submitScan(imageData: Data) async {
@@ -48,7 +43,7 @@ public final class ScanViewModel: ObservableObject {
         isLastErrorRetryable = false
         state = .loading(.resolving)
         do {
-            let response = try await api.resolve(requestId: requestId, selectedMbid: candidate.mbid, selectedDiscogsReleaseId: candidate.discogsReleaseId)
+            let response = try await api.resolve(requestId: requestId, selectedAlbum: candidate)
             state = .result(response)
             lastSubmittedImageData = nil
             collectionMessage = nil
@@ -75,9 +70,6 @@ public final class ScanViewModel: ObservableObject {
             state = .idle
         } catch let error as ApiClientError {
             switch error {
-            case .httpError(let status, _) where status == 401 || status == 403:
-                collectionMessage = "Sign in to add this album to My Crate."
-                await onAuthenticationRequired()
             case .httpError(_, let apiError?):
                 collectionMessage = apiError.message
             default:

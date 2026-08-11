@@ -309,7 +309,6 @@ Why now: the app is visual and scan-heavy. VoiceOver, Dynamic Type, contrast, an
 
 Priority: reduce complexity and maintenance risk.
 
-- [#168](https://github.com/simonholmes001/deja-groove/issues/168) Remove hosted auth dependency from iOS runtime.
 - [#169](https://github.com/simonholmes001/deja-groove/issues/169) Replace legacy Azure runtime with minimum-cost Function deployment.
 - [#160](https://github.com/simonholmes001/deja-groove/issues/160) Migrate app to iPhone-local runtime with minimal Azure proxy.
 

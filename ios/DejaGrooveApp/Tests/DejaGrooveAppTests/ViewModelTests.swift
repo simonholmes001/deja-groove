@@ -2,17 +2,12 @@ import XCTest
 @testable import DejaGrooveApp
 
 final class ViewModelTests: XCTestCase {
-    func testScanResponseNormalizesLegacySafeToBuyStatus() {
-        let response = ScanResponse(
-            status: "safetobuy",
-            confidence: 0.91,
-            album: Album(mbid: "a", discogsReleaseId: nil, title: "T", artist: "AR", year: 2000, format: nil),
-            candidates: [],
-            requestId: UUID()
-        )
+    func testScanResponseRejectsLegacyNonCanonicalStatusOnDecode() throws {
+        let json = """
+        {"status":"safetobuy","confidence":0.91,"album":null,"candidates":[],"request_id":"00000000-0000-0000-0000-000000000001"}
+        """.data(using: .utf8)!
 
-        XCTAssertEqual("safe_to_buy", response.status)
-        XCTAssertTrue(response.canAddToCollection)
+        XCTAssertThrowsError(try JSONDecoder().decode(ScanResponse.self, from: json))
     }
 
     func testOwnedScanResponseCannotBeAddedAgain() {
@@ -66,7 +61,9 @@ final class ViewModelTests: XCTestCase {
         await sut.resolve(requestId: requestId, candidate: candidate)
 
         let calls = await api.resolveCallCount
+        let selectedAlbum = await api.lastResolvedAlbum
         XCTAssertEqual(1, calls)
+        XCTAssertEqual(candidate, selectedAlbum)
     }
 
     func testCollectionViewModelLoadsRecords() async {
@@ -267,6 +264,36 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual([blueId], records.map(\.id))
     }
 
+    func testCollectionViewModelSearchUsesSameExtendedFieldsAsStore() async {
+        let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000571")!
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: recordId,
+                album: Album(
+                    mbid: nil,
+                    discogsReleaseId: "249504",
+                    title: "Blue",
+                    artist: "Joni Mitchell",
+                    year: 1971,
+                    format: "LP",
+                    barcode: "075992718127",
+                    tracklist: [AlbumTrack(position: "A1", title: "All I Want", duration: "3:34")]),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: "")
+        ], nextCursor: nil)
+        let sut = await CollectionViewModel(api: MockApiClient(collectionResponse: response))
+
+        await sut.load()
+        await MainActor.run {
+            sut.search = "075992718127"
+        }
+
+        let records = await sut.visibleRecords
+        XCTAssertEqual([recordId], records.map(\.id))
+    }
+
     func testCollectionViewModelCreatesAndAssignsCollections() async {
         let recordId = UUID(uuidString: "00000000-0000-0000-0000-000000000521")!
         let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000522")!
@@ -293,49 +320,37 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual([recordId], collections.first?.recordIds)
     }
 
-    func testCollectionViewModelAuthenticationErrorShowsSignInMessageAndRefreshesAuthState() async {
-        let tracker = CallbackTracker()
-        let authError = ApiClientError.httpError(
+    func testCollectionViewModelAuthorizationErrorShowsApiMessage() async {
+        let authorizationError = ApiClientError.httpError(
             401,
             ApiError(code: "auth_required", message: "Authentication is required.", retryable: false, requestId: UUID()))
-        let api = MockApiClient(collectionErrorSequence: [authError])
-        let sut = await CollectionViewModel(api: api, onAuthenticationRequired: {
-            await tracker.markCalled()
-        })
+        let api = MockApiClient(collectionErrorSequence: [authorizationError])
+        let sut = await CollectionViewModel(api: api)
 
         await sut.load()
 
-        let requiresAuthentication = await sut.requiresAuthentication
         let errorMessage = await sut.errorMessage
-        XCTAssertTrue(requiresAuthentication)
-        XCTAssertEqual("Sign in to view My Crate.", errorMessage)
-        let callbackCount = await tracker.callCount
-        XCTAssertEqual(1, callbackCount)
+        XCTAssertEqual("Authentication is required.", errorMessage)
     }
 
-    func testScanViewModelAddToCollectionAuthenticationErrorShowsFriendlyMessageAndRefreshesAuthState() async {
-        let tracker = CallbackTracker()
+    func testScanViewModelAddToCollectionAuthorizationErrorShowsApiMessage() async {
         let response = ScanResponse(
             status: "safe_to_buy",
             confidence: 0.9,
             album: Album(mbid: "m", discogsReleaseId: nil, title: "T", artist: "A", year: 2001, format: nil),
             candidates: [],
             requestId: UUID())
-        let authError = ApiClientError.httpError(
+        let authorizationError = ApiClientError.httpError(
             401,
             ApiError(code: "auth_required", message: "Authentication is required.", retryable: false, requestId: UUID()))
-        let api = MockApiClient(scanResponse: response, addToCollectionErrorSequence: [authError])
-        let sut = await ScanViewModel(api: api, onAuthenticationRequired: {
-            await tracker.markCalled()
-        })
+        let api = MockApiClient(scanResponse: response, addToCollectionErrorSequence: [authorizationError])
+        let sut = await ScanViewModel(api: api)
 
         await sut.submitScan(imageData: Data([0xFF, 0xD8]))
         await sut.addResultToCollection()
 
         let message = await sut.collectionMessage
-        XCTAssertEqual("Sign in to add this album to My Crate.", message)
-        let callbackCount = await tracker.callCount
-        XCTAssertEqual(1, callbackCount)
+        XCTAssertEqual("Authentication is required.", message)
     }
 
     func testScanViewModelClearsResultAfterSuccessfulAddToCollection() async {
@@ -429,6 +444,7 @@ actor MockApiClient: ApiClient {
     private let createdCollection: CrateCollection?
     private(set) var resolveCallCount = 0
     private(set) var scanCallCount = 0
+    private(set) var lastResolvedAlbum: Album?
     private var scanErrorSequence: [ApiClientError]
     private var resolveErrorSequence: [ApiClientError]
     private var collectionErrorSequence: [ApiClientError]
@@ -466,8 +482,9 @@ actor MockApiClient: ApiClient {
         return scanResponse
     }
 
-    func resolve(requestId: UUID, selectedMbid: String?, selectedDiscogsReleaseId: String?) async throws -> ScanResponse {
+    func resolve(requestId: UUID, selectedAlbum: Album) async throws -> ScanResponse {
         resolveCallCount += 1
+        lastResolvedAlbum = selectedAlbum
         if !resolveErrorSequence.isEmpty {
             throw resolveErrorSequence.removeFirst()
         }
@@ -573,13 +590,5 @@ actor MockApiClient: ApiClient {
         let updated = CrateCollection(id: current.id, name: current.name, recordIds: current.recordIds.filter { $0 != recordId }, createdAt: current.createdAt, updatedAt: current.updatedAt)
         crateCollections[index] = updated
         return updated
-    }
-}
-
-actor CallbackTracker {
-    private(set) var callCount = 0
-
-    func markCalled() {
-        callCount += 1
     }
 }

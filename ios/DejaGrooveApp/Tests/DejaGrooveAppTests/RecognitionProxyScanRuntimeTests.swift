@@ -61,23 +61,23 @@ final class RecognitionProxyScanRuntimeTests: XCTestCase {
         }
     }
 
-    func testResolveIsExplicitlyNotConfiguredUntilAmbiguousFlowIsImplemented() async {
+    func testResolveReturnsSelectedCandidateAsSafeToBuyWithoutProxyRoundTrip() async throws {
+        let transport = RecognitionProxyRecordingTransport(responseData: Data())
         let runtime = RecognitionProxyScanRuntime(
             baseURL: URL(string: "https://func.example.com")!,
             functionKey: "function-key-123",
-            transport: RecognitionProxyRecordingTransport(responseData: Data()))
+            transport: transport)
         let requestId = UUID()
+        let candidate = Album(mbid: "mbid", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: "LP")
 
-        do {
-            _ = try await runtime.resolve(requestId: requestId, selectedMbid: "mbid", selectedDiscogsReleaseId: nil)
-            XCTFail("Expected local resolution to be unavailable")
-        } catch let ApiClientError.httpError(statusCode, error) {
-            XCTAssertEqual(501, statusCode)
-            XCTAssertEqual("local_resolution_not_configured", error?.code)
-            XCTAssertEqual(requestId, error?.requestId)
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
+        let response = try await runtime.resolve(requestId: requestId, selectedAlbum: candidate)
+
+        XCTAssertEqual("safe_to_buy", response.status)
+        XCTAssertEqual(candidate, response.album)
+        XCTAssertTrue(response.candidates.isEmpty)
+        XCTAssertEqual(requestId, response.requestId)
+        let request = await transport.lastRequest
+        XCTAssertNil(request)
     }
 
     private static func scanResponseJson(requestId: UUID) -> Data {
