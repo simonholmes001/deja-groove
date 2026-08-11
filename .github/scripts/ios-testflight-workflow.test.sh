@@ -10,6 +10,11 @@ fail() {
 
 [ -f "$WORKFLOW" ] || fail "workflow not found"
 
+grep -q 'branches: \[main\]' "$WORKFLOW" || fail "missing automatic main branch trigger"
+grep -q "'ios/\*\*'" "$WORKFLOW" || fail "missing iOS path trigger"
+grep -q "'.github/workflows/ios-testflight.yml'" "$WORKFLOW" || fail "missing TestFlight workflow path trigger"
+grep -q "'.github/scripts/validate-ios-project.sh'" "$WORKFLOW" || fail "missing iOS validation path trigger"
+grep -q "'.github/scripts/write-ios-release-config.sh'" "$WORKFLOW" || fail "missing release config path trigger"
 grep -q 'name: Validate required secrets' "$WORKFLOW" || fail "missing secret validation step"
 grep -q 'Set only one of DEJA_GROOVE_XCODE_PROJECT or DEJA_GROOVE_XCODE_WORKSPACE' "$WORKFLOW" || fail "missing both-set guard"
 grep -q 'Either DEJA_GROOVE_XCODE_PROJECT or DEJA_GROOVE_XCODE_WORKSPACE is required' "$WORKFLOW" || fail "missing neither-set guard"

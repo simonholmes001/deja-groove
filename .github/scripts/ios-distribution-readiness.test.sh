@@ -12,7 +12,7 @@ fail() {
 new_repo() {
   local dir
   dir="$(mktemp -d)"
-  mkdir -p "$dir/ios/DejaGrooveApp" "$dir/ios/fastlane" "$dir/.github/workflows"
+  mkdir -p "$dir/ios/DejaGroove" "$dir/ios/DejaGrooveApp" "$dir/ios/fastlane" "$dir/.github/workflows"
   echo "$dir"
 }
 
@@ -39,6 +39,14 @@ test_required_files_present_passes() {
   cat > "$repo/ios/DejaGrooveApp/PrivacyInfo.xcprivacy" <<'JSON'
 {}
 JSON
+  cat > "$repo/ios/DejaGroove/Info.plist" <<'PLIST'
+<plist version="1.0">
+<dict>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+</dict>
+</plist>
+PLIST
 
   cat > "$repo/ios/fastlane/Appfile" <<'EOF_APP'
 app_identifier(ENV.fetch("DEJA_GROOVE_APP_IDENTIFIER"))
@@ -99,6 +107,13 @@ EOF_MATCH
   cat > "$repo/.github/workflows/ios-testflight.yml" <<'EOF_WF'
 name: iOS TestFlight
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-testflight.yml'
+      - '.github/scripts/validate-ios-project.sh'
+      - '.github/scripts/write-ios-release-config.sh'
   workflow_dispatch:
 permissions:
   contents: read
@@ -133,6 +148,14 @@ test_fails_without_validate_script_hook() {
   cat > "$repo/ios/DejaGrooveApp/PrivacyInfo.xcprivacy" <<'JSON'
 {}
 JSON
+  cat > "$repo/ios/DejaGroove/Info.plist" <<'PLIST'
+<plist version="1.0">
+<dict>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+</dict>
+</plist>
+PLIST
   cat > "$repo/ios/fastlane/Appfile" <<'EOF_APP'
 app_identifier("x")
 apple_id("x")
@@ -183,6 +206,13 @@ EOF_MATCH
   cat > "$repo/.github/workflows/ios-testflight.yml" <<'EOF_WF'
 name: iOS TestFlight
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-testflight.yml'
+      - '.github/scripts/validate-ios-project.sh'
+      - '.github/scripts/write-ios-release-config.sh'
   workflow_dispatch:
 permissions:
   contents: read

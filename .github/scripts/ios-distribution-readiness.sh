@@ -2,6 +2,7 @@
 set -euo pipefail
 
 required_files=(
+  "ios/DejaGroove/Info.plist"
   "ios/DejaGrooveApp/PrivacyInfo.xcprivacy"
   "ios/fastlane/Appfile"
   "ios/fastlane/Fastfile"
@@ -42,6 +43,8 @@ grep -q 'force_legacy_encryption(true)' ios/fastlane/Matchfile || { echo "Matchf
 
 grep -q 'permissions:' .github/workflows/ios-testflight.yml || { echo "Workflow missing explicit permissions" >&2; exit 1; }
 grep -q 'contents: read' .github/workflows/ios-testflight.yml || { echo "Workflow missing least-privilege contents: read" >&2; exit 1; }
+grep -q 'branches: \[main\]' .github/workflows/ios-testflight.yml || { echo "Workflow missing automatic main branch TestFlight trigger" >&2; exit 1; }
+grep -q "'ios/\*\*'" .github/workflows/ios-testflight.yml || { echo "Workflow missing iOS path trigger" >&2; exit 1; }
 grep -q 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' .github/workflows/ios-testflight.yml || { echo "Workflow missing immutable checkout pin" >&2; exit 1; }
 grep -q 'ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6' .github/workflows/ios-testflight.yml || { echo "Workflow missing immutable ruby/setup-ruby pin" >&2; exit 1; }
 grep -q "ruby-version: '3.1'" .github/workflows/ios-testflight.yml || { echo "Workflow missing Ruby version compatible with locked Fastlane dependencies" >&2; exit 1; }
@@ -56,5 +59,6 @@ grep -q 'run: bash .github/scripts/validate-ios-project.sh' .github/workflows/io
 
 grep -q 'DEJA_GROOVE_XCODE_PROJECT' ios/fastlane/Fastfile || { echo "Fastfile missing project forwarding" >&2; exit 1; }
 grep -q 'DEJA_GROOVE_XCODE_WORKSPACE' ios/fastlane/Fastfile || { echo "Fastfile missing workspace forwarding" >&2; exit 1; }
+grep -q 'ITSAppUsesNonExemptEncryption' ios/DejaGroove/Info.plist || { echo "Info.plist missing export compliance encryption declaration" >&2; exit 1; }
 
 echo "iOS distribution readiness checks passed."

@@ -1,6 +1,13 @@
 name: iOS TestFlight
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-testflight.yml'
+      - '.github/scripts/validate-ios-project.sh'
+      - '.github/scripts/write-ios-release-config.sh'
   workflow_dispatch:
 
 permissions:
