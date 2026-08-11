@@ -320,6 +320,34 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual([recordId], collections.first?.recordIds)
     }
 
+    func testCollectionViewModelKeepsCollectionsAlphabeticalAfterReloadCreateRenameAndDelete() async {
+        let jazzId = UUID(uuidString: "00000000-0000-0000-0000-000000000531")!
+        let rockId = UUID(uuidString: "00000000-0000-0000-0000-000000000532")!
+        let ambientId = UUID(uuidString: "00000000-0000-0000-0000-000000000533")!
+        let api = MockApiClient(crateCollections: [
+            CrateCollection(id: jazzId, name: "Jazz", recordIds: [], createdAt: "", updatedAt: ""),
+            CrateCollection(id: rockId, name: "rock", recordIds: [], createdAt: "", updatedAt: ""),
+            CrateCollection(id: ambientId, name: "Ambient", recordIds: [], createdAt: "", updatedAt: "")
+        ])
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        var collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Jazz", "rock"], collections.map(\.name))
+
+        await sut.createCollection(named: "Blues")
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Blues", "Jazz", "rock"], collections.map(\.name))
+
+        await sut.renameCollection(id: rockId, name: "Avant-Garde")
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Avant-Garde", "Blues", "Jazz"], collections.map(\.name))
+
+        await sut.deleteCollection(id: ambientId)
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Avant-Garde", "Blues", "Jazz"], collections.map(\.name))
+    }
+
     func testCollectionViewModelAuthorizationErrorShowsApiMessage() async {
         let authorizationError = ApiClientError.httpError(
             401,

@@ -76,6 +76,19 @@ public enum LocalCollectionRules {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
+    public static func compareCollectionsByName(_ lhs: CrateCollection, _ rhs: CrateCollection) -> Bool {
+        let lhsName = normalized(lhs.name)
+        let rhsName = normalized(rhs.name)
+        if lhsName != rhsName {
+            return lhsName < rhsName
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    public static func sortedCollections(_ collections: [CrateCollection]) -> [CrateCollection] {
+        collections.sorted { compareCollectionsByName($0, $1) }
+    }
+
     public static func normalized(_ value: String) -> String {
         value
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
