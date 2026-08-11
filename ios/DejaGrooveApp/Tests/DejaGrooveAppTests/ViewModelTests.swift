@@ -574,6 +574,33 @@ actor MockApiClient: ApiClient {
         }
     }
 
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        WishlistEntry(
+            id: UUID(),
+            album: album,
+            preferences: preferences,
+            sourceTrack: sourceTrack,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        []
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        WishlistEntry(
+            id: id,
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: nil),
+            preferences: preferences,
+            sourceTrack: nil,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {
+    }
+
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
         guard let search, !search.isEmpty else { return crateCollections }
         return crateCollections.filter { $0.name.localizedCaseInsensitiveContains(search) }

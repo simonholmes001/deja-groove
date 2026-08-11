@@ -29,6 +29,7 @@ public struct Album: Codable, Equatable, Sendable {
     public let tracklist: [AlbumTrack]
     public let identifiers: [AlbumIdentifier]
     public let discogsDataQuality: String?
+    public let listeningLinks: [AlbumListeningLink]
 
     public init(
         mbid: String?,
@@ -58,7 +59,8 @@ public struct Album: Codable, Equatable, Sendable {
         companies: [String] = [],
         tracklist: [AlbumTrack] = [],
         identifiers: [AlbumIdentifier] = [],
-        discogsDataQuality: String? = nil
+        discogsDataQuality: String? = nil,
+        listeningLinks: [AlbumListeningLink] = []
     ) {
         self.mbid = mbid
         self.discogsReleaseId = discogsReleaseId
@@ -88,6 +90,7 @@ public struct Album: Codable, Equatable, Sendable {
         self.tracklist = tracklist
         self.identifiers = identifiers
         self.discogsDataQuality = discogsDataQuality
+        self.listeningLinks = listeningLinks
     }
 
     enum CodingKeys: String, CodingKey {
@@ -119,6 +122,7 @@ public struct Album: Codable, Equatable, Sendable {
         case tracklist
         case identifiers
         case discogsDataQuality = "discogs_data_quality"
+        case listeningLinks = "listening_links"
     }
 
     public init(from decoder: Decoder) throws {
@@ -151,7 +155,8 @@ public struct Album: Codable, Equatable, Sendable {
             companies: try container.decodeIfPresent([String].self, forKey: .companies) ?? [],
             tracklist: try container.decodeIfPresent([AlbumTrack].self, forKey: .tracklist) ?? [],
             identifiers: try container.decodeIfPresent([AlbumIdentifier].self, forKey: .identifiers) ?? [],
-            discogsDataQuality: try container.decodeIfPresent(String.self, forKey: .discogsDataQuality))
+            discogsDataQuality: try container.decodeIfPresent(String.self, forKey: .discogsDataQuality),
+            listeningLinks: try container.decodeIfPresent([AlbumListeningLink].self, forKey: .listeningLinks) ?? [])
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -184,6 +189,28 @@ public struct Album: Codable, Equatable, Sendable {
         try container.encode(tracklist, forKey: .tracklist)
         try container.encode(identifiers, forKey: .identifiers)
         try container.encodeIfPresent(discogsDataQuality, forKey: .discogsDataQuality)
+        try container.encode(listeningLinks, forKey: .listeningLinks)
+    }
+}
+
+public struct AlbumListeningLink: Codable, Equatable, Sendable {
+    public let provider: String
+    public let url: String
+    public let catalogId: String?
+    public let previewUrl: String?
+
+    public init(provider: String, url: String, catalogId: String? = nil, previewUrl: String? = nil) {
+        self.provider = provider
+        self.url = url
+        self.catalogId = catalogId
+        self.previewUrl = previewUrl
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case url
+        case catalogId = "catalog_id"
+        case previewUrl = "preview_url"
     }
 }
 
@@ -229,6 +256,10 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     }
 
     public var canAddToCollection: Bool {
+        album != nil && (status == "safe_to_buy" || status == "wishlist_match")
+    }
+
+    public var canAddToWishlist: Bool {
         album != nil && status == "safe_to_buy"
     }
 
@@ -239,6 +270,16 @@ public struct ScanResponse: Codable, Equatable, Sendable {
             album: album,
             candidates: candidates,
             timings: timings?.withClientElapsedMs(clientElapsedMs),
+            requestId: requestId)
+    }
+
+    public func withStatus(_ status: String) -> ScanResponse {
+        ScanResponse(
+            status: status,
+            confidence: confidence,
+            album: album,
+            candidates: candidates,
+            timings: timings,
             requestId: requestId)
     }
 
@@ -270,7 +311,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         )
     }
 
-    private static let canonicalStatuses: Set<String> = ["safe_to_buy", "ambiguous", "no_match", "owned"]
+    private static let canonicalStatuses: Set<String> = ["safe_to_buy", "ambiguous", "no_match", "owned", "wishlist_match"]
 }
 
 public struct ScanTimings: Codable, Equatable, Sendable {
@@ -356,6 +397,156 @@ public struct CrateCollection: Codable, Equatable, Identifiable, Sendable {
         self.recordIds = recordIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+public struct AudioDiscoveryTrack: Codable, Equatable, Sendable {
+    public let title: String
+    public let artist: String
+    public let shazamId: String?
+    public let appleMusicId: String?
+    public let artworkUrl: String?
+    public let genre: String?
+    public let matchedAt: String
+
+    public init(
+        title: String,
+        artist: String,
+        shazamId: String? = nil,
+        appleMusicId: String? = nil,
+        artworkUrl: String? = nil,
+        genre: String? = nil,
+        matchedAt: String
+    ) {
+        self.title = title
+        self.artist = artist
+        self.shazamId = shazamId
+        self.appleMusicId = appleMusicId
+        self.artworkUrl = artworkUrl
+        self.genre = genre
+        self.matchedAt = matchedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case artist
+        case shazamId = "shazam_id"
+        case appleMusicId = "apple_music_id"
+        case artworkUrl = "artwork_url"
+        case genre
+        case matchedAt = "matched_at"
+    }
+}
+
+public struct WishlistPreferences: Codable, Equatable, Sendable {
+    public let targetFormat: String?
+    public let releaseYear: Int?
+    public let country: String?
+    public let label: String?
+    public let catalogNumber: String?
+    public let barcode: String?
+    public let discogsReleaseId: String?
+    public let discogsMasterId: String?
+    public let conditionNotes: String?
+    public let priceNote: String?
+    public let notes: String?
+
+    public init(
+        targetFormat: String? = nil,
+        releaseYear: Int? = nil,
+        country: String? = nil,
+        label: String? = nil,
+        catalogNumber: String? = nil,
+        barcode: String? = nil,
+        discogsReleaseId: String? = nil,
+        discogsMasterId: String? = nil,
+        conditionNotes: String? = nil,
+        priceNote: String? = nil,
+        notes: String? = nil
+    ) {
+        self.targetFormat = targetFormat
+        self.releaseYear = releaseYear
+        self.country = country
+        self.label = label
+        self.catalogNumber = catalogNumber
+        self.barcode = barcode
+        self.discogsReleaseId = discogsReleaseId
+        self.discogsMasterId = discogsMasterId
+        self.conditionNotes = conditionNotes
+        self.priceNote = priceNote
+        self.notes = notes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case targetFormat = "target_format"
+        case releaseYear = "release_year"
+        case country
+        case label
+        case catalogNumber = "catalog_number"
+        case barcode
+        case discogsReleaseId = "discogs_release_id"
+        case discogsMasterId = "discogs_master_id"
+        case conditionNotes = "condition_notes"
+        case priceNote = "price_note"
+        case notes
+    }
+}
+
+public struct WishlistEntry: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let album: Album
+    public let preferences: WishlistPreferences
+    public let sourceTrack: AudioDiscoveryTrack?
+    public let createdAt: String
+    public let updatedAt: String
+
+    public init(
+        id: UUID,
+        album: Album,
+        preferences: WishlistPreferences,
+        sourceTrack: AudioDiscoveryTrack?,
+        createdAt: String,
+        updatedAt: String
+    ) {
+        self.id = id
+        self.album = album
+        self.preferences = preferences
+        self.sourceTrack = sourceTrack
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case album
+        case preferences
+        case sourceTrack = "source_track"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+public struct DiscoveryEntry: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let source: String
+    public let album: Album?
+    public let track: AudioDiscoveryTrack?
+    public let createdAt: String
+
+    public init(id: UUID, source: String, album: Album?, track: AudioDiscoveryTrack?, createdAt: String) {
+        self.id = id
+        self.source = source
+        self.album = album
+        self.track = track
+        self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case album
+        case track
+        case createdAt = "created_at"
     }
 }
 

@@ -14,6 +14,10 @@ public protocol ApiClient: Sendable {
     func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse
     func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse
     func deleteCollectionRecord(id: UUID) async throws
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry]
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry
+    func deleteWishlistEntry(id: UUID) async throws
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection]
     func createCrateCollection(name: String) async throws -> CrateCollection
     func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection

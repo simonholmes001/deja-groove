@@ -1247,6 +1247,16 @@ private struct AlbumDetailView: View {
                 }
             }
 
+            if !currentRecord.album.listeningLinks.isEmpty {
+                Section("Listen") {
+                    ForEach(currentRecord.album.listeningLinks, id: \.url) { link in
+                        if let url = URL(string: link.url) {
+                            Link(link.provider, destination: url)
+                        }
+                    }
+                }
+            }
+
             if let releaseNotes = currentRecord.album.releaseNotes, !releaseNotes.isEmpty {
                 Section("Release Notes") {
                     Text(releaseNotes)

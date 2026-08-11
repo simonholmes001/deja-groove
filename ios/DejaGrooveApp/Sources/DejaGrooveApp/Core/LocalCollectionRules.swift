@@ -63,17 +63,30 @@ public enum LocalCollectionRules {
     }
 
     public static func compareByArtistFamilyName(_ lhs: CollectionRecord, _ rhs: CollectionRecord) -> Bool {
-        let lhsKey = artistSortKey(lhs.album.artist)
-        let rhsKey = artistSortKey(rhs.album.artist)
+        compareAlbumsByArtistFamilyName(
+            lhs.album,
+            rhs.album,
+            lhsTieBreaker: lhs.id.uuidString,
+            rhsTieBreaker: rhs.id.uuidString)
+    }
+
+    public static func compareAlbumsByArtistFamilyName(
+        _ lhs: Album,
+        _ rhs: Album,
+        lhsTieBreaker: String,
+        rhsTieBreaker: String
+    ) -> Bool {
+        let lhsKey = artistSortKey(lhs.artist)
+        let rhsKey = artistSortKey(rhs.artist)
         if lhsKey != rhsKey {
             return lhsKey < rhsKey
         }
-        let lhsTitle = titleSortKey(lhs.album.title)
-        let rhsTitle = titleSortKey(rhs.album.title)
+        let lhsTitle = titleSortKey(lhs.title)
+        let rhsTitle = titleSortKey(rhs.title)
         if lhsTitle != rhsTitle {
             return lhsTitle < rhsTitle
         }
-        return lhs.id.uuidString < rhs.id.uuidString
+        return lhsTieBreaker < rhsTieBreaker
     }
 
     public static func compareCollectionsByName(_ lhs: CrateCollection, _ rhs: CrateCollection) -> Bool {

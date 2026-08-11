@@ -78,6 +78,22 @@ private struct DisabledApiClient: ApiClient {
         throw ApiClientError.encodingFailure
     }
 
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        throw ApiClientError.encodingFailure
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        throw ApiClientError.encodingFailure
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        throw ApiClientError.encodingFailure
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {
+        throw ApiClientError.encodingFailure
+    }
+
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
         throw ApiClientError.encodingFailure
     }
