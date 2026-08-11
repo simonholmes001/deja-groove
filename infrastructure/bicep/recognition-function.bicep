@@ -29,6 +29,11 @@ param scanIncludeTimings bool
 @description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool
 
+@minValue(7)
+@maxValue(90)
+@description('Key Vault soft-delete retention in days. Azure treats this value as immutable after vault creation.')
+param keyVaultSoftDeleteRetentionInDays int = 7
+
 @description('Common Azure resource tags.')
 param tags object
 
@@ -91,7 +96,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enabledForTemplateDeployment: false
     enableSoftDelete: true
-    softDeleteRetentionInDays: 30
+    softDeleteRetentionInDays: keyVaultSoftDeleteRetentionInDays
     publicNetworkAccess: 'Enabled'
   }
 }
