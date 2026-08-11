@@ -13,6 +13,7 @@ TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEPLOYMENT_NAME="deja-minimal-function-${ENVIRONMENT:-unknown}-${TIMESTAMP}"
 PACKAGE_BLOB_NAME="released-package.zip"
 DEPLOYMENT_PRINCIPAL_OBJECT_ID="${AZURE_CLIENT_OBJECT_ID:-}"
+EFFECTIVE_PARAMS_FILE=""
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev>" >&2
@@ -55,40 +56,42 @@ if [[ -z "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" && -n "${AZURE_CLIENT_ID:-}" ]]; th
   fi
 fi
 
-PARAMETERS_JSON="$(mktemp)"
-cleanup_parameters_file() {
-  rm -f "${PARAMETERS_JSON}"
-}
-trap cleanup_parameters_file EXIT
+export DEPLOYMENT_PRINCIPAL_OBJECT_ID
 
-chmod 600 "${PARAMETERS_JSON}"
-if [[ -n "${DISCOGS_TOKEN:-}" ]]; then
-  jq -n \
-    --arg openAiKey "${OPENAI_KEY}" \
-    --arg deploymentPrincipalObjectId "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
-    --arg discogsToken "${DISCOGS_TOKEN}" \
-    '{
-      openAiKey: { value: $openAiKey },
-      deploymentPrincipalObjectId: { value: $deploymentPrincipalObjectId },
-      discogsToken: { value: $discogsToken }
-    }' > "${PARAMETERS_JSON}"
-else
-  jq -n \
-    --arg openAiKey "${OPENAI_KEY}" \
-    --arg deploymentPrincipalObjectId "${DEPLOYMENT_PRINCIPAL_OBJECT_ID}" \
-    '{
-      openAiKey: { value: $openAiKey },
-      deploymentPrincipalObjectId: { value: $deploymentPrincipalObjectId }
-    }' > "${PARAMETERS_JSON}"
-fi
+create_effective_params_file() {
+  EFFECTIVE_PARAMS_FILE="$(mktemp "${BICEP_DIR}/parameters/.${ENVIRONMENT}.XXXXXX.bicepparam")"
+  chmod 600 "${EFFECTIVE_PARAMS_FILE}"
+
+  cat > "${EFFECTIVE_PARAMS_FILE}" <<'PARAMS'
+using '../minimal-function.bicep'
+
+param environment = 'dev'
+param location = 'swedencentral'
+param resourceGroupName = 'rg-deja-groove-dev-recognition'
+param appBaseName = 'deja-recognition-dev'
+param openAiModel = 'gpt-5-mini'
+param scanIncludeTimings = true
+param enableApplicationInsights = true
+param openAiKey = readEnvironmentVariable('OPENAI_KEY')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
+PARAMS
+}
+
+cleanup_effective_params_file() {
+  if [[ -n "${EFFECTIVE_PARAMS_FILE}" ]]; then
+    rm -f "${EFFECTIVE_PARAMS_FILE}"
+  fi
+}
+trap cleanup_effective_params_file EXIT
+create_effective_params_file
 
 echo "==> Deploying ${DEPLOYMENT_NAME} (subscription scope)..."
 DEPLOYMENT_OUTPUTS="$(az deployment sub create \
   --name "${DEPLOYMENT_NAME}" \
   --location "${DEPLOY_LOCATION}" \
   --template-file "${MINIMAL_TEMPLATE}" \
-  --parameters "${PARAMS_FILE}" \
-  --parameters @"${PARAMETERS_JSON}" \
+  --parameters "${EFFECTIVE_PARAMS_FILE}" \
   --query properties.outputs \
   --output json)"
 
