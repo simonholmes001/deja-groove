@@ -60,6 +60,7 @@ For Function App configuration:
 - `ENRICHMENT_CACHE_MAX_ENTRIES` defaults to `500`.
 - `enableApplicationInsights` is enabled for dev to capture request status,
   Function errors, scan timings, and recognition failure diagnostics.
+- `keyVaultSoftDeleteRetentionInDays` defaults to `7` because the existing dev Key Vault was created with seven-day retention and Azure does not allow changing this setting after vault creation. Use a higher value only when creating a new production vault.
 
 Managed identity and RBAC:
 

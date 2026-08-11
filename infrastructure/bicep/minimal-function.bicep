@@ -38,6 +38,11 @@ param scanIncludeTimings bool = false
 @description('Enable minimal Application Insights diagnostics for Function request/error/timing logs.')
 param enableApplicationInsights bool = false
 
+@minValue(7)
+@maxValue(90)
+@description('Key Vault soft-delete retention in days. Azure treats this value as immutable after vault creation.')
+param keyVaultSoftDeleteRetentionInDays int = 7
+
 @description('Common Azure resource tags.')
 param tags object = {
   application: 'deja-groove'
@@ -65,6 +70,7 @@ module recognitionProxy 'recognition-function.bicep' = {
     scanEnrichmentTimeoutMs: scanEnrichmentTimeoutMs
     scanIncludeTimings: scanIncludeTimings
     enableApplicationInsights: enableApplicationInsights
+    keyVaultSoftDeleteRetentionInDays: keyVaultSoftDeleteRetentionInDays
     tags: tags
   }
 }
