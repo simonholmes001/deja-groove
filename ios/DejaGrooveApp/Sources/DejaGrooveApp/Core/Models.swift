@@ -256,11 +256,11 @@ public struct ScanResponse: Codable, Equatable, Sendable {
     }
 
     public var canAddToCollection: Bool {
-        album != nil && (status == "safe_to_buy" || status == "wishlist_match")
+        album != nil && (status == "safe_to_buy" || status == "wishlist_match" || status == "discovery_match")
     }
 
     public var canAddToWishlist: Bool {
-        album != nil && status == "safe_to_buy"
+        album != nil && (status == "safe_to_buy" || status == "discovery_match")
     }
 
     public func withClientElapsedMs(_ clientElapsedMs: Int) -> ScanResponse {
@@ -311,7 +311,7 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         )
     }
 
-    private static let canonicalStatuses: Set<String> = ["safe_to_buy", "ambiguous", "no_match", "owned", "wishlist_match"]
+    private static let canonicalStatuses: Set<String> = ["safe_to_buy", "ambiguous", "no_match", "owned", "wishlist_match", "discovery_match"]
 }
 
 public struct ScanTimings: Codable, Equatable, Sendable {

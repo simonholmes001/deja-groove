@@ -1,6 +1,7 @@
 import Foundation
 
 public protocol LocalDiscoveryStore: Sendable {
+    func contains(album: Album) async throws -> Bool
     func addDiscovery(source: String, album: Album?, track: AudioDiscoveryTrack?) async throws -> DiscoveryEntry
     func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry]
     func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry
@@ -82,6 +83,13 @@ public actor PersistentLocalDiscoveryStore: LocalDiscoveryStore {
         document.entries.append(entry)
         try documentStore.save(document)
         return entry
+    }
+
+    public func contains(album: Album) async throws -> Bool {
+        try documentStore.load().entries.contains {
+            guard let discoveredAlbum = $0.album else { return false }
+            return LocalCollectionRules.isDuplicate(discoveredAlbum, album)
+        }
     }
 
     public func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry] {

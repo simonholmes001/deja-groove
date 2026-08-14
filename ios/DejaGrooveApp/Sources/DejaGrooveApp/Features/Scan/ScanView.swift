@@ -322,6 +322,8 @@ private struct ScanResultView: View {
             return "DUPLICATE"
         case "wishlist_match":
             return "WISHLIST MATCH"
+        case "discovery_match":
+            return "DISCOVERY MATCH"
         case "ambiguous":
             return "AMBIGUOUS"
         case "no_match":
@@ -341,6 +343,8 @@ private struct ScanResultView: View {
             return .red
         case "wishlist_match":
             return DejaGrooveStyle.blue
+        case "discovery_match":
+            return .purple
         case "ambiguous":
             return .orange
         default:

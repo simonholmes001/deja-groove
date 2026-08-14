@@ -334,6 +334,13 @@ private final class SequencedAlbumMetadataEnricherStub: AlbumMetadataEnricher, @
 private actor DiscoveryStoreSpy: LocalDiscoveryStore {
     private(set) var entries: [DiscoveryEntry] = []
 
+    func contains(album: Album) async throws -> Bool {
+        entries.contains {
+            guard let discoveredAlbum = $0.album else { return false }
+            return LocalCollectionRules.isDuplicate(discoveredAlbum, album)
+        }
+    }
+
     func addDiscovery(source: String, album: Album?, track: AudioDiscoveryTrack?) async throws -> DiscoveryEntry {
         let entry = DiscoveryEntry(id: UUID(), source: source, album: album, track: track, createdAt: "2026-01-01T00:00:00Z")
         entries.append(entry)

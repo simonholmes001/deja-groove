@@ -60,6 +60,28 @@ final class ApiClientTests: XCTestCase {
         XCTAssertEqual(album, result.album)
     }
 
+    func testLocalProxyScanMarksDiscoveredAlbumWhenNotOwnedOrWishlisted() async throws {
+        let album = Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: album,
+            candidates: [],
+            requestId: UUID())
+        let client = LocalProxyApiClient(
+            scanRuntime: LocalScanRuntimeSpy(response: response),
+            collectionStore: LocalCollectionStoreSpy(),
+            wishlistStore: LocalWishlistStoreSpy(),
+            discoveryStore: LocalDiscoveryStoreSpy(existingAlbums: [album]))
+
+        let result = try await client.scan(imageData: Data([0xFF, 0xD8]), clientScanId: UUID(), capturedAtIso: nil)
+
+        XCTAssertEqual("discovery_match", result.status)
+        XCTAssertTrue(result.canAddToCollection)
+        XCTAssertTrue(result.canAddToWishlist)
+        XCTAssertEqual(album, result.album)
+    }
+
     @MainActor
     func testScanViewModelAddsSafeResultToWishlist() async {
         let album = Album(mbid: "m", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
@@ -340,4 +362,34 @@ struct LocalWishlistStoreSnapshot {
     let addCallCount: Int
     let fetchCallCount: Int
     let containsCallCount: Int
+}
+
+actor LocalDiscoveryStoreSpy: LocalDiscoveryStore {
+    private let existingAlbums: [Album]
+
+    init(existingAlbums: [Album] = []) {
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        existingAlbums.contains(album)
+    }
+
+    func addDiscovery(source: String, album: Album?, track: AudioDiscoveryTrack?) async throws -> DiscoveryEntry {
+        DiscoveryEntry(id: UUID(), source: source, album: album, track: track, createdAt: "")
+    }
+
+    func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry] {
+        []
+    }
+
+    func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry {
+        throw ApiClientError.invalidResponse
+    }
+
+    func deleteDiscovery(id: UUID) async throws {
+    }
+
+    func deleteAllDiscoveries() async throws {
+    }
 }

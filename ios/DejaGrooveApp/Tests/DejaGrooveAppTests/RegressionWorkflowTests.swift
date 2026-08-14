@@ -56,6 +56,37 @@ final class RegressionWorkflowTests: XCTestCase {
         XCTAssertEqual(album, secondScan.album)
     }
 
+    func testScanSavedToDiscoveryHistoryMarksFutureScansAsDiscoveryMatch() async throws {
+        let album = richAlbum()
+        let collectionStore = PersistentLocalCollectionStore(fileURL: temporaryStoreURL(named: "collection"))
+        let wishlistStore = PersistentLocalWishlistStore(fileURL: temporaryStoreURL(named: "wishlist"))
+        let discoveryStore = PersistentLocalDiscoveryStore(fileURL: temporaryStoreURL(named: "discovery"))
+        let client = LocalProxyApiClient(
+            scanRuntime: RegressionScanRuntime(response: ScanResponse(
+                status: "safe_to_buy",
+                confidence: 0.96,
+                album: album,
+                candidates: [],
+                requestId: UUID(uuidString: "00000000-0000-0000-0000-000000000704")!)),
+            collectionStore: collectionStore,
+            wishlistStore: wishlistStore,
+            discoveryStore: discoveryStore)
+        let scanViewModel = ScanViewModel(api: client, discoveryStore: discoveryStore)
+
+        await scanViewModel.submitScan(imageData: Data([0xFF, 0xD8, 0xFF]))
+        await scanViewModel.saveResultToDiscovery()
+        let secondScan = try await client.scan(
+            imageData: Data([0xFF, 0xD8, 0xFF]),
+            clientScanId: UUID(),
+            capturedAtIso: nil)
+
+        XCTAssertEqual("Saved to Discovery History.", scanViewModel.collectionMessage)
+        XCTAssertEqual("discovery_match", secondScan.status)
+        XCTAssertTrue(secondScan.canAddToCollection)
+        XCTAssertTrue(secondScan.canAddToWishlist)
+        XCTAssertEqual(album, secondScan.album)
+    }
+
     func testDiscoverSaveToWishlistStoresSourceTrackAndSortsWishlistByArtistFamilyName() async throws {
         let collectionStore = PersistentLocalCollectionStore(fileURL: temporaryStoreURL(named: "collection"))
         let wishlistStore = PersistentLocalWishlistStore(

@@ -24,11 +24,18 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
     private let scanRuntime: LocalScanRuntime
     private let collectionStore: LocalCollectionStore
     private let wishlistStore: LocalWishlistStore
+    private let discoveryStore: LocalDiscoveryStore
 
-    public init(scanRuntime: LocalScanRuntime, collectionStore: LocalCollectionStore, wishlistStore: LocalWishlistStore = PersistentLocalWishlistStore()) {
+    public init(
+        scanRuntime: LocalScanRuntime,
+        collectionStore: LocalCollectionStore,
+        wishlistStore: LocalWishlistStore = PersistentLocalWishlistStore(),
+        discoveryStore: LocalDiscoveryStore = PersistentLocalDiscoveryStore()
+    ) {
         self.scanRuntime = scanRuntime
         self.collectionStore = collectionStore
         self.wishlistStore = wishlistStore
+        self.discoveryStore = discoveryStore
     }
 
     public func scan(imageData: Data, clientScanId: UUID, capturedAtIso: String?) async throws -> ScanResponse {
@@ -123,6 +130,9 @@ public final class LocalProxyApiClient: ApiClient, @unchecked Sendable {
         if response.status == "safe_to_buy", try await wishlistStore.contains(album: album) {
             return response.withStatus("wishlist_match")
         }
+        if response.status == "safe_to_buy", try await discoveryStore.contains(album: album) {
+            return response.withStatus("discovery_match")
+        }
         return response
     }
 }
@@ -141,14 +151,16 @@ public enum LocalProxyApiClientFactory {
         return LocalProxyApiClient(
             scanRuntime: scanRuntime,
             collectionStore: PersistentLocalCollectionStore(),
-            wishlistStore: PersistentLocalWishlistStore())
+            wishlistStore: PersistentLocalWishlistStore(),
+            discoveryStore: PersistentLocalDiscoveryStore())
     }
 
     public static func makeUnconfigured(recognitionProxyBaseURL: URL? = nil) -> LocalProxyApiClient {
         LocalProxyApiClient(
             scanRuntime: UnconfiguredLocalScanRuntime(recognitionProxyBaseURL: recognitionProxyBaseURL),
             collectionStore: UnconfiguredLocalCollectionStore(),
-            wishlistStore: UnconfiguredLocalWishlistStore())
+            wishlistStore: UnconfiguredLocalWishlistStore(),
+            discoveryStore: UnconfiguredLocalDiscoveryStore())
     }
 }
 
@@ -253,6 +265,42 @@ private struct UnconfiguredLocalWishlistStore: LocalWishlistStore {
 
     func deleteWishlistEntry(id: UUID) async throws {
         throw unconfiguredError(message: "Local wishlist storage is not configured yet.")
+    }
+
+    private func unconfiguredError(message: String) -> ApiClientError {
+        ApiClientError.httpError(
+            503,
+            ApiError(
+                code: "local_runtime_not_configured",
+                message: message,
+                retryable: false,
+                requestId: UUID()))
+    }
+}
+
+private struct UnconfiguredLocalDiscoveryStore: LocalDiscoveryStore {
+    func contains(album: Album) async throws -> Bool {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
+    }
+
+    func addDiscovery(source: String, album: Album?, track: AudioDiscoveryTrack?) async throws -> DiscoveryEntry {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
+    }
+
+    func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry] {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
+    }
+
+    func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
+    }
+
+    func deleteDiscovery(id: UUID) async throws {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
+    }
+
+    func deleteAllDiscoveries() async throws {
+        throw unconfiguredError(message: "Local discovery storage is not configured yet.")
     }
 
     private func unconfiguredError(message: String) -> ApiClientError {

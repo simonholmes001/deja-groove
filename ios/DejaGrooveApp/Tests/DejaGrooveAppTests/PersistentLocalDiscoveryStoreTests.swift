@@ -31,6 +31,29 @@ final class PersistentLocalDiscoveryStoreTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
+    func testContainsUsesSharedDuplicateRulesForDiscoveredAlbums() async throws {
+        let discoveryStore = PersistentLocalDiscoveryStore(fileURL: temporaryDiscoveryURL())
+        let discovered = Album(
+            mbid: nil,
+            discogsReleaseId: "3669035",
+            title: "Footprints Live!",
+            artist: "Wayne Shorter",
+            year: 2002,
+            format: "CD")
+        let scanned = Album(
+            mbid: nil,
+            discogsReleaseId: "3669035",
+            title: "Footprints Live!",
+            artist: "Wayne Shorter",
+            year: nil,
+            format: nil)
+
+        _ = try await discoveryStore.addDiscovery(source: "audio", album: discovered, track: nil)
+
+        let contains = try await discoveryStore.contains(album: scanned)
+        XCTAssertTrue(contains)
+    }
+
     func testFetchDiscoveriesSortsByArtistFamilyNameThenTitle() async throws {
         let store = PersistentLocalDiscoveryStore(
             fileURL: temporaryDiscoveryURL(),
