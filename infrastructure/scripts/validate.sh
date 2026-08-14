@@ -55,6 +55,11 @@ if grep -q "functionapp deployment source config-zip" "${SCRIPT_DIR}/deploy.sh";
   exit 1
 fi
 
+if [[ "${MODE}" != "--lint-only" && -z "${DISCOGS_TOKEN:-}" ]]; then
+  echo "Error: DISCOGS_TOKEN must be set for Discogs metadata enrichment." >&2
+  exit 1
+fi
+
 echo "==> Linting minimal Function Bicep..."
 az bicep lint --file "${MINIMAL_TEMPLATE}"
 az bicep lint --file "${ONE_DEPLOY_TEMPLATE}"
@@ -78,7 +83,7 @@ param openAiModel = 'gpt-5-mini'
 param scanIncludeTimings = true
 param enableApplicationInsights = true
 param openAiKey = readEnvironmentVariable('OPENAI_KEY', 'validation-placeholder')
-param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', 'validation-discogs-placeholder')
 param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
 PARAMS
 }

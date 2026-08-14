@@ -45,6 +45,10 @@ if [[ -z "${OPENAI_KEY:-}" ]]; then
   echo "Error: OPENAI_KEY must be set for the Function App configuration." >&2
   exit 1
 fi
+if [[ -z "${DISCOGS_TOKEN:-}" ]]; then
+  echo "Error: DISCOGS_TOKEN must be set for Discogs metadata enrichment." >&2
+  exit 1
+fi
 
 echo "==> Running minimal Function validation..."
 "${SCRIPT_DIR}/validate.sh" "${ENVIRONMENT}"
@@ -73,7 +77,7 @@ param openAiModel = 'gpt-5-mini'
 param scanIncludeTimings = true
 param enableApplicationInsights = true
 param openAiKey = readEnvironmentVariable('OPENAI_KEY')
-param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN')
 param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
 PARAMS
 }

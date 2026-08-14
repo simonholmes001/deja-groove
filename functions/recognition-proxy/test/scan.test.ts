@@ -115,6 +115,23 @@ test("toScanResponse preserves enriched album metadata for the app contract", ()
   assert.equal(response.album?.listening_links?.[0]?.provider, "Apple Music");
 });
 
+test("toScanResponse adds Apple Music search links to recognition-only albums", () => {
+  const response = toScanResponse({
+    status: "safe_to_buy",
+    confidence: 0.9,
+    album: {
+      ...baseResult().album!,
+      artist: "Iron Maiden",
+      title: "Powerslave",
+      listening_links: []
+    },
+    candidates: []
+  }, "00000000-0000-4000-8000-000000000004");
+
+  assert.equal(response.album?.listening_links?.[0]?.provider, "Apple Music");
+  assert.equal(response.album?.listening_links?.[0]?.url, "https://music.apple.com/search?term=Iron+Maiden+Powerslave");
+});
+
 test("scan handler returns recognition-only result when enrichment times out", async () => {
   const warnings: unknown[] = [];
   const handler = createScanHandler(

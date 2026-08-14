@@ -1,7 +1,7 @@
 import { app } from "@azure/functions";
 import { ArtworkFallbackAlbumEnrichment } from "./artworkFallback.js";
 import { CachedAlbumEnrichment } from "./cachedEnrichment.js";
-import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
+import { DiscogsAlbumEnrichment } from "./discogs.js";
 import { createAlbumEnrichHandler } from "./enrich.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
@@ -12,19 +12,19 @@ const apiKey = process.env.OPENAI_KEY;
 if (!apiKey) {
   throw new Error("OPENAI_KEY app setting is required.");
 }
+const discogsToken = process.env.DISCOGS_TOKEN;
+if (!discogsToken) {
+  throw new Error("DISCOGS_TOKEN app setting is required for Discogs metadata enrichment.");
+}
 
 const recognition = new OpenAIAlbumRecognition({
   apiKey,
   model: process.env.OPENAI_MODEL || "gpt-5-mini"
 });
 
-const enrichmentChain = process.env.DISCOGS_TOKEN
-  ? new ArtworkFallbackAlbumEnrichment({
-      primary: new DiscogsAlbumEnrichment({ token: process.env.DISCOGS_TOKEN })
-    })
-  : new ArtworkFallbackAlbumEnrichment({
-      primary: new NoopAlbumEnrichment()
-    });
+const enrichmentChain = new ArtworkFallbackAlbumEnrichment({
+  primary: new DiscogsAlbumEnrichment({ token: discogsToken })
+});
 const enrichment = new CachedAlbumEnrichment({
   inner: enrichmentChain,
   ttlMs: Number.parseInt(process.env.ENRICHMENT_CACHE_TTL_MS || "86400000", 10),

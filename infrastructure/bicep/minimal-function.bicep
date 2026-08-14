@@ -20,8 +20,9 @@ param appBaseName string = 'deja-recognition-${environment}'
 param openAiKey string
 
 @secure()
-@description('Optional Discogs API token. When supplied, it is stored in Key Vault and exposed to the Function as DISCOGS_TOKEN.')
-param discogsToken string = ''
+@minLength(1)
+@description('Required Discogs API token. This is stored in Key Vault and exposed to the Function as DISCOGS_TOKEN.')
+param discogsToken string
 
 @description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
 param deploymentPrincipalObjectId string = ''
@@ -30,7 +31,7 @@ param deploymentPrincipalObjectId string = ''
 param openAiModel string = 'gpt-5-mini'
 
 @description('Maximum time, in milliseconds, that scan requests wait for external metadata enrichment before returning recognition-only results.')
-param scanEnrichmentTimeoutMs int = 4000
+param scanEnrichmentTimeoutMs int = 12000
 
 @description('Emit detailed scan timing diagnostics in /v1/scan responses. Intended for dev/test diagnostics only.')
 param scanIncludeTimings bool = false

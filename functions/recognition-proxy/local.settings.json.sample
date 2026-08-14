@@ -5,7 +5,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "OPENAI_KEY": "replace-with-local-openai-key",
     "OPENAI_MODEL": "gpt-5-mini",
-    "SCAN_ENRICHMENT_TIMEOUT_MS": "4000",
+    "SCAN_ENRICHMENT_TIMEOUT_MS": "12000",
     "SCAN_INCLUDE_TIMINGS": "true",
     "ENRICHMENT_CACHE_TTL_MS": "86400000",
     "ENRICHMENT_CACHE_MAX_ENTRIES": "500",
