@@ -2,6 +2,7 @@ import { app } from "@azure/functions";
 import { ArtworkFallbackAlbumEnrichment } from "./artworkFallback.js";
 import { CachedAlbumEnrichment } from "./cachedEnrichment.js";
 import { DiscogsAlbumEnrichment, NoopAlbumEnrichment } from "./discogs.js";
+import { createAlbumEnrichHandler } from "./enrich.js";
 import { OpenAIAlbumRecognition } from "./openaiRecognition.js";
 import { createScanHandler } from "./scan.js";
 import { health } from "./health.js";
@@ -46,4 +47,11 @@ app.http("scan", {
     includeTimings: process.env.SCAN_INCLUDE_TIMINGS === "true",
     includeDebugDetails: process.env.SCAN_INCLUDE_DEBUG === "true"
   })
+});
+
+app.http("enrichAlbum", {
+  methods: ["POST"],
+  authLevel: "function",
+  route: "v1/enrich",
+  handler: createAlbumEnrichHandler(enrichment)
 });

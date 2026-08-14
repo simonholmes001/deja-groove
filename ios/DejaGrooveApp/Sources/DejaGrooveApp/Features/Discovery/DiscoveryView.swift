@@ -5,6 +5,7 @@ public struct DiscoveryView: View {
     @ObservedObject private var viewModel: DiscoveryViewModel
     @State private var selectedAlbum: Album?
     @State private var selectedTrack: AudioDiscoveryTrack?
+    @State private var isConfirmingClearHistory = false
 
     public init(viewModel: DiscoveryViewModel) {
         self.viewModel = viewModel
@@ -42,6 +43,12 @@ public struct DiscoveryView: View {
                 NavigationStack {
                     DiscoveryTrackDetailView(track: track.track)
                 }
+            }
+            .confirmationDialog("Clear Discovery History?", isPresented: $isConfirmingClearHistory, titleVisibility: .visible) {
+                Button("Clear History", role: .destructive) {
+                    Task { await viewModel.clearAllHistory() }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
@@ -165,6 +172,15 @@ public struct DiscoveryView: View {
                 Text("\(viewModel.visibleHistory.count)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                if !viewModel.history.isEmpty {
+                    Button(role: .destructive) {
+                        isConfirmingClearHistory = true
+                    } label: {
+                        Image(systemName: "trash.slash")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Clear Discovery History")
+                }
             }
             .padding(.horizontal, 4)
 

@@ -63,6 +63,33 @@ final class PersistentLocalDiscoveryStoreTests: XCTestCase {
         XCTAssertEqual(["Blue Train", "Goodbye Pork Pie Hat", "Saxophone Colossus"], entries.map { $0.album?.title ?? $0.track?.title ?? "" })
     }
 
+    func testDeleteAllDiscoveriesClearsPersistedHistory() async throws {
+        let store = PersistentLocalDiscoveryStore(
+            fileURL: temporaryDiscoveryURL(),
+            idProvider: DiscoveryFixedUUIDProvider(ids: [
+                UUID(uuidString: "00000000-0000-0000-0000-000000000721")!,
+                UUID(uuidString: "00000000-0000-0000-0000-000000000722")!
+            ]),
+            clock: DiscoveryFixedISO8601Clock(instants: [
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z"
+            ]))
+
+        _ = try await store.addDiscovery(
+            source: "scan",
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "The Chemical Wedding", artist: "Bruce Dickinson", year: 1998, format: "CD"),
+            track: nil)
+        _ = try await store.addDiscovery(
+            source: "audio",
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "Indigo", artist: "Miki Yamanaka", year: 2024, format: nil),
+            track: AudioDiscoveryTrack(title: "Indigo", artist: "Miki Yamanaka", matchedAt: "2026-01-02T00:00:00Z"))
+
+        try await store.deleteAllDiscoveries()
+
+        let remaining = try await store.fetchDiscoveries(search: nil)
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
     private func temporaryDiscoveryURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("dejagroove-discovery-\(UUID().uuidString)", isDirectory: true)

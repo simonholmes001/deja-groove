@@ -3,6 +3,50 @@ import XCTest
 @testable import DejaGrooveApp
 
 final class DiscoveryServicesTests: XCTestCase {
+    func testRecognitionProxyAlbumMetadataEnricherPostsAlbumAndDecodesSharedMetadata() async throws {
+        let payload = """
+        {
+          "album": {
+            "discogs_release_id": "123456",
+            "title": "Indigo",
+            "artist": "Miki Yamanaka",
+            "year": 2024,
+            "format": "Vinyl, LP",
+            "label": "Cellar Music",
+            "catalog_number": "CM-123",
+            "country": "US",
+            "genres": ["Jazz"],
+            "tracklist": [{ "position": "A1", "title": "Indigo", "duration": "4:12" }],
+            "listening_links": [{ "provider": "Apple Music", "url": "https://music.apple.com/album/indigo" }]
+          },
+          "request_id": "f0a47ed2-0054-41e7-9ea8-6b74b3f4afe8"
+        }
+        """
+        let transport = CapturingHttpTransport(data: Data(payload.utf8), statusCode: 200)
+        let enricher = RecognitionProxyAlbumMetadataEnricher(
+            baseURL: URL(string: "https://proxy.example")!,
+            functionKey: "function-key",
+            transport: transport)
+
+        let album = try await enricher.enrich(album: Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Indigo",
+            artist: "Miki Yamanaka",
+            year: 2024,
+            format: nil))
+
+        XCTAssertEqual(URL(string: "https://proxy.example/v1/enrich"), transport.lastRequest?.url)
+        XCTAssertEqual("POST", transport.lastRequest?.httpMethod)
+        XCTAssertEqual("function-key", transport.lastRequest?.value(forHTTPHeaderField: "x-functions-key"))
+        XCTAssertEqual("123456", album.discogsReleaseId)
+        XCTAssertEqual("Cellar Music", album.label)
+        XCTAssertEqual("CM-123", album.catalogNumber)
+        XCTAssertEqual("US", album.country)
+        XCTAssertEqual("Indigo", album.tracklist.first?.title)
+        XCTAssertEqual("Apple Music", album.listeningLinks.first?.provider)
+    }
+
     func testAppleMusicAlbumCandidateResolverMapsCatalogResultsToAlbumCandidates() async throws {
         let payload = """
         {
@@ -32,6 +76,27 @@ final class DiscoveryServicesTests: XCTestCase {
         XCTAssertEqual(1959, candidates.first?.year)
         XCTAssertEqual("Apple Music", candidates.first?.listeningLinks.first?.provider)
         XCTAssertEqual("1440857781", candidates.first?.listeningLinks.first?.catalogId)
+    }
+}
+
+private final class CapturingHttpTransport: HttpTransport, @unchecked Sendable {
+    let data: Data
+    let statusCode: Int
+    private(set) var lastRequest: URLRequest?
+
+    init(data: Data, statusCode: Int) {
+        self.data = data
+        self.statusCode = statusCode
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lastRequest = request
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil)!
+        return (data, response)
     }
 }
 

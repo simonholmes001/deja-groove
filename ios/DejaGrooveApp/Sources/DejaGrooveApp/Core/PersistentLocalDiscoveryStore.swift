@@ -5,6 +5,7 @@ public protocol LocalDiscoveryStore: Sendable {
     func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry]
     func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry
     func deleteDiscovery(id: UUID) async throws
+    func deleteAllDiscoveries() async throws
 }
 
 struct LocalDiscoveryDocument: Codable, Equatable {
@@ -106,6 +107,12 @@ public actor PersistentLocalDiscoveryStore: LocalDiscoveryStore {
             throw discoveryEntryNotFoundError()
         }
         document.entries.removeAll { $0.id == id }
+        try documentStore.save(document)
+    }
+
+    public func deleteAllDiscoveries() async throws {
+        var document = try documentStore.load()
+        document.entries.removeAll()
         try documentStore.save(document)
     }
 

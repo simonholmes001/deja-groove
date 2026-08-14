@@ -76,6 +76,52 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(track, snapshot.entries.first?.track)
     }
 
+    func testIdentifyPlayingAudioStoresEnrichedAlbumCandidatesWithListeningLinks() async {
+        let track = AudioDiscoveryTrack(title: "Indigo", artist: "Miki Yamanaka", matchedAt: "2026-08-14T10:23:00Z")
+        let candidate = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Indigo",
+            artist: "Miki Yamanaka",
+            year: 2024,
+            format: nil,
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/indigo")])
+        let enriched = Album(
+            mbid: nil,
+            discogsReleaseId: "123456",
+            title: "Indigo",
+            artist: "Miki Yamanaka",
+            year: 2024,
+            format: "Vinyl, LP",
+            label: "Cellar Music",
+            catalogNumber: "CM-123",
+            country: "US",
+            genres: ["Jazz"],
+            styles: ["Contemporary Jazz"],
+            tracklist: [AlbumTrack(position: "A1", title: "Indigo", duration: "4:12")],
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/indigo")])
+        let discoveryStore = DiscoveryStoreSpy()
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            discoveryStore: discoveryStore,
+            audioDiscovery: AudioDiscoveryServiceStub(track: track),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [candidate]),
+            albumEnricher: AlbumMetadataEnricherStub(enrichedAlbums: [enriched]),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+
+        XCTAssertEqual("123456", sut.candidates.first?.discogsReleaseId)
+        XCTAssertEqual("Cellar Music", sut.candidates.first?.label)
+        XCTAssertEqual("CM-123", sut.candidates.first?.catalogNumber)
+        XCTAssertEqual("US", sut.candidates.first?.country)
+        XCTAssertEqual(["Jazz"], sut.candidates.first?.genres)
+        XCTAssertEqual("Indigo", sut.candidates.first?.tracklist.first?.title)
+        XCTAssertEqual("Apple Music", sut.candidates.first?.listeningLinks.first?.provider)
+        let snapshot = await discoveryStore.snapshot()
+        XCTAssertEqual(enriched, snapshot.entries.first?.album)
+    }
+
     func testIdentifyPlayingAudioSurfacesServiceMessageWhenMicrophonePermissionIsDenied() async {
         let error = ApiClientError.httpError(
             403,
@@ -115,6 +161,27 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(album, snapshot.wishlistAlbums.first)
         XCTAssertEqual(track, snapshot.sourceTracks.first)
         XCTAssertEqual("Added to Wishlist.", sut.message)
+    }
+
+    func testClearAllHistoryRemovesVisibleAndPersistedDiscoveries() async {
+        let discoveryStore = DiscoveryStoreSpy()
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            discoveryStore: discoveryStore,
+            audioDiscovery: AudioDiscoveryServiceStub(),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [
+                Album(mbid: nil, discogsReleaseId: nil, title: "Indigo", artist: "Miki Yamanaka", year: 2024, format: nil)
+            ]),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+        XCTAssertEqual(1, sut.history.count)
+
+        await sut.clearAllHistory()
+
+        XCTAssertTrue(sut.history.isEmpty)
+        let snapshot = await discoveryStore.snapshot()
+        XCTAssertTrue(snapshot.entries.isEmpty)
     }
 }
 
@@ -189,6 +256,14 @@ private struct AlbumCandidateResolverStub: AlbumCandidateResolver {
     }
 }
 
+private struct AlbumMetadataEnricherStub: AlbumMetadataEnricher {
+    var enrichedAlbums: [Album] = []
+
+    func enrich(album: Album) async throws -> Album {
+        enrichedAlbums.first { $0.title == album.title && $0.artist == album.artist } ?? album
+    }
+}
+
 private actor DiscoveryStoreSpy: LocalDiscoveryStore {
     private(set) var entries: [DiscoveryEntry] = []
 
@@ -211,6 +286,10 @@ private actor DiscoveryStoreSpy: LocalDiscoveryStore {
 
     func deleteDiscovery(id: UUID) async throws {
         entries.removeAll { $0.id == id }
+    }
+
+    func deleteAllDiscoveries() async throws {
+        entries.removeAll()
     }
 
     func snapshot() -> DiscoveryStoreSnapshot {

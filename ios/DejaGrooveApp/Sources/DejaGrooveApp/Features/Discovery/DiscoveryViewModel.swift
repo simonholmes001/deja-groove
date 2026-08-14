@@ -14,6 +14,7 @@ public final class DiscoveryViewModel: ObservableObject {
     private let discoveryStore: LocalDiscoveryStore
     private let audioDiscovery: AudioDiscoveryService
     private let candidateResolver: AlbumCandidateResolver
+    private let albumEnricher: AlbumMetadataEnricher
     private let musicAuthorization: MusicAuthorizationControlling
 
     public init(
@@ -21,12 +22,14 @@ public final class DiscoveryViewModel: ObservableObject {
         discoveryStore: LocalDiscoveryStore = PersistentLocalDiscoveryStore(),
         audioDiscovery: AudioDiscoveryService = UnavailableAudioDiscoveryService(),
         candidateResolver: AlbumCandidateResolver = LocalAlbumCandidateResolver(),
+        albumEnricher: AlbumMetadataEnricher = NoopAlbumMetadataEnricher(),
         musicAuthorization: MusicAuthorizationControlling = UnavailableMusicAuthorizationController()
     ) {
         self.api = api
         self.discoveryStore = discoveryStore
         self.audioDiscovery = audioDiscovery
         self.candidateResolver = candidateResolver
+        self.albumEnricher = albumEnricher
         self.musicAuthorization = musicAuthorization
     }
 
@@ -67,7 +70,7 @@ public final class DiscoveryViewModel: ObservableObject {
         do {
             let match = try await audioDiscovery.identifyCurrentAudio()
             track = match
-            candidates = try await candidateResolver.albumCandidates(for: match)
+            candidates = await enrichAlbums(try await candidateResolver.albumCandidates(for: match))
             _ = try await discoveryStore.addDiscovery(source: "audio", album: candidates.first, track: match)
             history = try await discoveryStore.fetchDiscoveries(search: nil)
             message = candidates.isEmpty ? "Audio identified. No album candidates found." : nil
@@ -98,6 +101,65 @@ public final class DiscoveryViewModel: ObservableObject {
         } catch {
             message = "Failed to delete discovery."
         }
+    }
+
+    public func clearAllHistory() async {
+        do {
+            try await discoveryStore.deleteAllDiscoveries()
+            history.removeAll()
+            message = nil
+        } catch {
+            message = "Failed to clear discovery history."
+        }
+    }
+
+    private func enrichAlbums(_ albums: [Album]) async -> [Album] {
+        var enrichedAlbums: [Album] = []
+        for album in albums {
+            do {
+                let enriched = try await albumEnricher.enrich(album: album)
+                enrichedAlbums.append(preservingListeningLinks(from: album, in: enriched))
+            } catch {
+                enrichedAlbums.append(album)
+            }
+        }
+        return enrichedAlbums
+    }
+
+    private func preservingListeningLinks(from original: Album, in enriched: Album) -> Album {
+        guard enriched.listeningLinks.isEmpty, !original.listeningLinks.isEmpty else {
+            return enriched
+        }
+        return Album(
+            mbid: enriched.mbid,
+            discogsReleaseId: enriched.discogsReleaseId,
+            discogsMasterId: enriched.discogsMasterId,
+            discogsUrl: enriched.discogsUrl,
+            discogsResourceUrl: enriched.discogsResourceUrl,
+            title: enriched.title,
+            artist: enriched.artist,
+            year: enriched.year,
+            format: enriched.format,
+            firstReleaseYear: enriched.firstReleaseYear,
+            releaseYear: enriched.releaseYear,
+            firstReleaseDate: enriched.firstReleaseDate,
+            releaseDate: enriched.releaseDate,
+            label: enriched.label,
+            catalogNumber: enriched.catalogNumber,
+            country: enriched.country,
+            barcode: enriched.barcode,
+            coverImageUrl: enriched.coverImageUrl,
+            thumbnailUrl: enriched.thumbnailUrl,
+            backCoverImageUrl: enriched.backCoverImageUrl,
+            backCoverText: enriched.backCoverText,
+            releaseNotes: enriched.releaseNotes,
+            genres: enriched.genres,
+            styles: enriched.styles,
+            companies: enriched.companies,
+            tracklist: enriched.tracklist,
+            identifiers: enriched.identifiers,
+            discogsDataQuality: enriched.discogsDataQuality,
+            listeningLinks: original.listeningLinks)
     }
 
     private static func message(for error: ApiClientError) -> String {

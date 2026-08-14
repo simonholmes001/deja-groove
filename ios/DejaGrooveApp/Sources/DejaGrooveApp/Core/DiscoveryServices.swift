@@ -12,6 +12,10 @@ public protocol MusicCatalogLinkResolver: Sendable {
     func enrichListeningLinks(for album: Album) async throws -> Album
 }
 
+public protocol AlbumMetadataEnricher: Sendable {
+    func enrich(album: Album) async throws -> Album
+}
+
 public enum MusicAuthorizationStatus: Equatable, Sendable {
     case authorized
     case denied
@@ -65,6 +69,61 @@ public struct UnavailableMusicCatalogLinkResolver: MusicCatalogLinkResolver {
     public func enrichListeningLinks(for album: Album) async throws -> Album {
         album
     }
+}
+
+public struct NoopAlbumMetadataEnricher: AlbumMetadataEnricher {
+    public init() {}
+
+    public func enrich(album: Album) async throws -> Album {
+        album
+    }
+}
+
+public final class RecognitionProxyAlbumMetadataEnricher: AlbumMetadataEnricher, @unchecked Sendable {
+    private let baseURL: URL
+    private let functionKey: String
+    private let transport: HttpTransport
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    public init(
+        baseURL: URL,
+        functionKey: String,
+        transport: HttpTransport = URLSessionTransport(session: .shared)
+    ) {
+        self.baseURL = baseURL
+        self.functionKey = functionKey
+        self.transport = transport
+        self.encoder = JSONEncoder()
+        self.decoder = JSONDecoder()
+    }
+
+    public func enrich(album: Album) async throws -> Album {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/enrich"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(functionKey, forHTTPHeaderField: "x-functions-key")
+        request.httpBody = try encoder.encode(AlbumMetadataEnrichmentRequest(album: album))
+
+        let (data, response) = try await transport.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
+
+        if (200..<300).contains(http.statusCode) {
+            return try decoder.decode(AlbumMetadataEnrichmentResponse.self, from: data).album
+        }
+
+        let envelope = try? decoder.decode(ApiErrorEnvelope.self, from: data)
+        throw ApiClientError.httpError(http.statusCode, envelope?.error)
+    }
+}
+
+private struct AlbumMetadataEnrichmentRequest: Encodable {
+    let album: Album
+}
+
+private struct AlbumMetadataEnrichmentResponse: Decodable {
+    let album: Album
 }
 
 public struct UnavailableMusicAuthorizationController: MusicAuthorizationControlling {

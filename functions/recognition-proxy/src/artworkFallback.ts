@@ -28,6 +28,8 @@ type ITunesSearchResponse = {
 type ITunesAlbumResult = {
   artistName?: string;
   collectionName?: string;
+  collectionId?: number;
+  collectionViewUrl?: string;
   artworkUrl100?: string;
   releaseDate?: string;
 };
@@ -53,10 +55,10 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
 
   async enrich(album: Album, options: AlbumEnrichmentOptions = {}): Promise<Album> {
     const enriched = await this.primary.enrich(album, options);
-    if (hasCompleteArtwork(enriched)) return enriched;
+    if (hasCompleteArtwork(enriched) && hasListeningLink(enriched)) return enriched;
 
     const withCoverArtArchive = await this.tryApplyCoverArtArchive(enriched, options);
-    if (hasFrontArtwork(withCoverArtArchive) && hasBackArtwork(withCoverArtArchive)) {
+    if (hasFrontArtwork(withCoverArtArchive) && hasBackArtwork(withCoverArtArchive) && hasListeningLink(withCoverArtArchive)) {
       return withCoverArtArchive;
     }
 
@@ -125,17 +127,24 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
   }
 
   private async applyITunes(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
-    if (hasFrontArtwork(album)) return album;
-
     const result = await this.fetchITunesAlbum(album, options);
-    const artwork = clean(result?.artworkUrl100);
-    if (!artwork) return album;
+    if (!result) return album;
 
-    const highResolutionArtwork = resizeITunesArtwork(artwork, 600);
+    const artwork = clean(result.artworkUrl100);
+    const listeningLink = clean(result.collectionViewUrl);
+    const currentLinks = album.listening_links || [];
+
     return {
       ...album,
-      cover_image_url: highResolutionArtwork,
-      thumbnail_url: album.thumbnail_url || resizeITunesArtwork(artwork, 100)
+      cover_image_url: album.cover_image_url || (artwork ? resizeITunesArtwork(artwork, 600) : null),
+      thumbnail_url: album.thumbnail_url || (artwork ? resizeITunesArtwork(artwork, 100) : null),
+      listening_links: currentLinks.length > 0 || !listeningLink
+        ? currentLinks
+        : [{
+            provider: "Apple Music",
+            url: listeningLink,
+            catalog_id: result.collectionId?.toString() || null
+          }]
     };
   }
 
@@ -172,6 +181,10 @@ function hasFrontArtwork(album: Album): boolean {
 
 function hasBackArtwork(album: Album): boolean {
   return Boolean(clean(album.back_cover_image_url));
+}
+
+function hasListeningLink(album: Album): boolean {
+  return (album.listening_links || []).some((link) => clean(link.url));
 }
 
 function selectImage(images: CoverArtArchiveImage[], kind: "front" | "back"): CoverArtArchiveImage | null {

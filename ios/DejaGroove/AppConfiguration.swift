@@ -56,8 +56,8 @@ enum AppConfiguration {
 }
 
 struct LoadedAppConfiguration {
-    let recognitionProxyBaseURL: URL?
-    let recognitionProxyKey: String?
+    let recognitionProxyBaseURL: URL
+    let recognitionProxyKey: String
 }
 
 enum AppConfigurationError: Error, LocalizedError {

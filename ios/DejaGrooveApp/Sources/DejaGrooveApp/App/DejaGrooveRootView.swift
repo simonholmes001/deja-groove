@@ -7,7 +7,7 @@ public struct DejaGrooveRootView: View {
     @StateObject private var wishlistViewModel: WishlistViewModel
     @StateObject private var discoveryViewModel: DiscoveryViewModel
 
-    public init(api: ApiClient) {
+    public init(api: ApiClient, albumEnricher: AlbumMetadataEnricher = NoopAlbumMetadataEnricher()) {
         self.api = api
         _collectionViewModel = StateObject(wrappedValue: CollectionViewModel(api: api))
         _wishlistViewModel = StateObject(wrappedValue: WishlistViewModel(api: api))
@@ -15,6 +15,7 @@ public struct DejaGrooveRootView: View {
             api: api,
             audioDiscovery: DejaGrooveAudioDiscoveryFactory.make(),
             candidateResolver: DejaGrooveAlbumCandidateResolverFactory.make(),
+            albumEnricher: albumEnricher,
             musicAuthorization: DejaGrooveMusicAuthorizationFactory.make()))
     }
 

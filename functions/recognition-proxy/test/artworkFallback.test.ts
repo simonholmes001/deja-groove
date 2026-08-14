@@ -4,13 +4,17 @@ import { ArtworkFallbackAlbumEnrichment } from "../src/artworkFallback.js";
 import type { Album } from "../src/contracts.js";
 import type { AlbumEnrichmentPort } from "../src/discogs.js";
 
-test("ArtworkFallbackAlbumEnrichment preserves complete primary artwork", async () => {
+test("ArtworkFallbackAlbumEnrichment preserves complete primary artwork and listening links", async () => {
   const requests: string[] = [];
   const enrichment = new ArtworkFallbackAlbumEnrichment({
     primary: new StubEnrichment({
       cover_image_url: "https://discogs.test/front.jpg",
       thumbnail_url: "https://discogs.test/thumb.jpg",
-      back_cover_image_url: "https://discogs.test/back.jpg"
+      back_cover_image_url: "https://discogs.test/back.jpg",
+      listening_links: [{
+        provider: "Apple Music",
+        url: "https://music.apple.com/album/kind-of-blue"
+      }]
     }),
     fetchImpl: async (input) => {
       requests.push(String(input));
@@ -23,6 +27,7 @@ test("ArtworkFallbackAlbumEnrichment preserves complete primary artwork", async 
   assert.equal(album.cover_image_url, "https://discogs.test/front.jpg");
   assert.equal(album.thumbnail_url, "https://discogs.test/thumb.jpg");
   assert.equal(album.back_cover_image_url, "https://discogs.test/back.jpg");
+  assert.equal(album.listening_links?.[0]?.url, "https://music.apple.com/album/kind-of-blue");
   assert.deepEqual(requests, []);
 });
 
@@ -56,8 +61,9 @@ test("ArtworkFallbackAlbumEnrichment fills missing front and back artwork from C
 
   const album = await enrichment.enrich(baseAlbum());
 
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   assert.match(requests[0], /cover-art\.test\/release\/mbid-1$/);
+  assert.match(requests[1], /itunes\.apple\.com\/search\?/);
   assert.equal(album.cover_image_url, "https://cover-art.test/release/front.jpg");
   assert.equal(album.thumbnail_url, "https://cover-art.test/release/front-500.jpg");
   assert.equal(album.back_cover_image_url, "https://cover-art.test/release/back.jpg");
@@ -80,6 +86,8 @@ test("ArtworkFallbackAlbumEnrichment falls back to iTunes when front artwork is 
           {
             artistName: "Sonny Rollins",
             collectionName: "The Bridge",
+            collectionId: 12345,
+            collectionViewUrl: "https://music.apple.com/album/the-bridge",
             artworkUrl100: "https://is1-ssl.mzstatic.com/image/thumb/Music/yy/source/100x100bb.jpg"
           }
         ]
@@ -99,6 +107,43 @@ test("ArtworkFallbackAlbumEnrichment falls back to iTunes when front artwork is 
   assert.equal(album.cover_image_url, "https://is1-ssl.mzstatic.com/image/thumb/Music/yy/source/600x600bb.jpg");
   assert.equal(album.thumbnail_url, "https://is1-ssl.mzstatic.com/image/thumb/Music/yy/source/100x100bb.jpg");
   assert.equal(album.back_cover_image_url, null);
+  assert.equal(album.listening_links?.[0]?.provider, "Apple Music");
+  assert.equal(album.listening_links?.[0]?.url, "https://music.apple.com/album/the-bridge");
+  assert.equal(album.listening_links?.[0]?.catalog_id, "12345");
+});
+
+test("ArtworkFallbackAlbumEnrichment adds Apple Music listening link when Discogs artwork is complete", async () => {
+  const requests: string[] = [];
+  const enrichment = new ArtworkFallbackAlbumEnrichment({
+    primary: new StubEnrichment({
+      cover_image_url: "https://discogs.test/front.jpg",
+      thumbnail_url: "https://discogs.test/thumb.jpg",
+      back_cover_image_url: "https://discogs.test/back.jpg"
+    }),
+    itunesBaseURL: "https://itunes.test",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return jsonResponse({
+        results: [{
+          artistName: "Miles Davis",
+          collectionName: "Kind of Blue",
+          collectionId: 1440857781,
+          collectionViewUrl: "https://music.apple.com/album/kind-of-blue",
+          artworkUrl100: "https://is1-ssl.mzstatic.com/image/thumb/Music/yy/source/100x100bb.jpg"
+        }]
+      });
+    }
+  });
+
+  const album = await enrichment.enrich(baseAlbum());
+
+  assert.equal(requests.length, 1);
+  assert.match(requests[0], /itunes\.test\/search\?/);
+  assert.equal(album.cover_image_url, "https://discogs.test/front.jpg");
+  assert.equal(album.back_cover_image_url, "https://discogs.test/back.jpg");
+  assert.equal(album.listening_links?.[0]?.provider, "Apple Music");
+  assert.equal(album.listening_links?.[0]?.url, "https://music.apple.com/album/kind-of-blue");
+  assert.equal(album.listening_links?.[0]?.catalog_id, "1440857781");
 });
 
 test("ArtworkFallbackAlbumEnrichment tries release-group artwork after release artwork is missing", async () => {
@@ -123,9 +168,10 @@ test("ArtworkFallbackAlbumEnrichment tries release-group artwork after release a
 
   const album = await enrichment.enrich(baseAlbum());
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.match(requests[0], /cover-art\.test\/release\/mbid-1$/);
   assert.match(requests[1], /cover-art\.test\/release-group\/mbid-1$/);
+  assert.match(requests[2], /itunes\.apple\.com\/search\?/);
   assert.equal(album.cover_image_url, "https://cover-art.test/release-group/front.jpg");
 });
 
