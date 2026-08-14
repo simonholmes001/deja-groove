@@ -28,11 +28,12 @@ assert_not_contains() {
 assert_contains "functions/recognition-proxy/src/index.ts" "DISCOGS_TOKEN app setting is required" "runtime fail-fast Discogs guard"
 assert_not_contains "functions/recognition-proxy/src/index.ts" "NoopAlbumEnrichment" "Noop Discogs fallback runtime path"
 
-assert_contains "infrastructure/scripts/deploy.sh" "verify_existing_discogs_secret" "deploy-time existing Key Vault Discogs guard"
-assert_contains "infrastructure/scripts/deploy.sh" "Using existing Key Vault" "existing Key Vault Discogs deployment path"
+assert_contains "infrastructure/scripts/deploy.sh" "describe_discogs_secret_source" "deployment Discogs source reporting"
+assert_contains "infrastructure/scripts/deploy.sh" "verify_key_vault_reference" "post-deploy Function App Key Vault reference guard"
 assert_contains "infrastructure/scripts/deploy.sh" "readEnvironmentVariable('DISCOGS_TOKEN', '')" "optional bootstrap Discogs token parameter"
+assert_not_contains "infrastructure/scripts/deploy.sh" "az keyvault secret show" "pre-deploy Key Vault data-plane secret read"
 
-assert_contains "infrastructure/scripts/validate.sh" "verify_existing_discogs_secret" "validation-time existing Key Vault Discogs guard"
+assert_not_contains "infrastructure/scripts/validate.sh" "az keyvault secret show" "validation-time Key Vault data-plane secret read"
 assert_contains "infrastructure/bicep/minimal-function.bicep" "param discogsToken string = ''" "optional Discogs token bootstrap parameter"
 assert_contains "infrastructure/bicep/recognition-function.bicep" "param discogsToken string = ''" "optional Function Discogs token bootstrap parameter"
 assert_contains "infrastructure/bicep/recognition-function.bicep" "name: 'DISCOGS_TOKEN'" "Function App Discogs app setting"

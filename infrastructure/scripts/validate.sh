@@ -10,8 +10,6 @@ ONE_DEPLOY_TEMPLATE="${BICEP_DIR}/function-onedeploy.bicep"
 PARAMS_FILE="${BICEP_DIR}/parameters/${ENVIRONMENT}.bicepparam"
 DEPLOY_LOCATION="${AZURE_LOCATION:-swedencentral}"
 EFFECTIVE_PARAMS_FILE=""
-RESOURCE_GROUP_NAME="rg-deja-groove-dev-recognition"
-KEY_VAULT_SECRET_NAME="DISCOGS-TOKEN"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev> [--lint-only|--what-if]" >&2
@@ -56,38 +54,6 @@ if grep -q "functionapp deployment source config-zip" "${SCRIPT_DIR}/deploy.sh";
   echo "Error: Flex Consumption deployments must use One Deploy, not classic config-zip." >&2
   exit 1
 fi
-
-verify_existing_discogs_secret() {
-  if [[ "${MODE}" == "--lint-only" || -n "${DISCOGS_TOKEN:-}" ]]; then
-    return 0
-  fi
-
-  local key_vault_name="${DISCOGS_KEY_VAULT_NAME:-}"
-  if [[ -z "${key_vault_name}" ]]; then
-    key_vault_name="$(az keyvault list \
-      --resource-group "${RESOURCE_GROUP_NAME}" \
-      --query "[?starts_with(name, 'dejarecdev')].name | [0]" \
-      --output tsv 2>/dev/null || true)"
-  fi
-
-  if [[ -z "${key_vault_name}" ]]; then
-    echo "Error: DISCOGS_TOKEN is not set and no dev Key Vault was found in ${RESOURCE_GROUP_NAME}." >&2
-    echo "Set DISCOGS_TOKEN to bootstrap the secret, or set DISCOGS_KEY_VAULT_NAME to a vault containing ${KEY_VAULT_SECRET_NAME}." >&2
-    exit 1
-  fi
-
-  if ! az keyvault secret show \
-    --vault-name "${key_vault_name}" \
-    --name "${KEY_VAULT_SECRET_NAME}" \
-    --query "attributes.enabled" \
-    --output tsv 2>/dev/null | grep -qx "true"; then
-    echo "Error: DISCOGS_TOKEN is not set and ${KEY_VAULT_SECRET_NAME} is not enabled in Key Vault ${key_vault_name}." >&2
-    echo "Set DISCOGS_TOKEN to bootstrap the secret, or restore the existing Key Vault secret." >&2
-    exit 1
-  fi
-}
-
-verify_existing_discogs_secret
 
 echo "==> Linting minimal Function Bicep..."
 az bicep lint --file "${MINIMAL_TEMPLATE}"
