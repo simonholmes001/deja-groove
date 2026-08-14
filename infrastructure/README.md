@@ -18,7 +18,8 @@ collection state, scan state, duplicate detection, and local persistence.
 - Azure resource access: Function system-assigned managed identity
 - Observability: minimal Application Insights for Function request/error/timing diagnostics
 - Required pipeline secret: `OPENAI_KEY`
-- Required pipeline secret for Discogs enrichment: `DISCOGS_TOKEN`
+- Required runtime secret: Key Vault secret `DISCOGS-TOKEN`
+- Optional bootstrap pipeline secret for rotating or creating Discogs enrichment: `DISCOGS_TOKEN`
 - `POST /v1/scan` requires an Azure Functions key; `GET /health` is anonymous.
 - Out of scope: hosted collection API, PostgreSQL, APIM, App Service
   containers, container registry, Entra-backed API auth, and private network
@@ -54,7 +55,8 @@ For GitHub OIDC login:
 For Function App configuration:
 
 - `OPENAI_KEY` (pipeline secret, written into Key Vault during deployment)
-- `DISCOGS_TOKEN` (pipeline secret, written into Key Vault as `DISCOGS-TOKEN` and exposed to the Function as `DISCOGS_TOKEN`)
+- `DISCOGS-TOKEN` (Key Vault secret, exposed to the Function as `DISCOGS_TOKEN`)
+- `DISCOGS_TOKEN` (optional pipeline secret; when present, deployment writes/rotates Key Vault `DISCOGS-TOKEN`)
 - `SCAN_ENRICHMENT_TIMEOUT_MS` defaults to `12000`.
 - `ENRICHMENT_CACHE_TTL_MS` defaults to `86400000` for a 24-hour warm-instance metadata/artwork cache. The cache is in-memory per Function instance; cold starts and parallel instances do not share cached entries.
 - `ENRICHMENT_CACHE_MAX_ENTRIES` defaults to `500`.

@@ -14,6 +14,8 @@ DEPLOYMENT_NAME="deja-minimal-function-${ENVIRONMENT:-unknown}-${TIMESTAMP}"
 PACKAGE_BLOB_NAME="released-package.zip"
 DEPLOYMENT_PRINCIPAL_OBJECT_ID="${AZURE_CLIENT_OBJECT_ID:-}"
 EFFECTIVE_PARAMS_FILE=""
+RESOURCE_GROUP_NAME="rg-deja-groove-dev-recognition"
+KEY_VAULT_SECRET_NAME="DISCOGS-TOKEN"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev>" >&2
@@ -45,10 +47,41 @@ if [[ -z "${OPENAI_KEY:-}" ]]; then
   echo "Error: OPENAI_KEY must be set for the Function App configuration." >&2
   exit 1
 fi
-if [[ -z "${DISCOGS_TOKEN:-}" ]]; then
-  echo "Error: DISCOGS_TOKEN must be set for Discogs metadata enrichment." >&2
-  exit 1
-fi
+
+verify_existing_discogs_secret() {
+  if [[ -n "${DISCOGS_TOKEN:-}" ]]; then
+    echo "Discogs token supplied by deployment environment; Key Vault secret will be updated."
+    return 0
+  fi
+
+  local key_vault_name="${DISCOGS_KEY_VAULT_NAME:-}"
+  if [[ -z "${key_vault_name}" ]]; then
+    key_vault_name="$(az keyvault list \
+      --resource-group "${RESOURCE_GROUP_NAME}" \
+      --query "[?starts_with(name, 'dejarecdev')].name | [0]" \
+      --output tsv 2>/dev/null || true)"
+  fi
+
+  if [[ -z "${key_vault_name}" ]]; then
+    echo "Error: DISCOGS_TOKEN is not set and no dev Key Vault was found in ${RESOURCE_GROUP_NAME}." >&2
+    echo "Set DISCOGS_TOKEN to bootstrap the secret, or set DISCOGS_KEY_VAULT_NAME to a vault containing ${KEY_VAULT_SECRET_NAME}." >&2
+    exit 1
+  fi
+
+  if ! az keyvault secret show \
+    --vault-name "${key_vault_name}" \
+    --name "${KEY_VAULT_SECRET_NAME}" \
+    --query "attributes.enabled" \
+    --output tsv 2>/dev/null | grep -qx "true"; then
+    echo "Error: DISCOGS_TOKEN is not set and ${KEY_VAULT_SECRET_NAME} is not enabled in Key Vault ${key_vault_name}." >&2
+    echo "Set DISCOGS_TOKEN to bootstrap the secret, or restore the existing Key Vault secret." >&2
+    exit 1
+  fi
+
+  echo "Using existing Key Vault ${KEY_VAULT_SECRET_NAME} secret from ${key_vault_name}."
+}
+
+verify_existing_discogs_secret
 
 echo "==> Running minimal Function validation..."
 "${SCRIPT_DIR}/validate.sh" "${ENVIRONMENT}"
@@ -77,7 +110,7 @@ param openAiModel = 'gpt-5-mini'
 param scanIncludeTimings = true
 param enableApplicationInsights = true
 param openAiKey = readEnvironmentVariable('OPENAI_KEY')
-param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
 param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
 PARAMS
 }

@@ -20,9 +20,8 @@ param appBaseName string = 'deja-recognition-${environment}'
 param openAiKey string
 
 @secure()
-@minLength(1)
-@description('Required Discogs API token. This is stored in Key Vault and exposed to the Function as DISCOGS_TOKEN.')
-param discogsToken string
+@description('Optional Discogs API token. When supplied, it is stored in Key Vault; otherwise the existing Key Vault DISCOGS-TOKEN secret is referenced.')
+param discogsToken string = ''
 
 @description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
 param deploymentPrincipalObjectId string = ''

@@ -11,9 +11,8 @@ param appBaseName string
 param openAiKey string
 
 @secure()
-@minLength(1)
-@description('Required Discogs API token. This is stored in Key Vault and referenced by the Function App.')
-param discogsToken string
+@description('Optional Discogs API token. When supplied, it is stored in Key Vault; otherwise the existing Key Vault DISCOGS-TOKEN secret is referenced.')
+param discogsToken string = ''
 
 @description('Optional object ID for the deployment principal that uploads Function packages to deployment storage.')
 param deploymentPrincipalObjectId string = ''
@@ -110,13 +109,17 @@ resource openAiSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource discogsSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource discogsSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(discogsToken)) {
   parent: keyVault
   name: 'DISCOGS-TOKEN'
   properties: {
     value: discogsToken
   }
 }
+
+var discogsSecretUri = !empty(discogsToken)
+  ? discogsSecret!.properties.secretUriWithVersion
+  : '${keyVault.properties.vaultUri}secrets/DISCOGS-TOKEN'
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (enableApplicationInsights) {
   name: appInsightsName
@@ -216,7 +219,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       ], [
         {
           name: 'DISCOGS_TOKEN'
-          value: '@Microsoft.KeyVault(SecretUri=${discogsSecret.properties.secretUriWithVersion})'
+          value: '@Microsoft.KeyVault(SecretUri=${discogsSecretUri})'
         }
       ]), enableApplicationInsights ? [
         {

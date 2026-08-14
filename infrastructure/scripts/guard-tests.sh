@@ -28,14 +28,16 @@ assert_not_contains() {
 assert_contains "functions/recognition-proxy/src/index.ts" "DISCOGS_TOKEN app setting is required" "runtime fail-fast Discogs guard"
 assert_not_contains "functions/recognition-proxy/src/index.ts" "NoopAlbumEnrichment" "Noop Discogs fallback runtime path"
 
-assert_contains "infrastructure/scripts/deploy.sh" "DISCOGS_TOKEN must be set for Discogs metadata enrichment" "deploy-time Discogs guard"
-assert_contains "infrastructure/scripts/deploy.sh" "readEnvironmentVariable('DISCOGS_TOKEN')" "required deployment Discogs parameter"
-assert_not_contains "infrastructure/scripts/deploy.sh" "readEnvironmentVariable('DISCOGS_TOKEN', '')" "optional deployment Discogs parameter"
+assert_contains "infrastructure/scripts/deploy.sh" "verify_existing_discogs_secret" "deploy-time existing Key Vault Discogs guard"
+assert_contains "infrastructure/scripts/deploy.sh" "Using existing Key Vault" "existing Key Vault Discogs deployment path"
+assert_contains "infrastructure/scripts/deploy.sh" "readEnvironmentVariable('DISCOGS_TOKEN', '')" "optional bootstrap Discogs token parameter"
 
-assert_contains "infrastructure/scripts/validate.sh" "DISCOGS_TOKEN must be set for Discogs metadata enrichment" "validation-time Discogs guard"
-assert_not_contains "infrastructure/bicep/minimal-function.bicep" "param discogsToken string = ''" "optional minimal Bicep Discogs token"
-assert_not_contains "infrastructure/bicep/recognition-function.bicep" "param discogsToken string = ''" "optional Function Bicep Discogs token"
+assert_contains "infrastructure/scripts/validate.sh" "verify_existing_discogs_secret" "validation-time existing Key Vault Discogs guard"
+assert_contains "infrastructure/bicep/minimal-function.bicep" "param discogsToken string = ''" "optional Discogs token bootstrap parameter"
+assert_contains "infrastructure/bicep/recognition-function.bicep" "param discogsToken string = ''" "optional Function Discogs token bootstrap parameter"
 assert_contains "infrastructure/bicep/recognition-function.bicep" "name: 'DISCOGS_TOKEN'" "Function App Discogs app setting"
+assert_contains "infrastructure/bicep/recognition-function.bicep" "secrets/DISCOGS-TOKEN" "existing Key Vault Discogs secret reference"
+assert_not_contains ".github/workflows/infrastructure-deploy-dev.yaml" "Missing DISCOGS_TOKEN secret" "GitHub-secret-only Discogs gate"
 
 assert_contains "functions/recognition-proxy/src/artworkFallback.ts" "withAppleMusicSearchLink" "Apple Music search-link fallback"
 assert_contains "functions/recognition-proxy/test/artworkFallback.test.ts" "adds Apple Music listening link when Discogs artwork is complete" "Discogs plus Apple Music link regression test"

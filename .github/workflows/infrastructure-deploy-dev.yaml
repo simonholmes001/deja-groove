@@ -72,15 +72,10 @@ jobs:
         shell: bash
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
-          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${OPENAI_KEY:-}" ]; then
             echo "::error::Missing OPENAI_KEY secret for the minimal Azure Function proxy."
-            exit 1
-          fi
-          if [ -z "${DISCOGS_TOKEN:-}" ]; then
-            echo "::error::Missing DISCOGS_TOKEN secret for Discogs metadata enrichment."
             exit 1
           fi
 
