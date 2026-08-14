@@ -5,6 +5,7 @@ import type { Album } from "../src/contracts.js";
 import type { AlbumEnrichmentPort } from "../src/discogs.js";
 
 test("album enrich handler returns shared enriched album metadata", async () => {
+  const logs: string[] = [];
   const handler = createAlbumEnrichHandler(new StubEnrichment({
     discogs_release_id: "123456",
     label: "Cellar Music",
@@ -24,7 +25,7 @@ test("album enrich handler returns shared enriched album metadata", async () => 
         url: "https://music.apple.com/album/indigo"
       }]
     }
-  }), context());
+  }), context(logs));
 
   assert.equal(response.status, 200);
   assert.equal(response.jsonBody.album.discogs_release_id, "123456");
@@ -34,6 +35,9 @@ test("album enrich handler returns shared enriched album metadata", async () => 
   assert.deepEqual(response.jsonBody.album.genres, ["Jazz"]);
   assert.equal(response.jsonBody.album.tracklist[0].title, "Indigo");
   assert.equal(response.jsonBody.album.listening_links[0].provider, "Apple Music");
+  assert.match(logs.join("\n"), /Album enrichment completed/);
+  assert.match(logs.join("\n"), /discogsReleaseId/);
+  assert.match(logs.join("\n"), /listeningLinkCount/);
 });
 
 test("album enrich handler rejects requests without an album title and artist", async () => {
@@ -59,8 +63,9 @@ function jsonRequest(body: unknown) {
   } as never;
 }
 
-function context() {
+function context(logs: string[] = []) {
   return {
-    warn: () => {}
+    log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
+    warn: (...args: unknown[]) => logs.push(args.map(String).join(" "))
   } as never;
 }

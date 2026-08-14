@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { readScanImage, RequestError } from "./http.js";
+import type { Album } from "./contracts.js";
 import type { AlbumEnrichmentPort } from "./discogs.js";
 import { RecognitionOutputError } from "./openaiRecognition.js";
 import type { RecognitionPort } from "./openaiRecognition.js";
@@ -40,6 +41,8 @@ export function createScanHandler(
       context.log("Album scan completed.", {
         requestId,
         status: pipeline.result.status,
+        albumSummary: pipeline.result.album ? enrichmentSummary(pipeline.result.album) : null,
+        candidateSummaries: (pipeline.result.candidates || []).map(enrichmentSummary),
         timings
       });
 
@@ -61,6 +64,23 @@ export function createScanHandler(
         true,
         requestId);
     }
+  };
+}
+
+function enrichmentSummary(album: Album): Record<string, unknown> {
+  return {
+    discogsReleaseIdPresent: Boolean(album.discogs_release_id),
+    discogsMasterIdPresent: Boolean(album.discogs_master_id),
+    labelPresent: Boolean(album.label),
+    catalogNumberPresent: Boolean(album.catalog_number),
+    countryPresent: Boolean(album.country),
+    barcodePresent: Boolean(album.barcode),
+    releaseDatePresent: Boolean(album.release_date || album.release_year || album.year),
+    genreCount: album.genres?.length || 0,
+    styleCount: album.styles?.length || 0,
+    trackCount: album.tracklist?.length || 0,
+    identifierCount: album.identifiers?.length || 0,
+    listeningLinkCount: album.listening_links?.length || 0
   };
 }
 

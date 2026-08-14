@@ -84,7 +84,8 @@ public final class DiscoveryViewModel: ObservableObject {
 
     public func saveCandidateToWishlist(_ album: Album) async {
         do {
-            _ = try await api.addToWishlist(album: album, preferences: WishlistPreferences(), sourceTrack: track)
+            let albumToSave = await albumForWishlistSave(album)
+            _ = try await api.addToWishlist(album: albumToSave, preferences: WishlistPreferences(), sourceTrack: track)
             message = "Added to Wishlist."
         } catch let error as ApiClientError {
             message = Self.message(for: error)
@@ -124,6 +125,31 @@ public final class DiscoveryViewModel: ObservableObject {
             }
         }
         return enrichedAlbums
+    }
+
+    private func albumForWishlistSave(_ album: Album) async -> Album {
+        let currentCandidate = matchingCurrentCandidate(for: album) ?? album
+        do {
+            let enriched = try await albumEnricher.enrich(album: currentCandidate)
+            return preservingListeningLinks(from: currentCandidate, in: enriched)
+        } catch {
+            return currentCandidate
+        }
+    }
+
+    private func matchingCurrentCandidate(for album: Album) -> Album? {
+        candidates.first { isSameAlbum($0, album) }
+    }
+
+    private func isSameAlbum(_ lhs: Album, _ rhs: Album) -> Bool {
+        if let lhsDiscogs = lhs.discogsReleaseId, let rhsDiscogs = rhs.discogsReleaseId {
+            return lhsDiscogs == rhsDiscogs
+        }
+        if let lhsMbid = lhs.mbid, let rhsMbid = rhs.mbid {
+            return lhsMbid == rhsMbid
+        }
+        return LocalCollectionRules.normalized(lhs.artist) == LocalCollectionRules.normalized(rhs.artist)
+            && LocalCollectionRules.normalized(lhs.title) == LocalCollectionRules.normalized(rhs.title)
     }
 
     private func preservingListeningLinks(from original: Album, in enriched: Album) -> Album {

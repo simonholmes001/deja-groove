@@ -79,7 +79,7 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
       return await this.applyITunes(album, options);
     } catch (error) {
       logFallbackFailure("iTunes Search", error, options);
-      return album;
+      return withAppleMusicSearchLink(album, options, "fallback_search_after_error");
     }
   }
 
@@ -128,23 +128,37 @@ export class ArtworkFallbackAlbumEnrichment implements AlbumEnrichmentPort {
 
   private async applyITunes(album: Album, options: AlbumEnrichmentOptions): Promise<Album> {
     const result = await this.fetchITunesAlbum(album, options);
-    if (!result) return album;
+    if (!result) {
+      return withAppleMusicSearchLink(album, options, "fallback_search");
+    }
 
     const artwork = clean(result.artworkUrl100);
     const listeningLink = clean(result.collectionViewUrl);
     const currentLinks = album.listening_links || [];
+    if (currentLinks.length > 0) {
+      logAppleMusicOutcome("existing_link_preserved", album, options, result);
+      return {
+        ...album,
+        cover_image_url: album.cover_image_url || (artwork ? resizeITunesArtwork(artwork, 600) : null),
+        thumbnail_url: album.thumbnail_url || (artwork ? resizeITunesArtwork(artwork, 100) : null),
+        listening_links: currentLinks
+      };
+    }
+    if (!listeningLink) {
+      return withAppleMusicSearchLink(album, options, "fallback_search_no_direct_url", result);
+    }
+
+    logAppleMusicOutcome("direct_album_link", album, options, result);
 
     return {
       ...album,
       cover_image_url: album.cover_image_url || (artwork ? resizeITunesArtwork(artwork, 600) : null),
       thumbnail_url: album.thumbnail_url || (artwork ? resizeITunesArtwork(artwork, 100) : null),
-      listening_links: currentLinks.length > 0 || !listeningLink
-        ? currentLinks
-        : [{
-            provider: "Apple Music",
-            url: listeningLink,
-            catalog_id: result.collectionId?.toString() || null
-          }]
+      listening_links: [{
+        provider: "Apple Music",
+        url: listeningLink,
+        catalog_id: result.collectionId?.toString() || null
+      }]
     };
   }
 
@@ -226,6 +240,52 @@ function bestITunesMatch(album: Album, results: ITunesAlbumResult[]): ITunesAlbu
 
 function resizeITunesArtwork(url: string, size: number): string {
   return url.replace(/\/\d+x\d+[^/]*\.(jpg|jpeg|png)$/i, `/${size}x${size}bb.$1`);
+}
+
+function withAppleMusicSearchLink(
+  album: Album,
+  options: AlbumEnrichmentOptions,
+  outcome: string,
+  result?: ITunesAlbumResult | null
+): Album {
+  const currentLinks = album.listening_links || [];
+  if (currentLinks.length > 0) {
+    logAppleMusicOutcome("existing_link_preserved", album, options, result);
+    return album;
+  }
+
+  logAppleMusicOutcome(outcome, album, options, result);
+  return {
+    ...album,
+    listening_links: [{
+      provider: "Apple Music",
+      url: appleMusicSearchUrl(album),
+      catalog_id: null
+    }]
+  };
+}
+
+function appleMusicSearchUrl(album: Album): string {
+  const term = [album.artist, album.title].filter(Boolean).join(" ");
+  const params = new URLSearchParams({ term });
+  return `https://music.apple.com/search?${params.toString()}`;
+}
+
+function logAppleMusicOutcome(
+  outcome: string,
+  album: Album,
+  options: AlbumEnrichmentOptions,
+  result?: ITunesAlbumResult | null
+): void {
+  options.logger?.log?.(`Apple Music album lookup completed: ${outcome}.`, {
+    outcome,
+    artistPresent: Boolean(clean(album.artist)),
+    titlePresent: Boolean(clean(album.title)),
+    matchedArtistPresent: Boolean(clean(result?.artistName)),
+    matchedTitlePresent: Boolean(clean(result?.collectionName)),
+    catalogIdPresent: Boolean(result?.collectionId),
+    directUrlPresent: Boolean(clean(result?.collectionViewUrl))
+  });
 }
 
 function normalize(value: string | undefined | null): string {

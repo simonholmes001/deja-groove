@@ -146,6 +146,49 @@ test("ArtworkFallbackAlbumEnrichment adds Apple Music listening link when Discog
   assert.equal(album.listening_links?.[0]?.catalog_id, "1440857781");
 });
 
+test("ArtworkFallbackAlbumEnrichment adds Apple Music search link when no direct album URL is returned", async () => {
+  const requests: string[] = [];
+  const enrichment = new ArtworkFallbackAlbumEnrichment({
+    primary: new StubEnrichment({}),
+    itunesBaseURL: "https://itunes.test",
+    fetchImpl: async (input) => {
+      requests.push(String(input));
+      return jsonResponse({ results: [] });
+    }
+  });
+
+  const album = await enrichment.enrich({
+    ...baseAlbum(),
+    mbid: null,
+    title: "Battle Hymns",
+    artist: "Manowar"
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(album.listening_links?.[0]?.provider, "Apple Music");
+  assert.equal(album.listening_links?.[0]?.url, "https://music.apple.com/search?term=Manowar+Battle+Hymns");
+  assert.equal(album.listening_links?.[0]?.catalog_id, null);
+});
+
+test("ArtworkFallbackAlbumEnrichment logs Apple Music fallback outcome without album payload", async () => {
+  const logs: string[] = [];
+  const enrichment = new ArtworkFallbackAlbumEnrichment({
+    primary: new StubEnrichment({}),
+    itunesBaseURL: "https://itunes.test",
+    fetchImpl: async () => jsonResponse({ results: [] })
+  });
+
+  await enrichment.enrich({
+    ...baseAlbum(),
+    mbid: null,
+    title: "Battle Hymns",
+    artist: "Manowar"
+  }, { logger: infoLogger(logs) });
+
+  assert.match(logs.join("\n"), /Apple Music album lookup completed/);
+  assert.match(logs.join("\n"), /fallback_search/);
+});
+
 test("ArtworkFallbackAlbumEnrichment tries release-group artwork after release artwork is missing", async () => {
   const requests: string[] = [];
   const enrichment = new ArtworkFallbackAlbumEnrichment({
@@ -247,6 +290,13 @@ function baseAlbum(): Album {
 function warningLogger(warnings: string[]): { warn: (...args: unknown[]) => void } {
   return {
     warn: (...args: unknown[]) => warnings.push(args.join(" "))
+  };
+}
+
+function infoLogger(logs: string[]): { log: (...args: unknown[]) => void; warn: (...args: unknown[]) => void } {
+  return {
+    log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
+    warn: (...args: unknown[]) => logs.push(args.map(String).join(" "))
   };
 }
 

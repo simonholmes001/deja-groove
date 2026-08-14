@@ -436,6 +436,14 @@ public struct AudioDiscoveryTrack: Codable, Equatable, Sendable {
         case genre
         case matchedAt = "matched_at"
     }
+
+    public var appleMusicSearchURL: URL {
+        var components = URLComponents(string: "https://music.apple.com/search")!
+        components.queryItems = [
+            URLQueryItem(name: "term", value: [artist, title].joined(separator: " "))
+        ]
+        return components.url!
+    }
 }
 
 public struct WishlistPreferences: Codable, Equatable, Sendable {

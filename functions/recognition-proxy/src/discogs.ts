@@ -7,6 +7,7 @@ export interface AlbumEnrichmentPort {
 export type AlbumEnrichmentOptions = {
   signal?: AbortSignal;
   logger?: {
+    log?: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
   };
 };

@@ -163,6 +163,55 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual("Added to Wishlist.", sut.message)
     }
 
+    func testSaveCandidateToWishlistRetriesEnrichmentBeforePersistingSparseAlbum() async {
+        let track = AudioDiscoveryTrack(title: "Sanctuary (Live)", artist: "Wayne Shorter", matchedAt: "2026-08-14T11:39:41Z")
+        let sparse = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Sanctuary (Live)",
+            artist: "Wayne Shorter",
+            year: nil,
+            format: nil)
+        let enriched = Album(
+            mbid: nil,
+            discogsReleaseId: "3669035",
+            title: "Footprints Live!",
+            artist: "Wayne Shorter",
+            year: 2002,
+            format: "CD, Album",
+            releaseDate: "2002",
+            label: "Verve Records",
+            catalogNumber: "589 679-2",
+            country: "Europe",
+            genres: ["Jazz"],
+            tracklist: [AlbumTrack(position: "8", title: "Sanctuary", duration: "5:31")],
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/search?term=Wayne+Shorter+Footprints+Live%21")])
+        let api = DiscoveryApiClientSpy()
+        let enricher = SequencedAlbumMetadataEnricherStub(results: [
+            .failure(ApiClientError.invalidResponse),
+            .success(enriched)
+        ])
+        let sut = DiscoveryViewModel(
+            api: api,
+            discoveryStore: DiscoveryStoreSpy(),
+            audioDiscovery: AudioDiscoveryServiceStub(track: track),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [sparse]),
+            albumEnricher: enricher,
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+        XCTAssertEqual("Sanctuary (Live)", sut.candidates.first?.title)
+
+        await sut.saveCandidateToWishlist(sparse)
+
+        let snapshot = await api.snapshot()
+        XCTAssertEqual("Footprints Live!", snapshot.wishlistAlbums.first?.title)
+        XCTAssertEqual("3669035", snapshot.wishlistAlbums.first?.discogsReleaseId)
+        XCTAssertEqual("Verve Records", snapshot.wishlistAlbums.first?.label)
+        XCTAssertEqual("Apple Music", snapshot.wishlistAlbums.first?.listeningLinks.first?.provider)
+        XCTAssertEqual(track, snapshot.sourceTracks.first)
+    }
+
     func testClearAllHistoryRemovesVisibleAndPersistedDiscoveries() async {
         let discoveryStore = DiscoveryStoreSpy()
         let sut = DiscoveryViewModel(
@@ -261,6 +310,24 @@ private struct AlbumMetadataEnricherStub: AlbumMetadataEnricher {
 
     func enrich(album: Album) async throws -> Album {
         enrichedAlbums.first { $0.title == album.title && $0.artist == album.artist } ?? album
+    }
+}
+
+private final class SequencedAlbumMetadataEnricherStub: AlbumMetadataEnricher, @unchecked Sendable {
+    private var results: [Result<Album, Error>]
+
+    init(results: [Result<Album, Error>]) {
+        self.results = results
+    }
+
+    func enrich(album: Album) async throws -> Album {
+        guard !results.isEmpty else { return album }
+        switch results.removeFirst() {
+        case .success(let enriched):
+            return enriched
+        case .failure(let error):
+            throw error
+        }
     }
 }
 

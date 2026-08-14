@@ -420,6 +420,10 @@ private struct DiscoveryTrackDetailView: View {
                 detail("Apple Music ID", track.appleMusicId)
                 LabeledContent("Matched", value: track.matchedAt)
             }
+
+            Section("Listen") {
+                Link("Apple Music", destination: track.appleMusicSearchURL)
+            }
         }
         .navigationTitle(track.title)
         .navigationBarTitleDisplayMode(.inline)

@@ -23,6 +23,11 @@ export function createAlbumEnrichHandler(enrichment: AlbumEnrichmentPort) {
       }
 
       const album = await enrichment.enrich(body.album, { logger: context });
+      context.log(
+        "Album enrichment completed.",
+        `discogsReleaseId=${present(album.discogs_release_id)}`,
+        `listeningLinkCount=${album.listening_links?.length || 0}`,
+        enrichmentSummary(album));
       const response: AlbumEnrichmentResponse = { album, request_id: requestId };
       return {
         status: 200,
@@ -47,4 +52,25 @@ function isAlbum(album: unknown): album is Album {
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function enrichmentSummary(album: Album): Record<string, unknown> {
+  return {
+    discogsReleaseIdPresent: Boolean(album.discogs_release_id),
+    discogsMasterIdPresent: Boolean(album.discogs_master_id),
+    labelPresent: Boolean(album.label),
+    catalogNumberPresent: Boolean(album.catalog_number),
+    countryPresent: Boolean(album.country),
+    barcodePresent: Boolean(album.barcode),
+    releaseDatePresent: Boolean(album.release_date || album.release_year || album.year),
+    genreCount: album.genres?.length || 0,
+    styleCount: album.styles?.length || 0,
+    trackCount: album.tracklist?.length || 0,
+    identifierCount: album.identifiers?.length || 0,
+    listeningLinkCount: album.listening_links?.length || 0
+  };
+}
+
+function present(value: string | undefined | null): string {
+  return value && value.trim() ? "present" : "missing";
 }
