@@ -27,6 +27,7 @@ export type Album = {
   tracklist?: Track[];
   identifiers?: ReleaseIdentifier[];
   discogs_data_quality?: string | null;
+  listening_links?: ListeningLink[];
 };
 
 export type Track = {
@@ -39,6 +40,13 @@ export type ReleaseIdentifier = {
   type: string;
   value?: string | null;
   description?: string | null;
+};
+
+export type ListeningLink = {
+  provider: string;
+  url: string;
+  catalog_id?: string | null;
+  preview_url?: string | null;
 };
 
 export type ScanResponse = {

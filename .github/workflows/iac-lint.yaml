@@ -23,4 +23,6 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Validate minimal Function IaC
-        run: bash ./infrastructure/scripts/validate.sh dev --lint-only
+        run: |
+          bash ./infrastructure/scripts/guard-tests.sh
+          bash ./infrastructure/scripts/validate.sh dev --lint-only

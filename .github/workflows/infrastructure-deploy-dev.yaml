@@ -55,6 +55,10 @@ jobs:
           npm ci --workspaces=false
           npm run test
 
+      - name: Run infrastructure guard tests
+        if: steps.detect.outputs.exists == 'true'
+        run: bash ./infrastructure/scripts/guard-tests.sh
+
       - name: Login to Azure (OIDC)
         if: steps.detect.outputs.exists == 'true'
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3

@@ -196,8 +196,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A20000000000000000000007 /* Config/Debug.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2PA85SU4UQ;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -221,8 +221,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A20000000000000000000008 /* Config/Release.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2PA85SU4UQ;
 				GENERATE_INFOPLIST_FILE = NO;

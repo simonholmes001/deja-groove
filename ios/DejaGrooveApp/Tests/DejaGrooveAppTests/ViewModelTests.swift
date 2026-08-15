@@ -320,6 +320,34 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual([recordId], collections.first?.recordIds)
     }
 
+    func testCollectionViewModelKeepsCollectionsAlphabeticalAfterReloadCreateRenameAndDelete() async {
+        let jazzId = UUID(uuidString: "00000000-0000-0000-0000-000000000531")!
+        let rockId = UUID(uuidString: "00000000-0000-0000-0000-000000000532")!
+        let ambientId = UUID(uuidString: "00000000-0000-0000-0000-000000000533")!
+        let api = MockApiClient(crateCollections: [
+            CrateCollection(id: jazzId, name: "Jazz", recordIds: [], createdAt: "", updatedAt: ""),
+            CrateCollection(id: rockId, name: "rock", recordIds: [], createdAt: "", updatedAt: ""),
+            CrateCollection(id: ambientId, name: "Ambient", recordIds: [], createdAt: "", updatedAt: "")
+        ])
+        let sut = await CollectionViewModel(api: api)
+
+        await sut.load()
+        var collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Jazz", "rock"], collections.map(\.name))
+
+        await sut.createCollection(named: "Blues")
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Blues", "Jazz", "rock"], collections.map(\.name))
+
+        await sut.renameCollection(id: rockId, name: "Avant-Garde")
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Ambient", "Avant-Garde", "Blues", "Jazz"], collections.map(\.name))
+
+        await sut.deleteCollection(id: ambientId)
+        collections = await sut.crateCollections
+        XCTAssertEqual(["Avant-Garde", "Blues", "Jazz"], collections.map(\.name))
+    }
+
     func testCollectionViewModelAuthorizationErrorShowsApiMessage() async {
         let authorizationError = ApiClientError.httpError(
             401,
@@ -353,7 +381,7 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual("Authentication is required.", message)
     }
 
-    func testScanViewModelClearsResultAfterSuccessfulAddToCollection() async {
+    func testScanViewModelKeepsAddedResultVisibleAfterSuccessfulAddToCollection() async {
         let response = ScanResponse(
             status: "safe_to_buy",
             confidence: 0.9,
@@ -368,7 +396,12 @@ final class ViewModelTests: XCTestCase {
 
         let state = await sut.state
         let message = await sut.collectionMessage
-        XCTAssertEqual(.idle, state)
+        if case .result(let added) = state {
+            XCTAssertEqual("owned", added.status)
+            XCTAssertEqual(response.album, added.album)
+        } else {
+            XCTFail("Expected added result to remain visible")
+        }
         XCTAssertEqual("Added to My Crate.", message)
     }
 
@@ -544,6 +577,33 @@ actor MockApiClient: ApiClient {
                 createdAt: collection.createdAt,
                 updatedAt: collection.updatedAt)
         }
+    }
+
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        WishlistEntry(
+            id: UUID(),
+            album: album,
+            preferences: preferences,
+            sourceTrack: sourceTrack,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        []
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        WishlistEntry(
+            id: id,
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: nil),
+            preferences: preferences,
+            sourceTrack: nil,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {
     }
 
     func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {

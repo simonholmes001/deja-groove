@@ -4,6 +4,7 @@ import DejaGrooveApp
 @main
 struct DejaGrooveMobileApp: App {
     private let apiClient: ApiClient
+    private let albumEnricher: AlbumMetadataEnricher
     private let startupError: String?
 
     init() {
@@ -12,9 +13,13 @@ struct DejaGrooveMobileApp: App {
             apiClient = LocalProxyApiClientFactory.make(
                 recognitionProxyBaseURL: config.recognitionProxyBaseURL,
                 recognitionProxyKey: config.recognitionProxyKey)
+            albumEnricher = RecognitionProxyAlbumMetadataEnricher(
+                baseURL: config.recognitionProxyBaseURL,
+                functionKey: config.recognitionProxyKey)
             startupError = nil
         case .failure(let error):
             apiClient = DisabledApiClient()
+            albumEnricher = NoopAlbumMetadataEnricher()
             startupError = error.errorDescription
         }
     }
@@ -24,7 +29,7 @@ struct DejaGrooveMobileApp: App {
             if let startupError {
                 StartupConfigurationErrorView(message: startupError)
             } else {
-                DejaGrooveRootView(api: apiClient)
+                DejaGrooveRootView(api: apiClient, albumEnricher: albumEnricher)
             }
         }
     }
@@ -75,6 +80,22 @@ private struct DisabledApiClient: ApiClient {
     }
 
     func deleteCollectionRecord(id: UUID) async throws {
+        throw ApiClientError.encodingFailure
+    }
+
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        throw ApiClientError.encodingFailure
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        throw ApiClientError.encodingFailure
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        throw ApiClientError.encodingFailure
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {
         throw ApiClientError.encodingFailure
     }
 

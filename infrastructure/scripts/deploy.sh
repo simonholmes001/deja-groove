@@ -14,6 +14,7 @@ DEPLOYMENT_NAME="deja-minimal-function-${ENVIRONMENT:-unknown}-${TIMESTAMP}"
 PACKAGE_BLOB_NAME="released-package.zip"
 DEPLOYMENT_PRINCIPAL_OBJECT_ID="${AZURE_CLIENT_OBJECT_ID:-}"
 EFFECTIVE_PARAMS_FILE=""
+RESOURCE_GROUP_NAME="rg-deja-groove-dev-recognition"
 
 if [[ -z "${ENVIRONMENT}" ]]; then
   echo "Usage: $0 <dev>" >&2
@@ -45,6 +46,17 @@ if [[ -z "${OPENAI_KEY:-}" ]]; then
   echo "Error: OPENAI_KEY must be set for the Function App configuration." >&2
   exit 1
 fi
+
+describe_discogs_secret_source() {
+  if [[ -n "${DISCOGS_TOKEN:-}" ]]; then
+    echo "Discogs token supplied by deployment environment; Key Vault secret will be updated."
+    return 0
+  fi
+
+  echo "Discogs token not supplied by deployment environment; Function App will reference existing Key Vault DISCOGS-TOKEN."
+}
+
+describe_discogs_secret_source
 
 echo "==> Running minimal Function validation..."
 "${SCRIPT_DIR}/validate.sh" "${ENVIRONMENT}"
@@ -255,6 +267,35 @@ retry_http_status() {
   echo "Error: ${description} did not return expected HTTP status. Last status: ${status}" >&2
   return 1
 }
+
+verify_key_vault_reference() {
+  local subscription_id
+  local config_references
+  local status
+  local details
+
+  subscription_id="$(az account show --query id --output tsv)"
+  config_references="$(az rest \
+    --method GET \
+    --uri "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.Web/sites/${FUNCTION_APP_NAME}/config/configreferences/appsettings?api-version=2022-03-01" \
+    --output json)"
+
+  status="$(jq -r '.value[] | select(.name == "DISCOGS_TOKEN" or .name == "APPSETTING_DISCOGS_TOKEN") | .properties.status' <<< "${config_references}" | head -n 1)"
+  details="$(jq -r '.value[] | select(.name == "DISCOGS_TOKEN" or .name == "APPSETTING_DISCOGS_TOKEN") | .properties.details' <<< "${config_references}" | head -n 1)"
+
+  if [[ "${status}" != "Resolved" ]]; then
+    echo "Error: Function App DISCOGS_TOKEN Key Vault reference is not resolved." >&2
+    echo "Status: ${status:-<missing>}" >&2
+    echo "Details: ${details:-<missing>}" >&2
+    echo "Set DISCOGS_TOKEN to bootstrap the secret, or restore Key Vault DISCOGS-TOKEN and Function identity access." >&2
+    exit 1
+  fi
+
+  echo "Verified Function App DISCOGS_TOKEN Key Vault reference: Resolved."
+}
+
+echo "==> Verifying Function App Key Vault references..."
+verify_key_vault_reference
 
 echo "==> Verifying deployed Function endpoints..."
 retry_http_status GET "${HEALTH_ENDPOINT}" '^200$' "health endpoint"

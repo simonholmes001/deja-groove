@@ -78,7 +78,7 @@ param openAiModel = 'gpt-5-mini'
 param scanIncludeTimings = true
 param enableApplicationInsights = true
 param openAiKey = readEnvironmentVariable('OPENAI_KEY', 'validation-placeholder')
-param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', '')
+param discogsToken = readEnvironmentVariable('DISCOGS_TOKEN', 'validation-discogs-placeholder')
 param deploymentPrincipalObjectId = readEnvironmentVariable('DEPLOYMENT_PRINCIPAL_OBJECT_ID', '')
 PARAMS
 }

@@ -148,6 +148,20 @@ public struct ScanView: View {
                 }
                 .buttonStyle(DejaGroovePrimaryButtonStyle())
             }
+            if response.canAddToWishlist {
+                Button {
+                    Task { await viewModel.addResultToWishlist() }
+                } label: {
+                    Label("Add To Wishlist", systemImage: "heart")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Button {
+                Task { await viewModel.saveResultToDiscovery() }
+            } label: {
+                Label("Save For Later", systemImage: "clock")
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -306,6 +320,10 @@ private struct ScanResultView: View {
             return "SAFE TO BUY"
         case "owned":
             return "DUPLICATE"
+        case "wishlist_match":
+            return "WISHLIST MATCH"
+        case "discovery_match":
+            return "DISCOVERY MATCH"
         case "ambiguous":
             return "AMBIGUOUS"
         case "no_match":
@@ -323,6 +341,10 @@ private struct ScanResultView: View {
             return .green
         case "owned":
             return .red
+        case "wishlist_match":
+            return DejaGrooveStyle.blue
+        case "discovery_match":
+            return .purple
         case "ambiguous":
             return .orange
         default:
@@ -414,6 +436,16 @@ private struct ScanAlbumDetailView: View {
             if let releaseNotes = album.releaseNotes, !releaseNotes.isEmpty {
                 Section("Release Notes") {
                     Text(releaseNotes)
+                }
+            }
+
+            if !album.listeningLinks.isEmpty {
+                Section("Listen") {
+                    ForEach(album.listeningLinks, id: \.url) { link in
+                        if let url = URL(string: link.url) {
+                            Link(link.provider, destination: url)
+                        }
+                    }
                 }
             }
 

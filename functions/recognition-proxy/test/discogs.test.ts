@@ -107,10 +107,93 @@ test("DiscogsAlbumEnrichment maps search and release metadata", async () => {
   assert.equal(album.discogs_data_quality, "Correct");
 });
 
+test("DiscogsAlbumEnrichment retries normalized album titles and logs missing lookups", async () => {
+  const requests: string[] = [];
+  const logs: string[] = [];
+  const enrichment = new DiscogsAlbumEnrichment({
+    token: "token",
+    baseURL: "https://discogs.test",
+    fetchImpl: async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.includes("/database/search")) {
+        const releaseTitle = new URL(url).searchParams.get("release_title");
+        if (releaseTitle === "Sanctuary") {
+          return jsonResponse({
+            results: [{
+              id: 1552461,
+              master_id: 4321,
+              title: "Wayne Shorter - Footprints Live!",
+              resource_url: "https://api.discogs.test/releases/1552461",
+              uri: "https://www.discogs.com/release/1552461"
+            }]
+          });
+        }
+        return jsonResponse({ results: [] });
+      }
+
+      return jsonResponse({
+        id: 1552461,
+        master_id: 4321,
+        title: "Footprints Live!",
+        artists: [{ name: "Wayne Shorter" }],
+        labels: [{ name: "Verve", catno: "314 589 679-2" }],
+        country: "US",
+        year: 2002,
+        released: "2002",
+        genres: ["Jazz"],
+        styles: ["Post Bop"],
+        identifiers: [{ type: "Barcode", value: "731458967927" }],
+        tracklist: [{ position: "1", title: "Sanctuary", duration: "5:31", type_: "track" }]
+      });
+    }
+  });
+
+  const album = await enrichment.enrich({
+    title: "Sanctuary (Live)",
+    artist: "Wayne Shorter",
+    label: "Verve"
+  }, { logger: infoLogger(logs) });
+
+  const searchTitles = requests
+    .filter((request) => request.includes("/database/search"))
+    .map((request) => new URL(request).searchParams.get("release_title"));
+  assert.deepEqual(searchTitles, ["Sanctuary (Live)", "Sanctuary"]);
+  assert.equal(album.discogs_release_id, "1552461");
+  assert.equal(album.label, "Verve");
+  assert.equal(album.catalog_number, "314 589 679-2");
+  assert.equal(album.tracklist?.[0]?.title, "Sanctuary");
+  assert.match(logs.join("\n"), /Discogs album lookup completed: present/);
+});
+
+test("DiscogsAlbumEnrichment logs when Discogs has no release match", async () => {
+  const logs: string[] = [];
+  const enrichment = new DiscogsAlbumEnrichment({
+    token: "token",
+    baseURL: "https://discogs.test",
+    fetchImpl: async () => jsonResponse({ results: [] })
+  });
+
+  const album = await enrichment.enrich({
+    title: "Unknown Apple Album",
+    artist: "Unknown Artist"
+  }, { logger: infoLogger(logs) });
+
+  assert.equal(album.discogs_release_id, undefined);
+  assert.match(logs.join("\n"), /Discogs album lookup completed: missing/);
+});
+
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
     status: 200,
     json: async () => body
   } as Response;
+}
+
+function infoLogger(logs: string[]) {
+  return {
+    log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
+    warn: (...args: unknown[]) => logs.push(args.map(String).join(" "))
+  };
 }

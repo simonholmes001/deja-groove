@@ -48,6 +48,10 @@ jobs:
           npm ci --workspaces=false
           npm run test
 
+      - name: Run infrastructure guard tests
+        if: steps.detect.outputs.exists == 'true'
+        run: bash ./infrastructure/scripts/guard-tests.sh
+
       - name: Lint minimal Function infrastructure
         if: steps.detect.outputs.exists == 'true'
         run: bash ./infrastructure/scripts/validate.sh dev --lint-only
@@ -62,8 +66,12 @@ jobs:
 
       - name: Validate minimal Function infrastructure
         if: steps.detect.outputs.exists == 'true'
+        env:
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
         run: bash ./infrastructure/scripts/validate.sh dev
 
       - name: Run minimal Function what-if
         if: steps.detect.outputs.exists == 'true'
+        env:
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
         run: bash ./infrastructure/scripts/validate.sh dev --what-if

@@ -59,7 +59,7 @@ public final class CollectionViewModel: ObservableObject {
         do {
             let response = try await api.fetchCollection(search: search.isEmpty ? nil : search)
             records = response.items
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
         } catch {
@@ -71,7 +71,7 @@ public final class CollectionViewModel: ObservableObject {
     public func createCollection(named name: String) async {
         do {
             _ = try await api.createCrateCollection(name: name)
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
@@ -83,7 +83,7 @@ public final class CollectionViewModel: ObservableObject {
     public func renameCollection(id: UUID, name: String) async {
         do {
             _ = try await api.renameCrateCollection(id: id, name: name)
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
@@ -98,7 +98,7 @@ public final class CollectionViewModel: ObservableObject {
             if selectedCollectionId == id {
                 selectedCollectionId = nil
             }
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
@@ -114,7 +114,7 @@ public final class CollectionViewModel: ObservableObject {
             } else {
                 _ = try await api.removeRecord(recordId, fromCrateCollection: collectionId)
             }
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
@@ -127,7 +127,7 @@ public final class CollectionViewModel: ObservableObject {
         do {
             try await api.deleteCollectionRecord(id: id)
             records.removeAll { $0.id == id }
-            crateCollections = try await api.fetchCrateCollections(search: nil)
+            try await refreshCrateCollections()
             errorMessage = nil
         } catch let error as ApiClientError {
             errorMessage = Self.message(for: error)
@@ -164,6 +164,10 @@ public final class CollectionViewModel: ObservableObject {
         default:
             return "Failed to load collection."
         }
+    }
+
+    private func refreshCrateCollections() async throws {
+        crateCollections = LocalCollectionRules.sortedCollections(try await api.fetchCrateCollections(search: nil))
     }
 
     private func matchesSearch(_ record: CollectionRecord) -> Bool {

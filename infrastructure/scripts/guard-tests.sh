@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+assert_contains() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+
+  if ! grep -Fq "${pattern}" "${REPO_ROOT}/${file}"; then
+    echo "Error: expected ${description} in ${file}." >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+
+  if grep -Fq "${pattern}" "${REPO_ROOT}/${file}"; then
+    echo "Error: unexpected ${description} in ${file}." >&2
+    exit 1
+  fi
+}
+
+assert_contains "functions/recognition-proxy/src/index.ts" "DISCOGS_TOKEN app setting is required" "runtime fail-fast Discogs guard"
+assert_not_contains "functions/recognition-proxy/src/index.ts" "NoopAlbumEnrichment" "Noop Discogs fallback runtime path"
+
+assert_contains "infrastructure/scripts/deploy.sh" "describe_discogs_secret_source" "deployment Discogs source reporting"
+assert_contains "infrastructure/scripts/deploy.sh" "verify_key_vault_reference" "post-deploy Function App Key Vault reference guard"
+assert_contains "infrastructure/scripts/deploy.sh" "readEnvironmentVariable('DISCOGS_TOKEN', '')" "optional bootstrap Discogs token parameter"
+assert_not_contains "infrastructure/scripts/deploy.sh" "az keyvault secret show" "pre-deploy Key Vault data-plane secret read"
+
+assert_not_contains "infrastructure/scripts/validate.sh" "az keyvault secret show" "validation-time Key Vault data-plane secret read"
+assert_contains "infrastructure/bicep/minimal-function.bicep" "param discogsToken string = ''" "optional Discogs token bootstrap parameter"
+assert_contains "infrastructure/bicep/recognition-function.bicep" "param discogsToken string = ''" "optional Function Discogs token bootstrap parameter"
+assert_contains "infrastructure/bicep/recognition-function.bicep" "name: 'DISCOGS_TOKEN'" "Function App Discogs app setting"
+assert_contains "infrastructure/bicep/recognition-function.bicep" "secrets/DISCOGS-TOKEN" "existing Key Vault Discogs secret reference"
+assert_not_contains ".github/workflows/infrastructure-deploy-dev.yaml" "Missing DISCOGS_TOKEN secret" "GitHub-secret-only Discogs gate"
+
+assert_contains "functions/recognition-proxy/src/artworkFallback.ts" "withAppleMusicSearchLink" "Apple Music search-link fallback"
+assert_contains "functions/recognition-proxy/test/artworkFallback.test.ts" "adds Apple Music listening link when Discogs artwork is complete" "Discogs plus Apple Music link regression test"
+
+echo "Guard tests passed."

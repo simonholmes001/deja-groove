@@ -39,6 +39,74 @@ final class ApiClientTests: XCTestCase {
         XCTAssertEqual(album, result.album)
     }
 
+    func testLocalProxyScanMarksWishlistedAlbumWhenNotOwned() async throws {
+        let album = Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: album,
+            candidates: [],
+            requestId: UUID())
+        let client = LocalProxyApiClient(
+            scanRuntime: LocalScanRuntimeSpy(response: response),
+            collectionStore: LocalCollectionStoreSpy(),
+            wishlistStore: LocalWishlistStoreSpy(existingAlbums: [album]))
+
+        let result = try await client.scan(imageData: Data([0xFF, 0xD8]), clientScanId: UUID(), capturedAtIso: nil)
+
+        XCTAssertEqual("wishlist_match", result.status)
+        XCTAssertTrue(result.canAddToCollection)
+        XCTAssertFalse(result.canAddToWishlist)
+        XCTAssertEqual(album, result.album)
+    }
+
+    func testLocalProxyScanMarksDiscoveredAlbumWhenNotOwnedOrWishlisted() async throws {
+        let album = Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: album,
+            candidates: [],
+            requestId: UUID())
+        let client = LocalProxyApiClient(
+            scanRuntime: LocalScanRuntimeSpy(response: response),
+            collectionStore: LocalCollectionStoreSpy(),
+            wishlistStore: LocalWishlistStoreSpy(),
+            discoveryStore: LocalDiscoveryStoreSpy(existingAlbums: [album]))
+
+        let result = try await client.scan(imageData: Data([0xFF, 0xD8]), clientScanId: UUID(), capturedAtIso: nil)
+
+        XCTAssertEqual("discovery_match", result.status)
+        XCTAssertTrue(result.canAddToCollection)
+        XCTAssertTrue(result.canAddToWishlist)
+        XCTAssertEqual(album, result.album)
+    }
+
+    @MainActor
+    func testScanViewModelAddsSafeResultToWishlist() async {
+        let album = Album(mbid: "m", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: album,
+            candidates: [],
+            requestId: UUID())
+        let wishlistStore = LocalWishlistStoreSpy()
+        let client = LocalProxyApiClient(
+            scanRuntime: LocalScanRuntimeSpy(response: response),
+            collectionStore: LocalCollectionStoreSpy(),
+            wishlistStore: wishlistStore)
+        let sut = ScanViewModel(api: client)
+
+        await sut.submitScan(imageData: Data([0xFF, 0xD8]))
+        await sut.addResultToWishlist()
+
+        let wishlistSnapshot = await wishlistStore.snapshot()
+        XCTAssertEqual(1, wishlistSnapshot.addCallCount)
+        XCTAssertEqual("Added to Wishlist.", sut.collectionMessage)
+        XCTAssertEqual(ScanState.idle, sut.state)
+    }
+
     func testLocalProxyResolveMarksExistingSelectedCandidateAsOwned() async throws {
         let album = Album(mbid: "mbid-blue", discogsReleaseId: nil, title: "Blue", artist: "Joni Mitchell", year: 1971, format: nil)
         let client = LocalProxyApiClient(
@@ -236,4 +304,92 @@ struct LocalCollectionStoreSnapshot {
     let fetchCallCount: Int
     let patchCallCount: Int
     let lastSearch: String?
+}
+
+actor LocalWishlistStoreSpy: LocalWishlistStore {
+    private(set) var addCallCount = 0
+    private(set) var fetchCallCount = 0
+    private(set) var containsCallCount = 0
+    private let existingAlbums: [Album]
+
+    init(existingAlbums: [Album] = []) {
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        containsCallCount += 1
+        return existingAlbums.contains(album)
+    }
+
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        addCallCount += 1
+        return WishlistEntry(
+            id: UUID(),
+            album: album,
+            preferences: preferences,
+            sourceTrack: sourceTrack,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        fetchCallCount += 1
+        return []
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        WishlistEntry(
+            id: id,
+            album: Album(mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: nil),
+            preferences: preferences,
+            sourceTrack: nil,
+            createdAt: "",
+            updatedAt: "")
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {
+    }
+
+    func snapshot() -> LocalWishlistStoreSnapshot {
+        LocalWishlistStoreSnapshot(
+            addCallCount: addCallCount,
+            fetchCallCount: fetchCallCount,
+            containsCallCount: containsCallCount)
+    }
+}
+
+struct LocalWishlistStoreSnapshot {
+    let addCallCount: Int
+    let fetchCallCount: Int
+    let containsCallCount: Int
+}
+
+actor LocalDiscoveryStoreSpy: LocalDiscoveryStore {
+    private let existingAlbums: [Album]
+
+    init(existingAlbums: [Album] = []) {
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        existingAlbums.contains(album)
+    }
+
+    func addDiscovery(source: String, album: Album?, track: AudioDiscoveryTrack?) async throws -> DiscoveryEntry {
+        DiscoveryEntry(id: UUID(), source: source, album: album, track: track, createdAt: "")
+    }
+
+    func fetchDiscoveries(search: String?) async throws -> [DiscoveryEntry] {
+        []
+    }
+
+    func promoteDiscoveryToWishlist(id: UUID, wishlistStore: LocalWishlistStore) async throws -> WishlistEntry {
+        throw ApiClientError.invalidResponse
+    }
+
+    func deleteDiscovery(id: UUID) async throws {
+    }
+
+    func deleteAllDiscoveries() async throws {
+    }
 }

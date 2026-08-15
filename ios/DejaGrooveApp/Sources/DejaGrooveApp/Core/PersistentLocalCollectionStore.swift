@@ -175,11 +175,9 @@ public actor PersistentLocalCollectionStore: LocalCollectionStore {
     }
 
     public func fetchCrateCollections(search: String?) async throws -> [CrateCollection] {
-        try documentStore.load().collections
+        LocalCollectionRules.sortedCollections(try documentStore.load().collections
             .filter { LocalCollectionRules.matchesCollectionSearch($0, search: search) }
-            .sorted { lhs, rhs in
-                LocalCollectionRules.normalized(lhs.name) < LocalCollectionRules.normalized(rhs.name)
-            }
+        )
     }
 
     public func createCrateCollection(name: String) async throws -> CrateCollection {

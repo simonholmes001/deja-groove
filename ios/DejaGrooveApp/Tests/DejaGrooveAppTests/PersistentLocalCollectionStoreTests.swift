@@ -274,6 +274,35 @@ final class PersistentLocalCollectionStoreTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
+    func testFetchCrateCollectionsReturnsAlphabeticalOrderAfterCreateRenameAndDelete() async throws {
+        let jazzId = UUID(uuidString: "00000000-0000-0000-0000-000000000461")!
+        let rockId = UUID(uuidString: "00000000-0000-0000-0000-000000000462")!
+        let ambientId = UUID(uuidString: "00000000-0000-0000-0000-000000000463")!
+        let store = try makeStore(
+            ids: [jazzId, rockId, ambientId],
+            instants: [
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "2026-01-03T00:00:00Z",
+                "2026-01-04T00:00:00Z"
+            ])
+
+        _ = try await store.createCrateCollection(name: "Jazz")
+        _ = try await store.createCrateCollection(name: "rock")
+        _ = try await store.createCrateCollection(name: " ambient ")
+
+        let afterCreate = try await store.fetchCrateCollections(search: nil)
+        XCTAssertEqual(["ambient", "Jazz", "rock"], afterCreate.map(\.name))
+
+        _ = try await store.renameCrateCollection(id: rockId, name: "Avant-Garde")
+        let afterRename = try await store.fetchCrateCollections(search: nil)
+        XCTAssertEqual(["ambient", "Avant-Garde", "Jazz"], afterRename.map(\.name))
+
+        try await store.deleteCrateCollection(id: ambientId)
+        let afterDelete = try await store.fetchCrateCollections(search: nil)
+        XCTAssertEqual(["Avant-Garde", "Jazz"], afterDelete.map(\.name))
+    }
+
     func testDeleteCollectionRecordRemovesAlbumAndCollectionMembership() async throws {
         let albumId = UUID(uuidString: "00000000-0000-0000-0000-000000000431")!
         let collectionId = UUID(uuidString: "00000000-0000-0000-0000-000000000432")!

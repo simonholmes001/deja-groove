@@ -8,10 +8,12 @@ public final class ScanViewModel: ObservableObject {
     @Published public private(set) var collectionMessage: String?
 
     private let api: ApiClient
+    private let discoveryStore: LocalDiscoveryStore
     private var lastSubmittedImageData: Data?
 
-    public init(api: ApiClient) {
+    public init(api: ApiClient, discoveryStore: LocalDiscoveryStore = PersistentLocalDiscoveryStore()) {
         self.api = api
+        self.discoveryStore = discoveryStore
     }
 
     public func submitScan(imageData: Data) async {
@@ -67,7 +69,7 @@ public final class ScanViewModel: ObservableObject {
         do {
             _ = try await api.addToCollection(album: album, notes: nil, addAnyway: false)
             collectionMessage = "Added to My Crate."
-            state = .idle
+            state = .result(response.withStatus("owned"))
         } catch let error as ApiClientError {
             switch error {
             case .httpError(_, let apiError?):
@@ -77,6 +79,34 @@ public final class ScanViewModel: ObservableObject {
             }
         } catch {
             collectionMessage = "Failed to add to collection."
+        }
+    }
+
+    public func addResultToWishlist() async {
+        guard case .result(let response) = state, response.canAddToWishlist, let album = response.album else { return }
+        do {
+            _ = try await api.addToWishlist(album: album, preferences: WishlistPreferences(), sourceTrack: nil)
+            collectionMessage = "Added to Wishlist."
+            state = .idle
+        } catch let error as ApiClientError {
+            switch error {
+            case .httpError(_, let apiError?):
+                collectionMessage = apiError.message
+            default:
+                collectionMessage = "Failed to add to Wishlist."
+            }
+        } catch {
+            collectionMessage = "Failed to add to Wishlist."
+        }
+    }
+
+    public func saveResultToDiscovery() async {
+        guard case .result(let response) = state else { return }
+        do {
+            _ = try await discoveryStore.addDiscovery(source: "scan", album: response.album, track: nil)
+            collectionMessage = "Saved to Discovery History."
+        } catch {
+            collectionMessage = "Failed to save discovery."
         }
     }
 
