@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  buildFallbackReviewBody,
   buildSystemPrompt,
   buildUserPrompt,
   isStructurallyValidReviewBody,
@@ -120,4 +121,13 @@ test('isStructurallyValidReviewBody accepts explicit no-finding output with resi
     'Residual risks / testing gaps:',
     '- Manual smoke testing still recommended.',
   ].join('\n')), true);
+});
+
+test('buildFallbackReviewBody produces a structurally valid review body', () => {
+  const fallback = buildFallbackReviewBody({
+    choices: [{ message: { parsed: { unexpected: true } } }],
+  });
+
+  assert.equal(isStructurallyValidReviewBody(fallback), true);
+  assert.match(fallback, /Automated review body could not be parsed/);
 });
