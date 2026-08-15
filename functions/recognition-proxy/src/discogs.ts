@@ -83,14 +83,25 @@ export class DiscogsAlbumEnrichment implements AlbumEnrichmentPort {
       : await this.search(album, options);
     const releaseId = album.discogs_release_id || searchResult?.id?.toString();
     if (!releaseId) {
+      logDiscogsLookup("missing", album, options);
       return searchResult ? mergeSearchResult(album, searchResult) : album;
     }
 
     const release = await this.getRelease(releaseId, options);
-    return mergeRelease(mergeSearchResult(album, searchResult), release);
+    const enriched = mergeRelease(mergeSearchResult(album, searchResult), release);
+    logDiscogsLookup("present", enriched, options);
+    return enriched;
   }
 
   private async search(album: Album, options: AlbumEnrichmentOptions): Promise<DiscogsSearchResult | null> {
+    for (const candidate of searchCandidates(album)) {
+      const result = await this.searchCandidate(candidate, options);
+      if (result) return result;
+    }
+    return null;
+  }
+
+  private async searchCandidate(album: Album, options: AlbumEnrichmentOptions): Promise<DiscogsSearchResult | null> {
     const params = new URLSearchParams({
       type: "release",
       per_page: "5"
@@ -127,6 +138,47 @@ export class DiscogsAlbumEnrichment implements AlbumEnrichmentPort {
     }
     return await response.json() as T;
   }
+}
+
+function searchCandidates(album: Album): Album[] {
+  const titles = unique([
+    album.title,
+    withoutParenthetical(album.title)
+  ]);
+
+  return titles.map((title) => ({ ...album, title }));
+}
+
+function withoutParenthetical(value: string | undefined | null): string | null {
+  const cleaned = clean(value)?.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || null;
+}
+
+function unique(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const cleaned = clean(value);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(cleaned);
+  }
+  return result;
+}
+
+function logDiscogsLookup(outcome: "present" | "missing", album: Album, options: AlbumEnrichmentOptions): void {
+  options.logger?.log?.(`Discogs album lookup completed: ${outcome}.`, {
+    outcome,
+    discogsReleaseIdPresent: Boolean(album.discogs_release_id),
+    artistPresent: Boolean(clean(album.artist)),
+    titlePresent: Boolean(clean(album.title)),
+    labelPresent: Boolean(clean(album.label)),
+    catalogNumberPresent: Boolean(clean(album.catalog_number)),
+    trackCount: album.tracklist?.length || 0,
+    identifierCount: album.identifiers?.length || 0
+  });
 }
 
 export class NoopAlbumEnrichment implements AlbumEnrichmentPort {

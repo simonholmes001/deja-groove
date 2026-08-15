@@ -122,6 +122,59 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(enriched, snapshot.entries.first?.album)
     }
 
+    func testIdentifyPlayingAudioPrioritizesDiscogsEnrichedCandidateForHistory() async {
+        let track = AudioDiscoveryTrack(title: "Sanctuary (Live)", artist: "Wayne Shorter", matchedAt: "2026-08-15T13:13:34Z")
+        let sparse = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Sanctuary (Live)",
+            artist: "Wayne Shorter",
+            year: 2002,
+            format: nil,
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/track/sanctuary")])
+        let albumCandidate = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Footprints Live!",
+            artist: "Wayne Shorter",
+            year: 2002,
+            format: nil,
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/footprints-live")])
+        let discogsEnriched = Album(
+            mbid: nil,
+            discogsReleaseId: "1552461",
+            discogsMasterId: "4321",
+            title: "Footprints Live!",
+            artist: "Wayne Shorter",
+            year: 2002,
+            format: "CD, Album",
+            label: "Verve",
+            catalogNumber: "314 589 679-2",
+            country: "US",
+            barcode: "731458967927",
+            genres: ["Jazz"],
+            styles: ["Post Bop"],
+            tracklist: [AlbumTrack(position: "8", title: "Sanctuary", duration: "5:31")],
+            identifiers: [AlbumIdentifier(type: "Barcode", value: "731458967927", description: nil)],
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/footprints-live")])
+        let discoveryStore = DiscoveryStoreSpy()
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            discoveryStore: discoveryStore,
+            audioDiscovery: AudioDiscoveryServiceStub(track: track),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [sparse, albumCandidate]),
+            albumEnricher: AlbumMetadataEnricherStub(enrichedAlbums: [discogsEnriched]),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+
+        XCTAssertEqual("1552461", sut.candidates.first?.discogsReleaseId)
+        XCTAssertEqual("Footprints Live!", sut.candidates.first?.title)
+        let snapshot = await discoveryStore.snapshot()
+        XCTAssertEqual("1552461", snapshot.entries.first?.album?.discogsReleaseId)
+        XCTAssertEqual("Footprints Live!", snapshot.entries.first?.album?.title)
+    }
+
     func testIdentifyPlayingAudioSurfacesServiceMessageWhenMicrophonePermissionIsDenied() async {
         let error = ApiClientError.httpError(
             403,

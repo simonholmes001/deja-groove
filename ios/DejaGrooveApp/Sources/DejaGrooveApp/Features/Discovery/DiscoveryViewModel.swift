@@ -124,7 +124,32 @@ public final class DiscoveryViewModel: ObservableObject {
                 enrichedAlbums.append(album)
             }
         }
-        return enrichedAlbums
+        return enrichedAlbums.sorted(by: discogsEnrichedAlbumsFirst)
+    }
+
+    private func discogsEnrichedAlbumsFirst(_ lhs: Album, _ rhs: Album) -> Bool {
+        let lhsScore = enrichmentScore(lhs)
+        let rhsScore = enrichmentScore(rhs)
+        if lhsScore != rhsScore {
+            return lhsScore > rhsScore
+        }
+        return LocalCollectionRules.compareAlbumsByArtistFamilyName(
+            lhs,
+            rhs,
+            lhsTieBreaker: lhs.discogsReleaseId ?? lhs.mbid ?? lhs.title,
+            rhsTieBreaker: rhs.discogsReleaseId ?? rhs.mbid ?? rhs.title)
+    }
+
+    private func enrichmentScore(_ album: Album) -> Int {
+        var score = 0
+        if album.discogsReleaseId != nil { score += 100 }
+        if album.discogsMasterId != nil { score += 25 }
+        if album.catalogNumber != nil { score += 10 }
+        if album.country != nil { score += 10 }
+        if !album.tracklist.isEmpty { score += 10 }
+        if !album.identifiers.isEmpty { score += 10 }
+        if album.label != nil { score += 5 }
+        return score
     }
 
     private func albumForWishlistSave(_ album: Album) async -> Album {
