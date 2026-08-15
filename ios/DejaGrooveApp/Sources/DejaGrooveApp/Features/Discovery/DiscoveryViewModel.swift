@@ -1,9 +1,15 @@
 import Foundation
 
+public struct DiscoveryCandidateResult: Equatable, Sendable {
+    public let album: Album
+    public let status: String
+}
+
 @MainActor
 public final class DiscoveryViewModel: ObservableObject {
     @Published public private(set) var track: AudioDiscoveryTrack?
     @Published public private(set) var candidates: [Album] = []
+    @Published public private(set) var candidateResults: [DiscoveryCandidateResult] = []
     @Published public private(set) var history: [DiscoveryEntry] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var message: String?
@@ -11,6 +17,8 @@ public final class DiscoveryViewModel: ObservableObject {
     @Published public var search = ""
 
     private let api: ApiClient
+    private let collectionStore: LocalCollectionStore
+    private let wishlistStore: LocalWishlistStore
     private let discoveryStore: LocalDiscoveryStore
     private let audioDiscovery: AudioDiscoveryService
     private let candidateResolver: AlbumCandidateResolver
@@ -19,6 +27,8 @@ public final class DiscoveryViewModel: ObservableObject {
 
     public init(
         api: ApiClient,
+        collectionStore: LocalCollectionStore = PersistentLocalCollectionStore(),
+        wishlistStore: LocalWishlistStore = PersistentLocalWishlistStore(),
         discoveryStore: LocalDiscoveryStore = PersistentLocalDiscoveryStore(),
         audioDiscovery: AudioDiscoveryService = UnavailableAudioDiscoveryService(),
         candidateResolver: AlbumCandidateResolver = LocalAlbumCandidateResolver(),
@@ -26,6 +36,8 @@ public final class DiscoveryViewModel: ObservableObject {
         musicAuthorization: MusicAuthorizationControlling = UnavailableMusicAuthorizationController()
     ) {
         self.api = api
+        self.collectionStore = collectionStore
+        self.wishlistStore = wishlistStore
         self.discoveryStore = discoveryStore
         self.audioDiscovery = audioDiscovery
         self.candidateResolver = candidateResolver
@@ -67,10 +79,14 @@ public final class DiscoveryViewModel: ObservableObject {
     public func identifyPlayingAudio() async {
         isLoading = true
         message = nil
+        candidateResults = []
+        candidates = []
         do {
             let match = try await audioDiscovery.identifyCurrentAudio()
             track = match
-            candidates = await enrichAlbums(try await candidateResolver.albumCandidates(for: match), for: match)
+            candidateResults = try await decorateCandidateResults(
+                await enrichAlbums(try await candidateResolver.albumCandidates(for: match), for: match))
+            candidates = candidateResults.map(\.album)
             _ = try await discoveryStore.addDiscovery(source: "audio", album: candidates.first, track: match)
             history = try await discoveryStore.fetchDiscoveries(search: nil)
             message = candidates.isEmpty ? "Audio identified. No album candidates found." : nil
@@ -127,6 +143,27 @@ public final class DiscoveryViewModel: ObservableObject {
         return enrichedAlbums
             .filter { isPlausibleAlbumCandidate($0, for: track) }
             .sorted(by: discogsEnrichedAlbumsFirst)
+    }
+
+    private func decorateCandidateResults(_ albums: [Album]) async throws -> [DiscoveryCandidateResult] {
+        var results: [DiscoveryCandidateResult] = []
+        for album in albums {
+            results.append(DiscoveryCandidateResult(album: album, status: try await status(for: album)))
+        }
+        return results
+    }
+
+    private func status(for album: Album) async throws -> String {
+        if try await collectionStore.contains(album: album) {
+            return "owned"
+        }
+        if try await wishlistStore.contains(album: album) {
+            return "wishlist_match"
+        }
+        if try await discoveryStore.contains(album: album) {
+            return "discovery_match"
+        }
+        return "safe_to_buy"
     }
 
     private func discogsEnrichedAlbumsFirst(_ lhs: Album, _ rhs: Album) -> Bool {

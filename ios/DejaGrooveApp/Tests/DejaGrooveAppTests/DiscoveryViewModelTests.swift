@@ -76,6 +76,30 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(track, snapshot.entries.first?.track)
     }
 
+    func testIdentifyPlayingAudioHighlightsExistingCrateWishlistAndDiscoveryMatches() async {
+        let track = AudioDiscoveryTrack(title: "Track", artist: "Artist", matchedAt: "2026-01-01T00:00:00Z")
+        let owned = Album(mbid: nil, discogsReleaseId: "owned-1", title: "Owned Album", artist: "Artist", year: 1970, format: nil)
+        let wanted = Album(mbid: nil, discogsReleaseId: "wanted-1", title: "Wanted Album", artist: "Artist", year: 1971, format: nil)
+        let discovered = Album(mbid: nil, discogsReleaseId: "discovered-1", title: "Discovered Album", artist: "Artist", year: 1972, format: nil)
+        let safe = Album(mbid: nil, discogsReleaseId: "safe-1", title: "Safe Album", artist: "Artist", year: 1973, format: nil)
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            collectionStore: DiscoveryCollectionStoreSpy(existingAlbums: [owned]),
+            wishlistStore: DiscoveryWishlistStoreSpy(existingAlbums: [wanted]),
+            discoveryStore: DiscoveryStoreSpy(existingAlbums: [discovered]),
+            audioDiscovery: AudioDiscoveryServiceStub(track: track),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [owned, wanted, discovered, safe]),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+
+        let statusesByTitle = Dictionary(uniqueKeysWithValues: sut.candidateResults.map { ($0.album.title, $0.status) })
+        XCTAssertEqual("owned", statusesByTitle["Owned Album"])
+        XCTAssertEqual("wishlist_match", statusesByTitle["Wanted Album"])
+        XCTAssertEqual("discovery_match", statusesByTitle["Discovered Album"])
+        XCTAssertEqual("safe_to_buy", statusesByTitle["Safe Album"])
+    }
+
     func testIdentifyPlayingAudioStoresEnrichedAlbumCandidatesWithListeningLinks() async {
         let track = AudioDiscoveryTrack(title: "Indigo", artist: "Miki Yamanaka", matchedAt: "2026-08-14T10:23:00Z")
         let candidate = Album(
@@ -449,8 +473,92 @@ private final class SequencedAlbumMetadataEnricherStub: AlbumMetadataEnricher, @
     }
 }
 
+private actor DiscoveryCollectionStoreSpy: LocalCollectionStore {
+    private var existingAlbums: [Album]
+
+    init(existingAlbums: [Album] = []) {
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        existingAlbums.contains { LocalCollectionRules.isDuplicate($0, album) }
+    }
+
+    func addToCollection(album: Album, notes: String?, addAnyway: Bool) async throws -> CollectionItemResponse {
+        existingAlbums.append(album)
+        return CollectionItemResponse(id: UUID(), mbid: album.mbid, discogsReleaseId: album.discogsReleaseId, title: album.title, artist: album.artist, year: album.year, format: album.format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func fetchCollection(search: String?) async throws -> CollectionListResponse {
+        CollectionListResponse(items: [], nextCursor: nil)
+    }
+
+    func patchCollection(id: UUID, format: String?, notes: String?) async throws -> CollectionItemResponse {
+        CollectionItemResponse(id: id, mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func updateCollectionRecord(id: UUID, album: Album, notes: String?) async throws -> CollectionItemResponse {
+        CollectionItemResponse(id: id, mbid: album.mbid, discogsReleaseId: album.discogsReleaseId, title: album.title, artist: album.artist, year: album.year, format: album.format, notes: notes, createdAt: "", updatedAt: "")
+    }
+
+    func deleteCollectionRecord(id: UUID) async throws {}
+
+    func fetchCrateCollections(search: String?) async throws -> [CrateCollection] { [] }
+
+    func createCrateCollection(name: String) async throws -> CrateCollection {
+        CrateCollection(id: UUID(), name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func renameCrateCollection(id: UUID, name: String) async throws -> CrateCollection {
+        CrateCollection(id: id, name: name, recordIds: [], createdAt: "", updatedAt: "")
+    }
+
+    func deleteCrateCollection(id: UUID) async throws {}
+
+    func addRecord(_ recordId: UUID, toCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [recordId], createdAt: "", updatedAt: "")
+    }
+
+    func removeRecord(_ recordId: UUID, fromCrateCollection collectionId: UUID) async throws -> CrateCollection {
+        CrateCollection(id: collectionId, name: "", recordIds: [], createdAt: "", updatedAt: "")
+    }
+}
+
+private actor DiscoveryWishlistStoreSpy: LocalWishlistStore {
+    private var existingAlbums: [Album]
+
+    init(existingAlbums: [Album] = []) {
+        self.existingAlbums = existingAlbums
+    }
+
+    func contains(album: Album) async throws -> Bool {
+        existingAlbums.contains { LocalCollectionRules.isDuplicate($0, album) }
+    }
+
+    func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        existingAlbums.append(album)
+        return WishlistEntry(id: UUID(), album: album, preferences: preferences, sourceTrack: sourceTrack, createdAt: "", updatedAt: "")
+    }
+
+    func fetchWishlist(search: String?) async throws -> [WishlistEntry] {
+        existingAlbums.map { WishlistEntry(id: UUID(), album: $0, preferences: WishlistPreferences(), sourceTrack: nil, createdAt: "", updatedAt: "") }
+    }
+
+    func updateWishlistPreferences(id: UUID, preferences: WishlistPreferences) async throws -> WishlistEntry {
+        WishlistEntry(id: id, album: Album(mbid: nil, discogsReleaseId: nil, title: "", artist: "", year: nil, format: nil), preferences: preferences, sourceTrack: nil, createdAt: "", updatedAt: "")
+    }
+
+    func deleteWishlistEntry(id: UUID) async throws {}
+}
+
 private actor DiscoveryStoreSpy: LocalDiscoveryStore {
     private(set) var entries: [DiscoveryEntry] = []
+
+    init(existingAlbums: [Album] = []) {
+        self.entries = existingAlbums.map {
+            DiscoveryEntry(id: UUID(), source: "audio", album: $0, track: nil, createdAt: "2026-01-01T00:00:00Z")
+        }
+    }
 
     func contains(album: Album) async throws -> Bool {
         entries.contains {

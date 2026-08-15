@@ -133,15 +133,15 @@ public struct DiscoveryView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(Array(viewModel.candidates.enumerated()), id: \.offset) { _, album in
+                        ForEach(Array(viewModel.candidateResults.enumerated()), id: \.offset) { _, result in
                             HStack {
                                 Button {
-                                    selectedAlbum = album
+                                    selectedAlbum = result.album
                                 } label: {
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(album.artist)
+                                        Text(result.album.artist)
                                             .font(.subheadline.bold())
-                                        Text(album.title)
+                                        Text(result.album.title)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -149,17 +149,55 @@ public struct DiscoveryView: View {
                                 }
                                 .buttonStyle(.plain)
                                 Spacer()
-                                Button {
-                                    Task { await viewModel.saveCandidateToWishlist(album) }
-                                } label: {
-                                    Image(systemName: "heart")
+                                Text(statusLabel(for: result.status))
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(statusColor(for: result.status))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(statusColor(for: result.status).opacity(0.12), in: Capsule())
+                                if result.status != "owned" && result.status != "wishlist_match" {
+                                    Button {
+                                        Task { await viewModel.saveCandidateToWishlist(result.album) }
+                                    } label: {
+                                        Image(systemName: "heart")
+                                    }
+                                    .buttonStyle(.bordered)
                                 }
-                                .buttonStyle(.bordered)
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    private func statusLabel(for status: String) -> String {
+        switch status {
+        case "safe_to_buy":
+            return "SAFE"
+        case "owned":
+            return "IN CRATE"
+        case "wishlist_match":
+            return "WISHLIST"
+        case "discovery_match":
+            return "DISCOVERED"
+        default:
+            return status.replacingOccurrences(of: "_", with: " ").uppercased()
+        }
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "safe_to_buy":
+            return .green
+        case "owned":
+            return .red
+        case "wishlist_match":
+            return DejaGrooveStyle.blue
+        case "discovery_match":
+            return .purple
+        default:
+            return .secondary
         }
     }
 
