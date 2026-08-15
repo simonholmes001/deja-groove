@@ -5,7 +5,6 @@ import process from 'process';
 import {
   buildSystemPrompt,
   buildUserPrompt,
-  buildFallbackReviewBody,
   extractReviewBodyFromOpenAiPayload,
   isStructurallyValidReviewBody,
   isChangesetReleasePr,
@@ -137,12 +136,13 @@ if (!openAiResponse.ok) {
 
 const openAiPayload = await openAiResponse.json();
 const extractedReviewBody = extractReviewBodyFromOpenAiPayload(openAiPayload);
-const reviewBody = extractedReviewBody && isStructurallyValidReviewBody(extractedReviewBody)
-  ? extractedReviewBody
-  : buildFallbackReviewBody(openAiPayload);
-if (reviewBody !== extractedReviewBody) {
-  console.warn('OpenAI review body was missing or did not match the required output contract; posting fallback review body.');
+if (!extractedReviewBody) {
+  throw new Error('OpenAI response did not include a parseable review body.');
 }
+if (!isStructurallyValidReviewBody(extractedReviewBody)) {
+  throw new Error('OpenAI review body did not match the required review output contract.');
+}
+const reviewBody = extractedReviewBody;
 
 const taggedBody = `${codexReviewMarker}\n${reviewBody}`;
 
