@@ -166,7 +166,9 @@ public struct AppleMusicAlbumCandidateResolver: AlbumCandidateResolver {
             return try await fallback.albumCandidates(for: track)
         }
         let decoded = try JSONDecoder().decode(AppleMusicSearchResponse.self, from: data)
-        let albums = decoded.results.map { result in
+        let albums = decoded.results
+            .filter { Self.artistMatches($0.artistName, track.artist) }
+            .map { result in
             Album(
                 mbid: nil,
                 discogsReleaseId: nil,
@@ -180,8 +182,25 @@ public struct AppleMusicAlbumCandidateResolver: AlbumCandidateResolver {
                 listeningLinks: result.collectionViewUrl.map {
                     [AlbumListeningLink(provider: "Apple Music", url: $0, catalogId: result.collectionId.map(String.init))]
                 } ?? [])
-        }
+            }
         return albums.isEmpty ? try await fallback.albumCandidates(for: track) : albums
+    }
+
+    private static func artistMatches(_ candidate: String, _ matchedArtist: String) -> Bool {
+        let candidate = normalizedArtist(candidate)
+        let matchedArtist = normalizedArtist(matchedArtist)
+        guard !candidate.isEmpty, !matchedArtist.isEmpty else { return false }
+        return candidate == matchedArtist
+            || candidate.contains(matchedArtist)
+            || matchedArtist.contains(candidate)
+    }
+
+    private static func normalizedArtist(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: #"(?i)\s+(feat\.?|featuring|with)\s+.*$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

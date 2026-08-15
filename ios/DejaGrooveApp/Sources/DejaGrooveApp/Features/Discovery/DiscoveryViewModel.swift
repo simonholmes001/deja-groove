@@ -70,7 +70,7 @@ public final class DiscoveryViewModel: ObservableObject {
         do {
             let match = try await audioDiscovery.identifyCurrentAudio()
             track = match
-            candidates = await enrichAlbums(try await candidateResolver.albumCandidates(for: match))
+            candidates = await enrichAlbums(try await candidateResolver.albumCandidates(for: match), for: match)
             _ = try await discoveryStore.addDiscovery(source: "audio", album: candidates.first, track: match)
             history = try await discoveryStore.fetchDiscoveries(search: nil)
             message = candidates.isEmpty ? "Audio identified. No album candidates found." : nil
@@ -114,7 +114,7 @@ public final class DiscoveryViewModel: ObservableObject {
         }
     }
 
-    private func enrichAlbums(_ albums: [Album]) async -> [Album] {
+    private func enrichAlbums(_ albums: [Album], for track: AudioDiscoveryTrack) async -> [Album] {
         var enrichedAlbums: [Album] = []
         for album in albums {
             do {
@@ -124,7 +124,9 @@ public final class DiscoveryViewModel: ObservableObject {
                 enrichedAlbums.append(album)
             }
         }
-        return enrichedAlbums.sorted(by: discogsEnrichedAlbumsFirst)
+        return enrichedAlbums
+            .filter { isPlausibleAlbumCandidate($0, for: track) }
+            .sorted(by: discogsEnrichedAlbumsFirst)
     }
 
     private func discogsEnrichedAlbumsFirst(_ lhs: Album, _ rhs: Album) -> Bool {
@@ -150,6 +152,39 @@ public final class DiscoveryViewModel: ObservableObject {
         if !album.identifiers.isEmpty { score += 10 }
         if album.label != nil { score += 5 }
         return score
+    }
+
+    private func isPlausibleAlbumCandidate(_ album: Album, for track: AudioDiscoveryTrack) -> Bool {
+        guard artistMatches(album.artist, track.artist) else { return false }
+        guard !album.tracklist.isEmpty else { return true }
+        return album.tracklist.contains { albumTrack in
+            normalizedTitle(albumTrack.title) == normalizedTitle(track.title)
+        }
+    }
+
+    private func artistMatches(_ candidate: String, _ matchedArtist: String) -> Bool {
+        let candidate = normalizedArtist(candidate)
+        let matchedArtist = normalizedArtist(matchedArtist)
+        guard !candidate.isEmpty, !matchedArtist.isEmpty else { return false }
+        return candidate == matchedArtist
+            || candidate.contains(matchedArtist)
+            || matchedArtist.contains(candidate)
+    }
+
+    private func normalizedArtist(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: #"(?i)\s+(feat\.?|featuring|with)\s+.*$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedTitle(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: #"\([^)]*\)"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func albumForWishlistSave(_ album: Album) async -> Album {

@@ -175,6 +175,71 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual("Footprints Live!", snapshot.entries.first?.album?.title)
     }
 
+    func testIdentifyPlayingAudioRejectsEnrichedAlbumsThatDoNotContainMatchedTrack() async {
+        let track = AudioDiscoveryTrack(title: "Flash Of The Blade", artist: "Iron Maiden", matchedAt: "2026-08-15T15:16:00Z")
+        let powerslave = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Powerslave",
+            artist: "Iron Maiden",
+            year: 1984,
+            format: nil,
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/powerslave")])
+        let wrongBlade = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "The Best Of Rusty Blade",
+            artist: "Rusty Blade",
+            year: 2010,
+            format: nil,
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/rusty-blade")])
+        let enrichedPowerslave = Album(
+            mbid: nil,
+            discogsReleaseId: "865721",
+            title: "Powerslave",
+            artist: "Iron Maiden",
+            year: 1984,
+            format: "Vinyl, LP, Album",
+            label: "EMI",
+            catalogNumber: "POWER 1",
+            tracklist: [
+                AlbumTrack(position: "A1", title: "Aces High", duration: nil),
+                AlbumTrack(position: "A2", title: "2 Minutes To Midnight", duration: nil),
+                AlbumTrack(position: "A3", title: "Losfer Words (Big 'Orra)", duration: nil),
+                AlbumTrack(position: "A4", title: "Flash Of The Blade", duration: nil)
+            ],
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/powerslave")])
+        let enrichedWrongBlade = Album(
+            mbid: nil,
+            discogsReleaseId: "999999",
+            discogsMasterId: "888888",
+            title: "The Best Of Rusty Blade",
+            artist: "Rusty Blade",
+            year: 2010,
+            format: "CD, Compilation",
+            label: "Wrong Label",
+            catalogNumber: "WRONG-1",
+            country: "MY",
+            tracklist: [AlbumTrack(position: "1", title: "Not Flash Of The Blade", duration: nil)],
+            identifiers: [AlbumIdentifier(type: "Barcode", value: "123", description: nil)],
+            listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/rusty-blade")])
+        let discoveryStore = DiscoveryStoreSpy()
+        let sut = DiscoveryViewModel(
+            api: DiscoveryApiClientSpy(),
+            discoveryStore: discoveryStore,
+            audioDiscovery: AudioDiscoveryServiceStub(track: track),
+            candidateResolver: AlbumCandidateResolverStub(candidates: [wrongBlade, powerslave]),
+            albumEnricher: AlbumMetadataEnricherStub(enrichedAlbums: [enrichedWrongBlade, enrichedPowerslave]),
+            musicAuthorization: MusicAuthorizationControllerStub(status: .authorized))
+
+        await sut.identifyPlayingAudio()
+
+        XCTAssertEqual(["Powerslave"], sut.candidates.map(\.title))
+        XCTAssertEqual("865721", sut.candidates.first?.discogsReleaseId)
+        let snapshot = await discoveryStore.snapshot()
+        XCTAssertEqual("Powerslave", snapshot.entries.first?.album?.title)
+    }
+
     func testIdentifyPlayingAudioSurfacesServiceMessageWhenMicrophonePermissionIsDenied() async {
         let error = ApiClientError.httpError(
             403,

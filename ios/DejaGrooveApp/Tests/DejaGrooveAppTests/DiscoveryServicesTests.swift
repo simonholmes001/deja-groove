@@ -77,6 +77,50 @@ final class DiscoveryServicesTests: XCTestCase {
         XCTAssertEqual("Apple Music", candidates.first?.listeningLinks.first?.provider)
         XCTAssertEqual("1440857781", candidates.first?.listeningLinks.first?.catalogId)
     }
+
+    func testAppleMusicAlbumCandidateResolverFiltersCatalogResultsToMatchedArtist() async throws {
+        let payload = """
+        {
+          "results": [
+            {
+              "artistName": "Iron Maiden",
+              "collectionName": "Powerslave",
+              "collectionId": 123,
+              "collectionViewUrl": "https://music.apple.com/us/album/powerslave/123",
+              "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/powerslave/100x100bb.jpg",
+              "releaseDate": "1984-09-03T12:00:00Z"
+            },
+            {
+              "artistName": "Rusty Blade",
+              "collectionName": "The Best Of Rusty Blade",
+              "collectionId": 456,
+              "collectionViewUrl": "https://music.apple.com/us/album/the-best-of-rusty-blade/456",
+              "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/rusty/100x100bb.jpg",
+              "releaseDate": "2010-01-01T12:00:00Z"
+            },
+            {
+              "artistName": "Various Artists",
+              "collectionName": "Spider-Man: Into the Spider-Verse",
+              "collectionId": 789,
+              "collectionViewUrl": "https://music.apple.com/us/album/spider-verse/789",
+              "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/spider/100x100bb.jpg",
+              "releaseDate": "2018-12-14T12:00:00Z"
+            }
+          ]
+        }
+        """
+        let resolver = AppleMusicAlbumCandidateResolver(
+            transport: StaticHttpTransport(data: Data(payload.utf8), statusCode: 200))
+
+        let candidates = try await resolver.albumCandidates(for: AudioDiscoveryTrack(
+            title: "Flash Of The Blade",
+            artist: "Iron Maiden",
+            matchedAt: "2026-08-15T15:16:00Z"))
+
+        XCTAssertEqual(1, candidates.count)
+        XCTAssertEqual("Iron Maiden", candidates.first?.artist)
+        XCTAssertEqual("Powerslave", candidates.first?.title)
+    }
 }
 
 private final class CapturingHttpTransport: HttpTransport, @unchecked Sendable {
