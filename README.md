@@ -11,9 +11,9 @@
 ![Node 22+](https://img.shields.io/badge/Node.js-22%2B-green)
 ![Azure Functions](https://img.shields.io/badge/Azure-Functions-0078D4)
 
-Déjà Groove is an iPhone-first record-store companion for vinyl collectors. Scan an album cover, identify the release, check whether it is already in your crate, save it locally, and organize it into collections.
+Déjà Groove is an iPhone-first record-store companion for vinyl collectors. Scan an album cover or identify music playing nearby, resolve it to album/release candidates, check whether it is already in My Crate, Wishlist, or Discovery history, and save it locally.
 
-The current product direction is deliberately local-first: the iOS app owns the user's crate, collections, duplicate detection, and local persistence. Azure is reduced to a small recognition proxy that keeps provider secrets off the phone and calls OpenAI plus optional metadata/artwork providers.
+The current product direction is deliberately local-first: the iOS app owns the user's crate, wishlist, discovery history, collections, duplicate/status detection, and local persistence. Azure is reduced to a small recognition proxy that keeps provider secrets off the phone and calls OpenAI plus metadata/artwork providers.
 
 ## Why This Exists
 
@@ -22,9 +22,11 @@ Record shopping is fast, noisy, and often network-constrained. The useful questi
 Déjà Groove focuses on that workflow:
 
 - identify a record from a cover image
-- flag duplicate ownership at scan time
-- enrich album details with release metadata and artwork
-- save albums into a local crate on the iPhone
+- identify playing music and map tracks to likely album/release candidates
+- flag matches across My Crate, Wishlist, and Discovery history
+- enrich album details with Discogs release metadata, artwork, and Apple Music listening links
+- save albums into a local crate or wishlist on the iPhone
+- keep a local discovery history for later decisions
 - organize albums into named collections
 - keep the hosted cloud footprint minimal until the product needs sync or collaboration
 
@@ -33,20 +35,27 @@ Déjà Groove focuses on that workflow:
 The app is usable through TestFlight/internal iPhone testing. The active runtime is:
 
 - iOS app in `local_proxy` mode
-- local My Crate and Collections storage on device
+- local My Crate, Wishlist, Discovery History, and Collections storage on device
+- camera/photo album scanning
+- ShazamKit audio discovery with MusicKit/iTunes album candidate lookup
 - Azure Function recognition proxy for scan inference
-- OpenAI recognition with Discogs metadata enrichment
-- Cover Art Archive and iTunes artwork fallback
+- OpenAI recognition with required Discogs metadata enrichment
+- Cover Art Archive, iTunes, and Apple Music link/artwork fallback
 - automatic internal TestFlight upload on iOS-related pushes to `main`
 
-This is not yet a public App Store-ready product. The remaining work is mostly privacy/compliance, accessibility, local data hardening, and product polish rather than core proof of concept.
+This is not yet a public App Store-ready product. The remaining work is mostly privacy/compliance, accessibility, local data hardening, and product polish.
 
 ## Features
 
 - Scan album covers from camera or existing photos.
 - See scan states: `SAFE TO BUY`, `DUPLICATE`, `AMBIGUOUS`, and `NO MATCH`.
 - Resolve ambiguous release candidates manually.
-- Add albums to My Crate.
+- Add albums to My Crate, Wishlist, or Discovery History.
+- Identify playing songs from the Discover tab.
+- Review album/release candidates for discovered tracks.
+- Save wanted albums to Wishlist with optional pressing preferences.
+- Clear all Discovery history or remove individual history items.
+- Open Apple Music listening/search links when available.
 - View album artwork and release details.
 - Edit locally stored album information.
 - Delete albums and uploaded local cover images.
@@ -84,10 +93,10 @@ This is not yet a public App Store-ready product. The remaining work is mostly p
              ┌──────────────────────────────────────────────┐
              │                  iPhone App                  │
              │                                              │
-             │  Scan UI  ── My Crate ── Collections         │
-             │     │             │             │            │
-             │     └─────────────┴─────────────┘            │
-             │          local persistence + duplicate checks │
+             │  Scan ── Discover ── Wishlist ── My Crate    │
+             │    │          │           │          │        │
+             │    └──────────┴───────────┴──────────┘        │
+             │      local persistence + status checks        │
              └──────────────────────┬───────────────────────┘
                                     │ HTTPS + Function key
                                     ▼
@@ -99,7 +108,7 @@ This is not yet a public App Store-ready product. The remaining work is mostly p
              └───────────────┬───────────────┬──────────────┘
                              │               │
                              ▼               ▼
-                         OpenAI API       Discogs / artwork fallbacks
+                         OpenAI API       Discogs / artwork / Apple Music
 ```
 
 ### Design Principles
@@ -107,7 +116,8 @@ This is not yet a public App Store-ready product. The remaining work is mostly p
 - **Local-first user data:** crate and collection state live on the iPhone.
 - **Small cloud surface:** Azure exists primarily to protect API keys and normalize scan responses.
 - **No committed secrets:** local Function keys live in ignored `.xcconfig` files; CI secrets live in GitHub Actions and Azure Key Vault.
-- **Provider data is nullable:** Discogs/artwork metadata varies by release; UI and persistence must tolerate missing fields.
+- **Shared album metadata path:** image scans and audio discovery album candidates should converge on the same album detail model.
+- **Provider data is nullable:** Discogs, artwork, and Apple Music metadata varies by release; UI and persistence must tolerate missing fields.
 - **Release automation over manual drift:** GitHub Actions owns validation, releases, and TestFlight uploads.
 
 ## Prerequisites
@@ -116,6 +126,8 @@ For iOS development:
 
 - macOS with Xcode that supports Swift 6
 - iOS 17+ device or simulator
+- physical iPhone recommended for camera, microphone, ShazamKit, and Apple Music testing
+- Apple Developer capabilities for Apple Music/MusicKit if testing listening links and catalog access
 - GitHub CLI if working with PRs/issues locally
 
 For the recognition proxy:
@@ -180,11 +192,11 @@ Debug builds use the deployed recognition proxy through `local_proxy` mode. To r
 ## Usage
 
 1. Open the app.
-2. Go to **Scan**.
-3. Tap **Pick or Capture Cover**.
-4. Choose a cover image or capture one with the camera.
-5. Review the recognition result.
-6. Add safe results to **My Crate**, or resolve ambiguous candidates.
+2. Use **Scan** to pick or capture a cover image.
+3. Review the recognition result and status against My Crate, Wishlist, and Discovery history.
+4. Add safe results to **My Crate**, save wanted records to **Wishlist**, save later decisions to **Discovery**, or resolve ambiguous candidates.
+5. Use **Discover** to identify a playing song, review album candidates, save wanted albums, and open Apple Music links.
+6. Use **Wishlist** to review wanted albums and record pressing preferences.
 7. Use **My Crate** to search, filter, edit, delete, and assign albums to collections.
 8. Use **Collections** to create named groupings and manage membership.
 
@@ -267,8 +279,12 @@ Local app configuration is controlled through Xcode `.xcconfig` files:
 The Azure Function reads:
 
 - `OPENAI_KEY` from Key Vault as `openai-key`
-- optional `DISCOGS_TOKEN`, provisioned into Key Vault as `DISCOGS-TOKEN`
+- required `DISCOGS_TOKEN`, provisioned into Key Vault as `DISCOGS-TOKEN`
 - optional scan/enrichment timeout and cache settings
+
+The dev infrastructure deployment validates that Discogs enrichment is configured. If `DISCOGS-TOKEN` is missing or disabled in Key Vault, set `DISCOGS_TOKEN` in the deployment environment so the secret can be bootstrapped.
+
+ShazamKit and MusicKit run through Apple platform APIs on the iPhone. Apple Music links are resolved best-effort from MusicKit/iTunes catalog data and do not require a backend API key.
 
 Never commit API keys, Function keys, Apple signing secrets, Match passwords, or App Store Connect private keys.
 
@@ -305,22 +321,21 @@ Priority: important MVP quality gate.
 
 Why now: the app is visual and scan-heavy. VoiceOver, Dynamic Type, contrast, and non-color-only status cues should be fixed before design debt spreads.
 
-### 4. Simplify The Runtime And Remove Legacy Paths
+### 4. Keep Runtime And Metadata Paths Simple
 
 Priority: reduce complexity and maintenance risk.
 
-- [#169](https://github.com/simonholmes001/deja-groove/issues/169) Replace legacy Azure runtime with minimum-cost Function deployment.
-- [#160](https://github.com/simonholmes001/deja-groove/issues/160) Migrate app to iPhone-local runtime with minimal Azure proxy.
+- Audit any remaining hosted-era documentation, identity notes, and inactive runtime references.
+- Keep image scan and audio discovery enrichment on the same album metadata contract.
+- Keep deployment guards strict for required provider configuration.
 
-Why now: the product has moved to local-first. Keeping hosted-era auth and infrastructure paths around makes every change harder to reason about.
+Why now: the product has moved to local-first. Runtime drift and inconsistent enrichment paths make user-facing regressions harder to diagnose.
 
 ### 5. Improve Scan Reliability And Latency
 
 Priority: continue after data safety and compliance.
 
 - [#165](https://github.com/simonholmes001/deja-groove/issues/165) Port scan confidence mapping to Swift.
-- [#167](https://github.com/simonholmes001/deja-groove/issues/167) Implement local ambiguous scan resolution.
-- [#162](https://github.com/simonholmes001/deja-groove/issues/162) Configure OpenAI secret handling for minimal Azure proxy.
 
 Why now: scan quality is the core experience, but the current baseline is usable. The next improvements should be measured against real record-store testing rather than model changes made in isolation.
 
@@ -329,7 +344,6 @@ Why now: scan quality is the core experience, but the current baseline is usable
 Priority: useful once testing expands.
 
 - [#64](https://github.com/simonholmes001/deja-groove/issues/64) Implement settings and account management screens.
-- [#24](https://github.com/simonholmes001/deja-groove/issues/24) Deliver My Crate browsing experience.
 
 Why now: users need a place to understand runtime, privacy, storage, app version, and support state.
 
@@ -339,15 +353,20 @@ Déjà Groove is an MVP when:
 
 - a tester can install through TestFlight without developer help
 - scanning works reliably enough for normal record-store conditions
+- audio discovery can identify a playing song and produce usable album candidates
 - albums can be added, edited, deleted, searched, filtered, and grouped locally
+- wanted albums can be saved and reviewed in Wishlist
 - local data survives app updates
-- privacy disclosures accurately describe image recognition and third-party providers
-- accessibility basics pass for the core Scan, My Crate, and Collections flows
+- privacy disclosures accurately describe image/audio recognition and third-party providers
+- accessibility basics pass for the core Scan, Discover, Wishlist, My Crate, and Collections flows
 - CI can deploy the Function and publish TestFlight builds without manual repair
 
 ## Known Constraints
 
 - Back cover text and artwork availability depend on provider metadata.
+- Audio discovery depends on device microphone permission, ShazamKit availability, and Apple catalog coverage.
+- Apple Music links are best-effort; unavailable catalog matches should degrade to useful album details.
+- Discogs enrichment is required for deployed metadata quality, but individual Discogs fields can still be absent.
 - TestFlight builds expire after 90 days and must be refreshed by a new upload.
 - Local-only storage means there is no cross-device sync yet.
 - Deleting the app from the iPhone removes local data.
