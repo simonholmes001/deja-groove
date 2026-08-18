@@ -121,6 +121,66 @@ final class DiscoveryServicesTests: XCTestCase {
         XCTAssertEqual("Iron Maiden", candidates.first?.artist)
         XCTAssertEqual("Powerslave", candidates.first?.title)
     }
+
+    func testAlbumReturnsAppleMusicCatalogIdFromListeningLinks() {
+        let album = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Powerslave",
+            artist: "Iron Maiden",
+            year: 1984,
+            format: nil,
+            listeningLinks: [
+                AlbumListeningLink(provider: "Discogs", url: "https://discogs.example/release/1", catalogId: "discogs-1"),
+                AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/powerslave", catalogId: "1440857781")
+            ])
+
+        XCTAssertEqual("1440857781", album.appleMusicCatalogId)
+        XCTAssertTrue(album.canAddToAppleMusicLibrary)
+    }
+
+    func testUnavailableAppleMusicLibraryAdderRequiresCatalogId() async {
+        let album = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Unknown",
+            artist: "Unknown",
+            year: nil,
+            format: nil)
+        let adder = UnavailableAppleMusicLibraryAdder()
+
+        do {
+            try await adder.addAlbumToLibrary(album)
+            XCTFail("Expected missing Apple Music catalog id to fail")
+        } catch let error as AppleMusicLibraryAddError {
+            XCTAssertEqual(.missingCatalogId, error)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testUnavailableAppleMusicLibraryAdderReportsUnavailableWhenCatalogIdExists() async {
+        let album = Album(
+            mbid: nil,
+            discogsReleaseId: nil,
+            title: "Powerslave",
+            artist: "Iron Maiden",
+            year: nil,
+            format: nil,
+            listeningLinks: [
+                AlbumListeningLink(provider: "Apple Music", url: "https://music.apple.com/album/powerslave", catalogId: "1440857781")
+            ])
+        let adder = UnavailableAppleMusicLibraryAdder()
+
+        do {
+            try await adder.addAlbumToLibrary(album)
+            XCTFail("Expected unavailable MusicKit build to fail")
+        } catch let error as AppleMusicLibraryAddError {
+            XCTAssertEqual(.unavailable, error)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private final class CapturingHttpTransport: HttpTransport, @unchecked Sendable {

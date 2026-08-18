@@ -102,6 +102,17 @@ public enum LocalCollectionRules {
         collections.sorted { compareCollectionsByName($0, $1) }
     }
 
+    public static func artistIndexLetter(_ artist: String) -> String {
+        guard let first = artistSortKey(artist).unicodeScalars.first else {
+            return "#"
+        }
+        let character = Character(first)
+        if character.isLetter {
+            return String(character).uppercased()
+        }
+        return "#"
+    }
+
     public static func normalized(_ value: String) -> String {
         value
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)

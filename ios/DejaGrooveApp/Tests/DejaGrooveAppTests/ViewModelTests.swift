@@ -125,6 +125,67 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual(["Blue Train", "Mingus Ah Um", "Saxophone Colossus"], titles)
     }
 
+    func testCollectionViewModelBuildsAlphabetIndexFromVisibleArtistFamilyNames() async {
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000571")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Blue Train", artist: "John Coltrane", year: 1957, format: "LP"),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: ""),
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000572")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Mingus Ah Um", artist: "Charles Mingus", year: 1959, format: "LP"),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: ""),
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000573")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Waterloo", artist: "ABBA", year: 1974, format: "LP"),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: "")
+        ], nextCursor: nil)
+        let sut = await CollectionViewModel(api: MockApiClient(collectionResponse: response))
+
+        await sut.load()
+
+        let letters = await sut.alphabetIndexSections.map(\.letter)
+        let sectionTitles = await sut.alphabetIndexSections.map { section in
+            section.records.map(\.album.title)
+        }
+        XCTAssertEqual(["A", "C", "M"], letters)
+        XCTAssertEqual([["Waterloo"], ["Blue Train"], ["Mingus Ah Um"]], sectionTitles)
+    }
+
+    func testCollectionViewModelAlphabetIndexUsesHashForNonLetterArtistSortKeys() async {
+        let response = CollectionListResponse(items: [
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000581")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Symbolic", artist: "!Symbol", year: nil, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: ""),
+            CollectionRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000582")!,
+                album: Album(mbid: nil, discogsReleaseId: nil, title: "Kind of Blue", artist: "Miles Davis", year: 1959, format: nil),
+                notes: nil,
+                version: 1,
+                createdAt: "",
+                updatedAt: "")
+        ], nextCursor: nil)
+        let sut = await CollectionViewModel(api: MockApiClient(collectionResponse: response))
+
+        await sut.load()
+
+        let letters = await sut.alphabetIndexSections.map(\.letter)
+        XCTAssertEqual(["#", "D"], letters)
+    }
+
     func testCollectionViewModelSortsCollectionRecordsByArtistFamilyNameThenTitle() async {
         let rollinsId = UUID(uuidString: "00000000-0000-0000-0000-000000000561")!
         let coltraneId = UUID(uuidString: "00000000-0000-0000-0000-000000000562")!
@@ -405,6 +466,42 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual("Added to My Crate.", message)
     }
 
+    func testScanViewModelDefaultAddToCollectionDoesNotAllowDuplicates() async {
+        let response = ScanResponse(
+            status: "safe_to_buy",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: nil, title: "T", artist: "A", year: 2001, format: nil),
+            candidates: [],
+            requestId: UUID())
+        let api = MockApiClient(scanResponse: response)
+        let sut = await ScanViewModel(api: api)
+
+        await sut.submitScan(imageData: Data([0xFF, 0xD8]))
+        await sut.addResultToCollection()
+
+        let addAnywayFlags = await api.addToCollectionAddAnywayFlags
+        XCTAssertEqual([false], addAnywayFlags)
+    }
+
+    func testScanViewModelCanIntentionallyAddAnotherCopyOfOwnedResult() async {
+        let response = ScanResponse(
+            status: "owned",
+            confidence: 0.9,
+            album: Album(mbid: "m", discogsReleaseId: "r", title: "T", artist: "A", year: 2001, format: nil),
+            candidates: [],
+            requestId: UUID())
+        let api = MockApiClient(scanResponse: response)
+        let sut = await ScanViewModel(api: api)
+
+        await sut.submitScan(imageData: Data([0xFF, 0xD8]))
+        await sut.addResultToCollection(addAnyway: true)
+
+        let addAnywayFlags = await api.addToCollectionAddAnywayFlags
+        let message = await sut.collectionMessage
+        XCTAssertEqual([true], addAnywayFlags)
+        XCTAssertEqual("Added another copy to My Crate.", message)
+    }
+
     func testScanViewModelRetryableHttpErrorExposesRetryFlagAndCanRetryLastScan() async {
         let failure = ApiClientError.httpError(
             503,
@@ -483,6 +580,7 @@ actor MockApiClient: ApiClient {
     private var collectionErrorSequence: [ApiClientError]
     private var addToCollectionErrorSequence: [ApiClientError]
     private(set) var deletedRecordIds: [UUID] = []
+    private(set) var addToCollectionAddAnywayFlags: [Bool] = []
 
     init(
         scanResponse: ScanResponse? = nil,
@@ -535,6 +633,7 @@ actor MockApiClient: ApiClient {
         if !addToCollectionErrorSequence.isEmpty {
             throw addToCollectionErrorSequence.removeFirst()
         }
+        addToCollectionAddAnywayFlags.append(addAnyway)
         return CollectionItemResponse(
             id: UUID(),
             mbid: album.mbid,

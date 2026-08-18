@@ -1,5 +1,12 @@
 import Foundation
 
+public struct CollectionAlphabetSection: Identifiable, Equatable, Sendable {
+    public let letter: String
+    public let records: [CollectionRecord]
+
+    public var id: String { letter }
+}
+
 @MainActor
 public final class CollectionViewModel: ObservableObject {
     @Published public private(set) var records: [CollectionRecord] = []
@@ -25,6 +32,19 @@ public final class CollectionViewModel: ObservableObject {
                 && matchesCollection(record)
         }
         .sorted { LocalCollectionRules.compareByArtistFamilyName($0, $1) }
+    }
+
+    public var alphabetIndexSections: [CollectionAlphabetSection] {
+        visibleRecords.reduce(into: [CollectionAlphabetSection]()) { sections, record in
+            let letter = LocalCollectionRules.artistIndexLetter(record.album.artist)
+            if let index = sections.firstIndex(where: { $0.letter == letter }) {
+                var records = sections[index].records
+                records.append(record)
+                sections[index] = CollectionAlphabetSection(letter: letter, records: records)
+            } else {
+                sections.append(CollectionAlphabetSection(letter: letter, records: [record]))
+            }
+        }
     }
 
     public var availableArtists: [String] {

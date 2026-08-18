@@ -214,6 +214,19 @@ public struct AlbumListeningLink: Codable, Equatable, Sendable {
     }
 }
 
+public extension Album {
+    var appleMusicCatalogId: String? {
+        listeningLinks.first { link in
+            link.provider.localizedCaseInsensitiveContains("apple music")
+                && !(link.catalogId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        }?.catalogId
+    }
+
+    var canAddToAppleMusicLibrary: Bool {
+        appleMusicCatalogId != nil
+    }
+}
+
 public struct AlbumTrack: Codable, Equatable, Sendable {
     public let position: String?
     public let title: String
@@ -257,6 +270,10 @@ public struct ScanResponse: Codable, Equatable, Sendable {
 
     public var canAddToCollection: Bool {
         album != nil && (status == "safe_to_buy" || status == "wishlist_match" || status == "discovery_match")
+    }
+
+    public var canAddAnotherCopyToCollection: Bool {
+        album != nil && status == "owned"
     }
 
     public var canAddToWishlist: Bool {
