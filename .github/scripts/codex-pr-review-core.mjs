@@ -215,6 +215,55 @@ function safeKeyList(value) {
   return keys.length > 0 ? keys.join(', ') : '(none)';
 }
 
+function safeValue(value) {
+  if (value === undefined || value === null || value === '') {
+    return 'none';
+  }
+
+  return String(value);
+}
+
+function contentLength(value) {
+  if (typeof value === 'string') {
+    return value.length;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.keys(value).length;
+  }
+
+  return 0;
+}
+
+export function buildOpenAiResponseDiagnostics({ payload, extractedReviewBody, isStructurallyValid }) {
+  const choice = payload?.choices?.[0] ?? null;
+  const message = choice?.message ?? null;
+  const usage = payload?.usage ?? null;
+  const completionDetails = usage?.completion_tokens_details ?? usage?.output_tokens_details ?? null;
+  const messageContent = message?.content;
+
+  return [
+    'OpenAI response diagnostics:',
+    `- model=${safeValue(payload?.model)}`,
+    `- finish_reason=${safeValue(choice?.finish_reason)}`,
+    `- top_level_keys=${safeKeyList(payload)}`,
+    `- choice_keys=${safeKeyList(choice)}`,
+    `- message_keys=${safeKeyList(message)}`,
+    `- message_content_type=${Array.isArray(messageContent) ? 'array' : typeof messageContent}`,
+    `- message_content_length=${contentLength(messageContent)}`,
+    `- extracted_review_length=${contentLength(extractedReviewBody)}`,
+    `- structurally_valid=${Boolean(isStructurallyValid)}`,
+    `- prompt_tokens=${safeValue(usage?.prompt_tokens ?? usage?.input_tokens)}`,
+    `- completion_tokens=${safeValue(usage?.completion_tokens ?? usage?.output_tokens)}`,
+    `- reasoning_tokens=${safeValue(completionDetails?.reasoning_tokens)}`,
+    `- total_tokens=${safeValue(usage?.total_tokens)}`,
+  ].join('\n');
+}
+
 export function buildFallbackReviewBody(payload) {
   const topLevelKeys = safeKeyList(payload);
   const choiceKeys = safeKeyList(payload?.choices?.[0] ?? null);

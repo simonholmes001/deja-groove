@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   buildFallbackReviewBody,
+  buildOpenAiResponseDiagnostics,
   buildSystemPrompt,
   buildUserPrompt,
   isStructurallyValidReviewBody,
@@ -130,4 +131,42 @@ test('buildFallbackReviewBody produces a structurally valid review body', () => 
 
   assert.equal(isStructurallyValidReviewBody(fallback), true);
   assert.match(fallback, /Automated review body could not be parsed/);
+});
+
+test('buildOpenAiResponseDiagnostics summarizes response shape without content', () => {
+  const diagnostics = buildOpenAiResponseDiagnostics({
+    payload: {
+      model: 'gpt-5.4',
+      choices: [
+        {
+          finish_reason: 'length',
+          message: {
+            role: 'assistant',
+            content: '',
+            annotations: [],
+          },
+        },
+      ],
+      usage: {
+        prompt_tokens: 1200,
+        completion_tokens: 1500,
+        total_tokens: 2700,
+        completion_tokens_details: {
+          reasoning_tokens: 1500,
+        },
+      },
+    },
+    extractedReviewBody: '',
+    isStructurallyValid: false,
+  });
+
+  assert.match(diagnostics, /model=gpt-5\.4/);
+  assert.match(diagnostics, /finish_reason=length/);
+  assert.match(diagnostics, /message_content_type=string/);
+  assert.match(diagnostics, /message_content_length=0/);
+  assert.match(diagnostics, /extracted_review_length=0/);
+  assert.match(diagnostics, /structurally_valid=false/);
+  assert.match(diagnostics, /completion_tokens=1500/);
+  assert.match(diagnostics, /reasoning_tokens=1500/);
+  assert.doesNotMatch(diagnostics, /assistant review content/i);
 });

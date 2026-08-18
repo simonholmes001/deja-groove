@@ -6,6 +6,7 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   buildFallbackReviewBody,
+  buildOpenAiResponseDiagnostics,
   extractReviewBodyFromOpenAiPayload,
   isStructurallyValidReviewBody,
   isChangesetReleasePr,
@@ -137,7 +138,14 @@ if (!openAiResponse.ok) {
 
 const openAiPayload = await openAiResponse.json();
 const extractedReviewBody = extractReviewBodyFromOpenAiPayload(openAiPayload);
-const reviewBody = extractedReviewBody && isStructurallyValidReviewBody(extractedReviewBody)
+const structurallyValidReviewBody = isStructurallyValidReviewBody(extractedReviewBody);
+console.log(buildOpenAiResponseDiagnostics({
+  payload: openAiPayload,
+  extractedReviewBody,
+  isStructurallyValid: structurallyValidReviewBody,
+}));
+
+const reviewBody = extractedReviewBody && structurallyValidReviewBody
   ? extractedReviewBody
   : buildFallbackReviewBody(openAiPayload);
 if (reviewBody !== extractedReviewBody) {
