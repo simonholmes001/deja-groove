@@ -14,15 +14,29 @@ public struct CollectionView: View {
     public var body: some View {
         NavigationStack {
             DejaGrooveScreen {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        crateHeader
-                        filters
-                        albumList
+                ScrollViewReader { scrollProxy in
+                    ZStack(alignment: .trailing) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 18) {
+                                crateHeader
+                                filters
+                                albumList
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.trailing, viewModel.alphabetIndexSections.count > 1 ? 18 : 0)
+                            .padding(.top, 20)
+                            .padding(.bottom, 110)
+                        }
+
+                        if viewModel.alphabetIndexSections.count > 1 {
+                            AlphabetIndexRail(sections: viewModel.alphabetIndexSections) { sectionId in
+                                withAnimation(.snappy) {
+                                    scrollProxy.scrollTo(sectionId, anchor: .top)
+                                }
+                            }
+                            .padding(.trailing, 4)
+                        }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 110)
                 }
             }
             .overlay {
@@ -140,25 +154,35 @@ public struct CollectionView: View {
                     systemImage: "square.stack.3d.up",
                     detail: "Adjust the filters or scan albums into My Crate.")
             } else {
-                ForEach(viewModel.visibleRecords, id: \.id) { record in
-                    SwipeActionCard(actionCount: 3) {
-                        Button {
-                            selectedRecordId = record.id
-                        } label: {
-                            DejaGroovePanel {
-                                AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                ForEach(viewModel.alphabetIndexSections) { section in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(section.letter)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                            .id(section.id)
+
+                        ForEach(section.records, id: \.id) { record in
+                            SwipeActionCard(actionCount: 3) {
+                                Button {
+                                    selectedRecordId = record.id
+                                } label: {
+                                    DejaGroovePanel {
+                                        AlbumRow(record: record, collections: viewModel.collections(containing: record.id))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            } actions: {
+                                SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
+                                    editingRecord = record
+                                }
+                                SwipeActionButton(title: "Collection", systemImage: "folder", color: DejaGrooveStyle.ink) {
+                                    assigningCollectionsRecord = record
+                                }
+                                SwipeActionButton(title: "Delete", systemImage: "trash", color: DejaGrooveStyle.coral) {
+                                    Task { await viewModel.deleteRecord(id: record.id) }
+                                }
                             }
-                        }
-                        .buttonStyle(.plain)
-                    } actions: {
-                        SwipeActionButton(title: "Edit", systemImage: "pencil", color: DejaGrooveStyle.blue) {
-                            editingRecord = record
-                        }
-                        SwipeActionButton(title: "Collection", systemImage: "folder", color: DejaGrooveStyle.ink) {
-                            assigningCollectionsRecord = record
-                        }
-                        SwipeActionButton(title: "Delete", systemImage: "trash", color: DejaGrooveStyle.coral) {
-                            Task { await viewModel.deleteRecord(id: record.id) }
                         }
                     }
                 }
@@ -243,6 +267,33 @@ private struct DejaGrooveSectionHeader: View {
             }
         }
         .padding(.horizontal, 4)
+    }
+}
+
+private struct AlphabetIndexRail: View {
+    let sections: [CollectionAlphabetSection]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(sections) { section in
+                Button {
+                    onSelect(section.id)
+                } label: {
+                    Text(section.letter)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(DejaGrooveStyle.blue)
+                        .frame(width: 22, height: 18)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Jump to \(section.letter)")
+            }
+        }
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Album alphabet index")
     }
 }
 

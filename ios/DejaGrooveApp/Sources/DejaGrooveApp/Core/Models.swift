@@ -259,6 +259,10 @@ public struct ScanResponse: Codable, Equatable, Sendable {
         album != nil && (status == "safe_to_buy" || status == "wishlist_match" || status == "discovery_match")
     }
 
+    public var canAddAnotherCopyToCollection: Bool {
+        album != nil && status == "owned"
+    }
+
     public var canAddToWishlist: Bool {
         album != nil && (status == "safe_to_buy" || status == "discovery_match")
     }

@@ -64,11 +64,12 @@ public final class ScanViewModel: ObservableObject {
         await submitScan(imageData: imageData)
     }
 
-    public func addResultToCollection() async {
+    public func addResultToCollection(addAnyway: Bool = false) async {
         guard case .result(let response) = state, let album = response.album else { return }
+        guard response.canAddToCollection || addAnyway else { return }
         do {
-            _ = try await api.addToCollection(album: album, notes: nil, addAnyway: false)
-            collectionMessage = "Added to My Crate."
+            _ = try await api.addToCollection(album: album, notes: nil, addAnyway: addAnyway)
+            collectionMessage = addAnyway ? "Added another copy to My Crate." : "Added to My Crate."
             state = .result(response.withStatus("owned"))
         } catch let error as ApiClientError {
             switch error {

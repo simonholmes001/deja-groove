@@ -87,9 +87,13 @@ public struct ScanView: View {
         .sheet(isPresented: detailAlbumBinding) {
             if let detailAlbum {
                 NavigationStack {
-                    ScanAlbumDetailView(album: detailAlbum, canAddToCrate: currentResultCanAddToCollection) {
+                    ScanAlbumDetailView(
+                        album: detailAlbum,
+                        addActionTitle: currentResultCanAddAnotherCopy ? "Add Another Copy" : "Add To My Crate",
+                        canAddToCrate: currentResultCanAddToCollection || currentResultCanAddAnotherCopy
+                    ) {
                         Task {
-                            await viewModel.addResultToCollection()
+                            await viewModel.addResultToCollection(addAnyway: currentResultCanAddAnotherCopy)
                             self.detailAlbum = nil
                         }
                     }
@@ -148,6 +152,14 @@ public struct ScanView: View {
                 }
                 .buttonStyle(DejaGroovePrimaryButtonStyle())
             }
+            if response.canAddAnotherCopyToCollection {
+                Button {
+                    Task { await viewModel.addResultToCollection(addAnyway: true) }
+                } label: {
+                    Label("Add Another Copy", systemImage: "plus.square.on.square")
+                }
+                .buttonStyle(.borderedProminent)
+            }
             if response.canAddToWishlist {
                 Button {
                     Task { await viewModel.addResultToWishlist() }
@@ -178,6 +190,13 @@ public struct ScanView: View {
     private var currentResultCanAddToCollection: Bool {
         if case .result(let response) = viewModel.state {
             return response.canAddToCollection
+        }
+        return false
+    }
+
+    private var currentResultCanAddAnotherCopy: Bool {
+        if case .result(let response) = viewModel.state {
+            return response.canAddAnotherCopyToCollection
         }
         return false
     }
@@ -399,6 +418,7 @@ private struct ScanTimingSummary: View {
 private struct ScanAlbumDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let album: Album
+    let addActionTitle: String
     let canAddToCrate: Bool
     let onAdd: () -> Void
 
@@ -502,7 +522,7 @@ private struct ScanAlbumDetailView: View {
                     Button {
                         onAdd()
                     } label: {
-                        Label("Add To My Crate", systemImage: "plus.circle.fill")
+                        Label(addActionTitle, systemImage: "plus.circle.fill")
                     }
                 }
             }
