@@ -243,6 +243,7 @@ private struct WishlistAlbumDetailView: View {
                             Link(link.provider, destination: url)
                         }
                     }
+                    AppleMusicLibraryAddButton(album: entry.album)
                 }
             }
 

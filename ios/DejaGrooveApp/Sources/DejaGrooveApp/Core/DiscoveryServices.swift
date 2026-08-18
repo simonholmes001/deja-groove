@@ -12,8 +12,20 @@ public protocol MusicCatalogLinkResolver: Sendable {
     func enrichListeningLinks(for album: Album) async throws -> Album
 }
 
+public protocol AppleMusicLibraryAdding: Sendable {
+    func addAlbumToLibrary(_ album: Album) async throws
+}
+
 public protocol AlbumMetadataEnricher: Sendable {
     func enrich(album: Album) async throws -> Album
+}
+
+public enum AppleMusicLibraryAddError: Error, Equatable, Sendable {
+    case missingCatalogId
+    case authorizationDenied
+    case authorizationRestricted
+    case catalogAlbumNotFound
+    case unavailable
 }
 
 public enum MusicAuthorizationStatus: Equatable, Sendable {
@@ -68,6 +80,17 @@ public struct UnavailableMusicCatalogLinkResolver: MusicCatalogLinkResolver {
 
     public func enrichListeningLinks(for album: Album) async throws -> Album {
         album
+    }
+}
+
+public struct UnavailableAppleMusicLibraryAdder: AppleMusicLibraryAdding {
+    public init() {}
+
+    public func addAlbumToLibrary(_ album: Album) async throws {
+        guard album.appleMusicCatalogId != nil else {
+            throw AppleMusicLibraryAddError.missingCatalogId
+        }
+        throw AppleMusicLibraryAddError.unavailable
     }
 }
 
@@ -331,6 +354,53 @@ public struct MusicKitAlbumCandidateResolver: AlbumCandidateResolver {
         return formatter.string(from: date)
     }
 }
+
+#if os(iOS)
+public struct MusicKitAppleMusicLibraryAdder: AppleMusicLibraryAdding {
+    public init() {}
+
+    public func addAlbumToLibrary(_ album: Album) async throws {
+        guard let catalogId = album.appleMusicCatalogId else {
+            throw AppleMusicLibraryAddError.missingCatalogId
+        }
+
+        switch await MusicAuthorization.request() {
+        case .authorized:
+            break
+        case .denied:
+            throw AppleMusicLibraryAddError.authorizationDenied
+        case .restricted:
+            throw AppleMusicLibraryAddError.authorizationRestricted
+        case .notDetermined:
+            throw AppleMusicLibraryAddError.authorizationDenied
+        @unknown default:
+            throw AppleMusicLibraryAddError.unavailable
+        }
+
+        let query = "\(album.artist) \(album.title)"
+        var request = MusicCatalogSearchRequest(term: query, types: [MusicKit.Album.self])
+        request.limit = 10
+        let response = try await request.response()
+        guard let catalogAlbum = response.albums.first(where: { $0.id.rawValue == catalogId })
+            ?? response.albums.first(where: { Self.matches($0, album) }) else {
+            throw AppleMusicLibraryAddError.catalogAlbumNotFound
+        }
+        try await MusicLibrary.shared.add(catalogAlbum)
+    }
+
+    private static func matches(_ candidate: MusicKit.Album, _ album: Album) -> Bool {
+        normalized(candidate.title) == normalized(album.title)
+            && normalized(candidate.artistName) == normalized(album.artist)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+#endif
 #endif
 
 #if canImport(ShazamKit) && canImport(AVFoundation)

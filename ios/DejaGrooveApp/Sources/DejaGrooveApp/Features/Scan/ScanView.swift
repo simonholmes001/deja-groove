@@ -466,6 +466,7 @@ private struct ScanAlbumDetailView: View {
                             Link(link.provider, destination: url)
                         }
                     }
+                    AppleMusicLibraryAddButton(album: album)
                 }
             }
 

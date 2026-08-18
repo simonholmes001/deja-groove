@@ -1305,6 +1305,7 @@ private struct AlbumDetailView: View {
                             Link(link.provider, destination: url)
                         }
                     }
+                    AppleMusicLibraryAddButton(album: currentRecord.album)
                 }
             }
 

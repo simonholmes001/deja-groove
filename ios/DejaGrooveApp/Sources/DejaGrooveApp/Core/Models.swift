@@ -214,6 +214,19 @@ public struct AlbumListeningLink: Codable, Equatable, Sendable {
     }
 }
 
+public extension Album {
+    var appleMusicCatalogId: String? {
+        listeningLinks.first { link in
+            link.provider.localizedCaseInsensitiveContains("apple music")
+                && !(link.catalogId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        }?.catalogId
+    }
+
+    var canAddToAppleMusicLibrary: Bool {
+        appleMusicCatalogId != nil
+    }
+}
+
 public struct AlbumTrack: Codable, Equatable, Sendable {
     public let position: String?
     public let title: String
