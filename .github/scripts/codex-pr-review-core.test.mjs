@@ -170,3 +170,28 @@ test('buildOpenAiResponseDiagnostics summarizes response shape without content',
   assert.match(diagnostics, /reasoning_tokens=1500/);
   assert.doesNotMatch(diagnostics, /assistant review content/i);
 });
+
+test('buildOpenAiResponseDiagnostics handles alternate response shapes', () => {
+  const diagnostics = buildOpenAiResponseDiagnostics({
+    payload: {
+      output_text: 'No blocking issues found\n\nResidual risks / testing gaps:\n- none',
+      usage: {
+        input_tokens: 55,
+        output_tokens: 89,
+        output_tokens_details: {
+          reasoning_tokens: 13,
+        },
+      },
+    },
+    extractedReviewBody: 'No blocking issues found',
+    isStructurallyValid: false,
+  });
+
+  assert.match(diagnostics, /finish_reason=none/);
+  assert.match(diagnostics, /choice_keys=\(none\)/);
+  assert.match(diagnostics, /message_keys=\(none\)/);
+  assert.match(diagnostics, /message_content_type=undefined/);
+  assert.match(diagnostics, /prompt_tokens=55/);
+  assert.match(diagnostics, /completion_tokens=89/);
+  assert.match(diagnostics, /reasoning_tokens=13/);
+});
