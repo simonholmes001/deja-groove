@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   buildFallbackReviewBody,
+  buildOpenAiReviewRequestPayload,
   buildOpenAiResponseDiagnostics,
   buildSystemPrompt,
   buildUserPrompt,
@@ -88,6 +89,24 @@ test('buildUserPrompt wraps PR content in untrusted boundaries', () => {
   assert.match(prompt, /<pr_metadata>/);
   assert.match(prompt, /<pr_diff>/);
   assert.equal(prompt.includes('<\\/untrusted_pr_content>'), true);
+});
+
+test('buildOpenAiReviewRequestPayload uses Responses API reasoning controls', () => {
+  const payload = buildOpenAiReviewRequestPayload({
+    model: 'gpt-5.4',
+    systemPrompt: 'review system prompt',
+    userPrompt: 'review user prompt',
+    maxOutputTokens: 6000,
+    reasoningEffort: 'low',
+  });
+
+  assert.equal(payload.model, 'gpt-5.4');
+  assert.equal(payload.instructions, 'review system prompt');
+  assert.equal(payload.input, 'review user prompt');
+  assert.equal(payload.max_output_tokens, 6000);
+  assert.deepEqual(payload.reasoning, { effort: 'low' });
+  assert.equal(Object.hasOwn(payload, 'max_completion_tokens'), false);
+  assert.equal(Object.hasOwn(payload, 'messages'), false);
 });
 
 test('buildSystemPrompt instructs the model to treat PR content as data', () => {
@@ -191,7 +210,33 @@ test('buildOpenAiResponseDiagnostics handles alternate response shapes', () => {
   assert.match(diagnostics, /choice_keys=\(none\)/);
   assert.match(diagnostics, /message_keys=\(none\)/);
   assert.match(diagnostics, /message_content_type=undefined/);
+  assert.match(diagnostics, /status=none/);
+  assert.match(diagnostics, /incomplete_reason=none/);
+  assert.match(diagnostics, /output_text_length=63/);
   assert.match(diagnostics, /prompt_tokens=55/);
   assert.match(diagnostics, /completion_tokens=89/);
   assert.match(diagnostics, /reasoning_tokens=13/);
+});
+
+test('buildFallbackReviewBody reports Responses API response shape', () => {
+  const fallback = buildFallbackReviewBody({
+    status: 'incomplete',
+    incomplete_details: {
+      reason: 'max_output_tokens',
+    },
+    output_text: '',
+    usage: {
+      output_tokens: 6000,
+      output_tokens_details: {
+        reasoning_tokens: 5800,
+      },
+    },
+  });
+
+  assert.match(fallback, /response body could not be parsed/);
+  assert.match(fallback, /Status: incomplete/);
+  assert.match(fallback, /Incomplete reason: max_output_tokens/);
+  assert.match(fallback, /Output text length: 0/);
+  assert.match(fallback, /Reasoning tokens: 5800/);
+  assert.equal(isStructurallyValidReviewBody(fallback), true);
 });

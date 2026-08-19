@@ -104,6 +104,24 @@ export function buildUserPrompt(pr, diff, maxDiffChars, diffTruncated) {
   ].join('\n');
 }
 
+export function buildOpenAiReviewRequestPayload({
+  model,
+  systemPrompt,
+  userPrompt,
+  maxOutputTokens,
+  reasoningEffort,
+}) {
+  return {
+    model,
+    instructions: systemPrompt,
+    input: userPrompt,
+    max_output_tokens: maxOutputTokens,
+    reasoning: {
+      effort: reasoningEffort,
+    },
+  };
+}
+
 function asTrimmedString(value) {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -245,16 +263,21 @@ export function buildOpenAiResponseDiagnostics({ payload, extractedReviewBody, i
   const usage = payload?.usage ?? null;
   const completionDetails = usage?.completion_tokens_details ?? usage?.output_tokens_details ?? null;
   const messageContent = message?.content;
+  const incompleteReason = payload?.incomplete_details?.reason ?? payload?.response?.incomplete_details?.reason;
+  const outputText = payload?.output_text ?? payload?.response?.output_text;
 
   return [
     'OpenAI response diagnostics:',
     `- model=${safeValue(payload?.model)}`,
+    `- status=${safeValue(payload?.status)}`,
+    `- incomplete_reason=${safeValue(incompleteReason)}`,
     `- finish_reason=${safeValue(choice?.finish_reason)}`,
     `- top_level_keys=${safeKeyList(payload)}`,
     `- choice_keys=${safeKeyList(choice)}`,
     `- message_keys=${safeKeyList(message)}`,
     `- message_content_type=${Array.isArray(messageContent) ? 'array' : typeof messageContent}`,
     `- message_content_length=${contentLength(messageContent)}`,
+    `- output_text_length=${contentLength(outputText)}`,
     `- extracted_review_length=${contentLength(extractedReviewBody)}`,
     `- structurally_valid=${Boolean(isStructurallyValid)}`,
     `- prompt_tokens=${safeValue(usage?.prompt_tokens ?? usage?.input_tokens)}`,
@@ -268,18 +291,22 @@ export function buildFallbackReviewBody(payload) {
   const topLevelKeys = safeKeyList(payload);
   const choiceKeys = safeKeyList(payload?.choices?.[0] ?? null);
   const messageKeys = safeKeyList(payload?.choices?.[0]?.message ?? null);
+  const usage = payload?.usage ?? null;
+  const completionDetails = usage?.completion_tokens_details ?? usage?.output_tokens_details ?? null;
+  const outputText = payload?.output_text ?? payload?.response?.output_text;
+  const incompleteReason = payload?.incomplete_details?.reason ?? payload?.response?.incomplete_details?.reason;
 
   return [
     'No blocking issues found',
     '',
-    'The Codex review job ran, but OpenAI returned an unexpected response shape, so the automated review body could not be extracted.',
+    'The Codex review job ran, but the OpenAI response body could not be parsed into the required review output contract.',
     '',
     '1. Findings',
     '- Severity: Medium',
     '- Title: Automated review body could not be parsed',
-    '- Evidence: `choices[0].message.content` was empty or not a plain string',
+    '- Evidence: OpenAI returned a response without a structurally valid review body in the expected text fields',
     '- Impact: This run may miss issues that the model generated in a different output format',
-    '- Fix: Parser fallback posted this message so CI does not fail; script should continue to evolve with API formats',
+    '- Fix: Parser fallback posted this message so CI does not fail; inspect the response diagnostics in the workflow log',
     '',
     '2. Summary',
     '- Codex review executed with fallback output.',
@@ -289,6 +316,11 @@ export function buildFallbackReviewBody(payload) {
     '- Top-level keys: ' + topLevelKeys,
     '- `choices[0]` keys: ' + choiceKeys,
     '- `choices[0].message` keys: ' + messageKeys,
+    '- Status: ' + safeValue(payload?.status),
+    '- Incomplete reason: ' + safeValue(incompleteReason),
+    '- Output text length: ' + contentLength(outputText),
+    '- Output tokens: ' + safeValue(usage?.completion_tokens ?? usage?.output_tokens),
+    '- Reasoning tokens: ' + safeValue(completionDetails?.reasoning_tokens),
     '',
     '4. Risks/Follow-ups',
     '- Request a manual reviewer when this fallback appears.',
