@@ -6,6 +6,7 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   buildFallbackReviewBody,
+  buildOpenAiErrorDiagnostics,
   buildOpenAiReviewRequestPayload,
   buildOpenAiResponseDiagnostics,
   extractReviewBodyFromOpenAiPayload,
@@ -134,7 +135,13 @@ const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
 
 if (!openAiResponse.ok) {
   const text = await openAiResponse.text();
-  throw new Error(`OpenAI API ${openAiResponse.status} ${openAiResponse.statusText}: ${text}`);
+  console.error(buildOpenAiErrorDiagnostics({
+    status: openAiResponse.status,
+    statusText: openAiResponse.statusText,
+    headers: openAiResponse.headers,
+    bodyText: text,
+  }));
+  throw new Error(`OpenAI API ${openAiResponse.status} ${openAiResponse.statusText}. See OpenAI error diagnostics above.`);
 }
 
 const openAiPayload = await openAiResponse.json();

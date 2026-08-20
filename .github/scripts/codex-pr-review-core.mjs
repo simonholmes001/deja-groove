@@ -241,6 +241,30 @@ function safeValue(value) {
   return String(value);
 }
 
+function safeLogValue(value, maxLength = 700) {
+  const text = safeValue(value)
+    .replaceAll(/sk-[A-Za-z0-9_-]+/g, 'sk-REDACTED')
+    .replaceAll(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer REDACTED');
+
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function getHeaderValue(headers, name) {
+  if (!headers || typeof headers.get !== 'function') {
+    return '';
+  }
+
+  return headers.get(name) || '';
+}
+
+function parseJsonBody(bodyText) {
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    return null;
+  }
+}
+
 function contentLength(value) {
   if (typeof value === 'string') {
     return value.length;
@@ -255,6 +279,29 @@ function contentLength(value) {
   }
 
   return 0;
+}
+
+export function buildOpenAiErrorDiagnostics({ status, statusText, headers, bodyText }) {
+  const parsedBody = parseJsonBody(bodyText);
+  const error = parsedBody?.error && typeof parsedBody.error === 'object'
+    ? parsedBody.error
+    : null;
+  const requestId = getHeaderValue(headers, 'x-request-id')
+    || getHeaderValue(headers, 'request-id')
+    || getHeaderValue(headers, 'openai-request-id');
+  const message = error?.message ?? bodyText;
+
+  return [
+    'OpenAI error diagnostics:',
+    `- status=${safeValue(status)}`,
+    `- status_text=${safeValue(statusText)}`,
+    `- request_id=${safeValue(requestId)}`,
+    `- body_parse=${parsedBody ? 'json' : 'text'}`,
+    `- error_type=${safeLogValue(error?.type)}`,
+    `- error_code=${safeLogValue(error?.code)}`,
+    `- error_param=${safeLogValue(error?.param)}`,
+    `- message=${safeLogValue(message)}`,
+  ].join('\n');
 }
 
 export function buildOpenAiResponseDiagnostics({ payload, extractedReviewBody, isStructurallyValid }) {

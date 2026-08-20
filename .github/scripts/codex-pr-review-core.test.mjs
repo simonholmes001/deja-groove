@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   buildFallbackReviewBody,
+  buildOpenAiErrorDiagnostics,
   buildOpenAiReviewRequestPayload,
   buildOpenAiResponseDiagnostics,
   buildSystemPrompt,
@@ -216,6 +217,56 @@ test('buildOpenAiResponseDiagnostics handles alternate response shapes', () => {
   assert.match(diagnostics, /prompt_tokens=55/);
   assert.match(diagnostics, /completion_tokens=89/);
   assert.match(diagnostics, /reasoning_tokens=13/);
+});
+
+test('buildOpenAiErrorDiagnostics highlights quota and billing failures', () => {
+  const diagnostics = buildOpenAiErrorDiagnostics({
+    status: 429,
+    statusText: 'Too Many Requests',
+    headers: {
+      get(name) {
+        return name.toLowerCase() === 'x-request-id' ? 'req_123' : null;
+      },
+    },
+    bodyText: JSON.stringify({
+      error: {
+        message: 'You exceeded your current quota, please check your plan and billing details.',
+        type: 'insufficient_quota',
+        param: null,
+        code: 'insufficient_quota',
+      },
+    }),
+  });
+
+  assert.match(diagnostics, /OpenAI error diagnostics:/);
+  assert.match(diagnostics, /status=429/);
+  assert.match(diagnostics, /status_text=Too Many Requests/);
+  assert.match(diagnostics, /request_id=req_123/);
+  assert.match(diagnostics, /body_parse=json/);
+  assert.match(diagnostics, /error_type=insufficient_quota/);
+  assert.match(diagnostics, /error_code=insufficient_quota/);
+  assert.match(diagnostics, /error_param=none/);
+  assert.match(diagnostics, /message=You exceeded your current quota/);
+  assert.doesNotMatch(diagnostics, /sk-/);
+  assert.doesNotMatch(diagnostics, /Bearer/);
+});
+
+test('buildOpenAiErrorDiagnostics handles non-json error bodies', () => {
+  const diagnostics = buildOpenAiErrorDiagnostics({
+    status: 500,
+    statusText: 'Internal Server Error',
+    headers: {
+      get() {
+        return null;
+      },
+    },
+    bodyText: 'upstream unavailable',
+  });
+
+  assert.match(diagnostics, /status=500/);
+  assert.match(diagnostics, /request_id=none/);
+  assert.match(diagnostics, /body_parse=text/);
+  assert.match(diagnostics, /message=upstream unavailable/);
 });
 
 test('buildFallbackReviewBody reports Responses API response shape', () => {
