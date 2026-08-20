@@ -6,6 +6,9 @@ import test from 'node:test';
 
 import {
   buildFallbackReviewBody,
+  buildOpenAiErrorDiagnostics,
+  buildOpenAiReviewRequestPayload,
+  buildOpenAiResponseDiagnostics,
   buildSystemPrompt,
   buildUserPrompt,
   isStructurallyValidReviewBody,
@@ -89,6 +92,24 @@ test('buildUserPrompt wraps PR content in untrusted boundaries', () => {
   assert.equal(prompt.includes('<\\/untrusted_pr_content>'), true);
 });
 
+test('buildOpenAiReviewRequestPayload uses Responses API reasoning controls', () => {
+  const payload = buildOpenAiReviewRequestPayload({
+    model: 'gpt-5.4',
+    systemPrompt: 'review system prompt',
+    userPrompt: 'review user prompt',
+    maxOutputTokens: 6000,
+    reasoningEffort: 'low',
+  });
+
+  assert.equal(payload.model, 'gpt-5.4');
+  assert.equal(payload.instructions, 'review system prompt');
+  assert.equal(payload.input, 'review user prompt');
+  assert.equal(payload.max_output_tokens, 6000);
+  assert.deepEqual(payload.reasoning, { effort: 'low' });
+  assert.equal(Object.hasOwn(payload, 'max_completion_tokens'), false);
+  assert.equal(Object.hasOwn(payload, 'messages'), false);
+});
+
 test('buildSystemPrompt instructs the model to treat PR content as data', () => {
   const prompt = buildSystemPrompt({
     pullRequestReview: 'A',
@@ -130,4 +151,143 @@ test('buildFallbackReviewBody produces a structurally valid review body', () => 
 
   assert.equal(isStructurallyValidReviewBody(fallback), true);
   assert.match(fallback, /Automated review body could not be parsed/);
+});
+
+test('buildOpenAiResponseDiagnostics summarizes response shape without content', () => {
+  const diagnostics = buildOpenAiResponseDiagnostics({
+    payload: {
+      model: 'gpt-5.4',
+      choices: [
+        {
+          finish_reason: 'length',
+          message: {
+            role: 'assistant',
+            content: '',
+            annotations: [],
+          },
+        },
+      ],
+      usage: {
+        prompt_tokens: 1200,
+        completion_tokens: 1500,
+        total_tokens: 2700,
+        completion_tokens_details: {
+          reasoning_tokens: 1500,
+        },
+      },
+    },
+    extractedReviewBody: '',
+    isStructurallyValid: false,
+  });
+
+  assert.match(diagnostics, /model=gpt-5\.4/);
+  assert.match(diagnostics, /finish_reason=length/);
+  assert.match(diagnostics, /message_content_type=string/);
+  assert.match(diagnostics, /message_content_length=0/);
+  assert.match(diagnostics, /extracted_review_length=0/);
+  assert.match(diagnostics, /structurally_valid=false/);
+  assert.match(diagnostics, /completion_tokens=1500/);
+  assert.match(diagnostics, /reasoning_tokens=1500/);
+  assert.doesNotMatch(diagnostics, /assistant review content/i);
+});
+
+test('buildOpenAiResponseDiagnostics handles alternate response shapes', () => {
+  const diagnostics = buildOpenAiResponseDiagnostics({
+    payload: {
+      output_text: 'No blocking issues found\n\nResidual risks / testing gaps:\n- none',
+      usage: {
+        input_tokens: 55,
+        output_tokens: 89,
+        output_tokens_details: {
+          reasoning_tokens: 13,
+        },
+      },
+    },
+    extractedReviewBody: 'No blocking issues found',
+    isStructurallyValid: false,
+  });
+
+  assert.match(diagnostics, /finish_reason=none/);
+  assert.match(diagnostics, /choice_keys=\(none\)/);
+  assert.match(diagnostics, /message_keys=\(none\)/);
+  assert.match(diagnostics, /message_content_type=undefined/);
+  assert.match(diagnostics, /status=none/);
+  assert.match(diagnostics, /incomplete_reason=none/);
+  assert.match(diagnostics, /output_text_length=63/);
+  assert.match(diagnostics, /prompt_tokens=55/);
+  assert.match(diagnostics, /completion_tokens=89/);
+  assert.match(diagnostics, /reasoning_tokens=13/);
+});
+
+test('buildOpenAiErrorDiagnostics highlights quota and billing failures', () => {
+  const diagnostics = buildOpenAiErrorDiagnostics({
+    status: 429,
+    statusText: 'Too Many Requests',
+    headers: {
+      get(name) {
+        return name.toLowerCase() === 'x-request-id' ? 'req_123' : null;
+      },
+    },
+    bodyText: JSON.stringify({
+      error: {
+        message: 'You exceeded your current quota, please check your plan and billing details.',
+        type: 'insufficient_quota',
+        param: null,
+        code: 'insufficient_quota',
+      },
+    }),
+  });
+
+  assert.match(diagnostics, /OpenAI error diagnostics:/);
+  assert.match(diagnostics, /status=429/);
+  assert.match(diagnostics, /status_text=Too Many Requests/);
+  assert.match(diagnostics, /request_id=req_123/);
+  assert.match(diagnostics, /body_parse=json/);
+  assert.match(diagnostics, /error_type=insufficient_quota/);
+  assert.match(diagnostics, /error_code=insufficient_quota/);
+  assert.match(diagnostics, /error_param=none/);
+  assert.match(diagnostics, /message=You exceeded your current quota/);
+  assert.doesNotMatch(diagnostics, /sk-/);
+  assert.doesNotMatch(diagnostics, /Bearer/);
+});
+
+test('buildOpenAiErrorDiagnostics handles non-json error bodies', () => {
+  const diagnostics = buildOpenAiErrorDiagnostics({
+    status: 500,
+    statusText: 'Internal Server Error',
+    headers: {
+      get() {
+        return null;
+      },
+    },
+    bodyText: 'upstream unavailable',
+  });
+
+  assert.match(diagnostics, /status=500/);
+  assert.match(diagnostics, /request_id=none/);
+  assert.match(diagnostics, /body_parse=text/);
+  assert.match(diagnostics, /message=upstream unavailable/);
+});
+
+test('buildFallbackReviewBody reports Responses API response shape', () => {
+  const fallback = buildFallbackReviewBody({
+    status: 'incomplete',
+    incomplete_details: {
+      reason: 'max_output_tokens',
+    },
+    output_text: '',
+    usage: {
+      output_tokens: 6000,
+      output_tokens_details: {
+        reasoning_tokens: 5800,
+      },
+    },
+  });
+
+  assert.match(fallback, /response body could not be parsed/);
+  assert.match(fallback, /Status: incomplete/);
+  assert.match(fallback, /Incomplete reason: max_output_tokens/);
+  assert.match(fallback, /Output text length: 0/);
+  assert.match(fallback, /Reasoning tokens: 5800/);
+  assert.equal(isStructurallyValidReviewBody(fallback), true);
 });

@@ -29,4 +29,6 @@ jobs:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           CODEX_REVIEW_MODEL: gpt-5.4
           CODEX_REVIEW_DIFF_MAX: 120000
+          CODEX_REVIEW_MAX_OUTPUT_TOKENS: 6000
+          CODEX_REVIEW_REASONING_EFFORT: low
         run: node .github/scripts/codex-pr-review.mjs

@@ -6,6 +6,9 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   buildFallbackReviewBody,
+  buildOpenAiErrorDiagnostics,
+  buildOpenAiReviewRequestPayload,
+  buildOpenAiResponseDiagnostics,
   extractReviewBodyFromOpenAiPayload,
   isStructurallyValidReviewBody,
   isChangesetReleasePr,
@@ -58,6 +61,8 @@ if (!openAiKey) {
 const githubApi = process.env.GITHUB_API_URL || 'https://api.github.com';
 const model = process.env.CODEX_REVIEW_MODEL || 'gpt-5.2';
 const maxDiffChars = Number.parseInt(process.env.CODEX_REVIEW_DIFF_MAX || '120000', 10);
+const maxOutputTokens = Number.parseInt(process.env.CODEX_REVIEW_MAX_OUTPUT_TOKENS || '6000', 10);
+const reasoningEffort = process.env.CODEX_REVIEW_REASONING_EFFORT || 'low';
 const codexReviewMarker = '<!-- codex-review -->';
 
 async function githubRequest(path, options = {}) {
@@ -113,31 +118,42 @@ const rubrics = loadSkillRubrics(process.cwd());
 const systemPrompt = buildSystemPrompt(rubrics);
 const userPrompt = buildUserPrompt(pr, diff, maxDiffChars, diffTruncated);
 
-const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
   method: 'POST',
   headers: {
     Authorization: `Bearer ${openAiKey}`,
     'Content-Type': 'application/json',
   },
-  body: JSON.stringify({
+  body: JSON.stringify(buildOpenAiReviewRequestPayload({
     model,
-    temperature: 0.2,
-    max_completion_tokens: 1500,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  }),
+    systemPrompt,
+    userPrompt,
+    maxOutputTokens,
+    reasoningEffort,
+  })),
 });
 
 if (!openAiResponse.ok) {
   const text = await openAiResponse.text();
-  throw new Error(`OpenAI API ${openAiResponse.status} ${openAiResponse.statusText}: ${text}`);
+  console.error(buildOpenAiErrorDiagnostics({
+    status: openAiResponse.status,
+    statusText: openAiResponse.statusText,
+    headers: openAiResponse.headers,
+    bodyText: text,
+  }));
+  throw new Error(`OpenAI API ${openAiResponse.status} ${openAiResponse.statusText}. See OpenAI error diagnostics above.`);
 }
 
 const openAiPayload = await openAiResponse.json();
 const extractedReviewBody = extractReviewBodyFromOpenAiPayload(openAiPayload);
-const reviewBody = extractedReviewBody && isStructurallyValidReviewBody(extractedReviewBody)
+const structurallyValidReviewBody = isStructurallyValidReviewBody(extractedReviewBody);
+console.log(buildOpenAiResponseDiagnostics({
+  payload: openAiPayload,
+  extractedReviewBody,
+  isStructurallyValid: structurallyValidReviewBody,
+}));
+
+const reviewBody = extractedReviewBody && structurallyValidReviewBody
   ? extractedReviewBody
   : buildFallbackReviewBody(openAiPayload);
 if (reviewBody !== extractedReviewBody) {
