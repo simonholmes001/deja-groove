@@ -23,6 +23,7 @@ public final class NearbyRecordShopsViewModel: ObservableObject {
     }
 
     public func findNearCurrentLocation() async {
+        placeSearch = ""
         state = .loading
         let authorization = await discoveryService.requestLocationAuthorization()
         switch authorization {

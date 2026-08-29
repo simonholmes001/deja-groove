@@ -36,10 +36,12 @@ final class NearbyRecordShopsViewModelTests: XCTestCase {
             inventoryStatus: .unknown)
         let service = StubRecordShopDiscoveryService(authorization: .authorized, currentLocationResults: [opportunity])
         let sut = NearbyRecordShopsViewModel(album: Self.album, discoveryService: service)
+        sut.placeSearch = "Berlin"
 
         await sut.findNearCurrentLocation()
 
         XCTAssertEqual(.loaded([opportunity]), sut.state)
+        XCTAssertEqual("", sut.placeSearch)
         XCTAssertFalse(opportunity.inventoryStatus.isVerifiedAvailable)
     }
 

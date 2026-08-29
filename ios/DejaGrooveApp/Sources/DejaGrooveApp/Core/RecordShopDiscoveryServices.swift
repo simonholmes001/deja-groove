@@ -101,18 +101,21 @@ public struct UnavailableRecordShopDiscoveryService: RecordShopDiscoveryService 
 public final class MapKitRecordShopDiscoveryService: NSObject, RecordShopDiscoveryService, @unchecked Sendable {
     private let locationManager: CLLocationManager
     private let searchCompleter: MapKitRecordShopSearching
+    private let geocoder: CLGeocoder
     private var authorizationContinuation: CheckedContinuation<RecordShopLocationAuthorizationStatus, Never>?
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
 
     public init(
         locationManager: CLLocationManager = CLLocationManager(),
-        searchCompleter: MapKitRecordShopSearching = MapKitRecordShopSearcher()
+        searchCompleter: MapKitRecordShopSearching = MapKitRecordShopSearcher(),
+        geocoder: CLGeocoder = CLGeocoder()
     ) {
         self.locationManager = locationManager
         self.searchCompleter = searchCompleter
+        self.geocoder = geocoder
         super.init()
         self.locationManager.delegate = self
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        self.locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
     }
 
     public var authorizationStatus: RecordShopLocationAuthorizationStatus {
@@ -136,25 +139,33 @@ public final class MapKitRecordShopDiscoveryService: NSObject, RecordShopDiscove
         let status = await requestLocationAuthorization()
         guard status == .authorized else { return [] }
         let location = try await currentLocation()
-        let shops = try await searchCompleter.searchRecordShops(near: location, query: "record store vinyl records")
+        let shops = try await searchCompleter.searchRecordShops(near: location)
         return shops.map { RecordShopOpportunity(shop: $0, inventoryStatus: .unknown) }
     }
 
     public func shops(matching place: String, for album: Album) async throws -> [RecordShopOpportunity] {
         let trimmed = place.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let shops = try await searchCompleter.searchRecordShops(in: trimmed, query: "record store vinyl records")
+        guard let location = try await geocoder.geocodeAddressString(trimmed).first?.location else {
+            return []
+        }
+        let shops = try await searchCompleter.searchRecordShops(near: location)
         return shops.map { RecordShopOpportunity(shop: $0, inventoryStatus: .unknown) }
     }
 
     private func currentLocation() async throws -> CLLocation {
-        if let location = locationManager.location {
+        if let location = locationManager.location, Self.isUsableCachedLocation(location) {
             return location
         }
         return try await withCheckedThrowingContinuation { continuation in
             locationContinuation = continuation
             locationManager.requestLocation()
         }
+    }
+
+    private static func isUsableCachedLocation(_ location: CLLocation) -> Bool {
+        location.horizontalAccuracy >= 0
+            && location.timestamp.timeIntervalSinceNow > -120
     }
 
     private static func mapAuthorizationStatus(_ status: CLAuthorizationStatus) -> RecordShopLocationAuthorizationStatus {
@@ -198,27 +209,33 @@ extension MapKitRecordShopDiscoveryService: CLLocationManagerDelegate {
 }
 
 public protocol MapKitRecordShopSearching: Sendable {
-    func searchRecordShops(near location: CLLocation, query: String) async throws -> [RecordShop]
-    func searchRecordShops(in place: String, query: String) async throws -> [RecordShop]
+    func searchRecordShops(near location: CLLocation) async throws -> [RecordShop]
 }
 
 public struct MapKitRecordShopSearcher: MapKitRecordShopSearching {
+    private let searchQueries = [
+        "record store",
+        "vinyl records",
+        "used records",
+        "record shop",
+        "music store vinyl"
+    ]
+
     public init() {}
 
-    public func searchRecordShops(near location: CLLocation, query: String) async throws -> [RecordShop] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.region = MKCoordinateRegion(
+    public func searchRecordShops(near location: CLLocation) async throws -> [RecordShop] {
+        let region = MKCoordinateRegion(
             center: location.coordinate,
-            latitudinalMeters: 20_000,
-            longitudinalMeters: 20_000)
-        return try await search(request: request, origin: location)
-    }
-
-    public func searchRecordShops(in place: String, query: String) async throws -> [RecordShop] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = "\(query) \(place)"
-        return try await search(request: request, origin: nil)
+            latitudinalMeters: 35_000,
+            longitudinalMeters: 35_000)
+        var shops: [RecordShop] = []
+        for query in searchQueries {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.region = region
+            shops.append(contentsOf: try await search(request: request, origin: location))
+        }
+        return deduplicated(shops)
     }
 
     private func search(request: MKLocalSearch.Request, origin: CLLocation?) async throws -> [RecordShop] {
@@ -242,6 +259,33 @@ public struct MapKitRecordShopSearcher: MapKitRecordShopSearching {
                 phoneNumber: item.phoneNumber,
                 websiteURL: item.url,
                 directionsURL: directionsURL)
+        }
+    }
+
+    private func deduplicated(_ shops: [RecordShop]) -> [RecordShop] {
+        var seen = Set<String>()
+        var unique: [RecordShop] = []
+        for shop in shops.sorted(by: sortRecordShops) {
+            let key = [
+                shop.name.lowercased(),
+                shop.address?.lowercased() ?? shop.id
+            ].joined(separator: "|")
+            guard seen.insert(key).inserted else { continue }
+            unique.append(shop)
+        }
+        return unique
+    }
+
+    private func sortRecordShops(_ lhs: RecordShop, _ rhs: RecordShop) -> Bool {
+        switch (lhs.distanceMeters, rhs.distanceMeters) {
+        case let (lhs?, rhs?):
+            return lhs < rhs
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 

@@ -201,6 +201,10 @@ private struct WishlistAlbumDetailView: View {
                 }
             }
 
+            Section("Nearby Record Shops") {
+                NearbyRecordShopsSection(entry: entry, discoveryService: recordShopDiscovery)
+            }
+
             Section("Album") {
                 detail("Artist", entry.album.artist)
                 detail("Title", entry.album.title)
@@ -229,10 +233,6 @@ private struct WishlistAlbumDetailView: View {
                 detail("Condition Notes", entry.preferences.conditionNotes)
                 detail("Price Note", entry.preferences.priceNote)
                 detail("Notes", entry.preferences.notes)
-            }
-
-            Section("Nearby Record Shops") {
-                NearbyRecordShopsSection(entry: entry, discoveryService: recordShopDiscovery)
             }
 
             if let sourceTrack = entry.sourceTrack {
