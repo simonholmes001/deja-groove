@@ -3,12 +3,18 @@ import SwiftUI
 #if os(iOS)
 public struct DejaGrooveRootView: View {
     private let api: ApiClient
+    private let recordShopDiscovery: RecordShopDiscoveryService
     @StateObject private var collectionViewModel: CollectionViewModel
     @StateObject private var wishlistViewModel: WishlistViewModel
     @StateObject private var discoveryViewModel: DiscoveryViewModel
 
-    public init(api: ApiClient, albumEnricher: AlbumMetadataEnricher = NoopAlbumMetadataEnricher()) {
+    public init(
+        api: ApiClient,
+        albumEnricher: AlbumMetadataEnricher = NoopAlbumMetadataEnricher(),
+        recordShopDiscovery: RecordShopDiscoveryService = DejaGrooveRecordShopDiscoveryFactory.make()
+    ) {
         self.api = api
+        self.recordShopDiscovery = recordShopDiscovery
         _collectionViewModel = StateObject(wrappedValue: CollectionViewModel(api: api))
         _wishlistViewModel = StateObject(wrappedValue: WishlistViewModel(api: api))
         _discoveryViewModel = StateObject(wrappedValue: DiscoveryViewModel(
@@ -30,7 +36,7 @@ public struct DejaGrooveRootView: View {
             CollectionView(viewModel: collectionViewModel)
                 .tabItem { Label("My Crate", systemImage: "square.stack") }
 
-            WishlistView(viewModel: wishlistViewModel)
+            WishlistView(viewModel: wishlistViewModel, recordShopDiscovery: recordShopDiscovery)
                 .tabItem { Label("Wishlist", systemImage: "heart") }
 
             CollectionsView(viewModel: collectionViewModel)
@@ -66,6 +72,16 @@ public enum DejaGrooveAlbumCandidateResolverFactory {
         return MusicKitAlbumCandidateResolver(fallback: AppleMusicAlbumCandidateResolver())
         #else
         return AppleMusicAlbumCandidateResolver()
+        #endif
+    }
+}
+
+public enum DejaGrooveRecordShopDiscoveryFactory {
+    public static func make() -> RecordShopDiscoveryService {
+        #if canImport(CoreLocation) && canImport(MapKit)
+        return MapKitRecordShopDiscoveryService()
+        #else
+        return UnavailableRecordShopDiscoveryService()
         #endif
     }
 }

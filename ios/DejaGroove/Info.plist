@@ -26,6 +26,8 @@
     <string>Deja Groove uses your camera to scan album covers and compare against your collection.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Deja Groove uses the microphone when you choose audio discovery to identify music playing nearby.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Deja Groove uses your location when you choose to find nearby record shops for albums in your wishlist.</string>
     <key>NSAppleMusicUsageDescription</key>
     <string>Deja Groove can use Apple Music catalog access to add listening links and previews to albums.</string>
     <key>NSPhotoLibraryUsageDescription</key>

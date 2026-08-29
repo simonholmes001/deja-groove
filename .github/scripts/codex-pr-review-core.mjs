@@ -62,9 +62,10 @@ export function buildSystemPrompt(rubrics) {
     rubrics.cleanArchitecture,
     '',
     'Output contract:',
-    '- Findings first, ordered by severity (Critical, High, Medium, Low).',
-    '- Each finding must include Severity, Title, Evidence, Impact, Fix.',
-    '- If no findings: output "No blocking issues found" and list residual risks/testing gaps.',
+    '- Return only data that matches the requested structured output schema.',
+    '- Findings must be ordered by severity (Critical, High, Medium, Low).',
+    '- Each finding must include severity, title, evidence, impact, and fix.',
+    '- If no findings, return an empty findings array and include residual risks/testing gaps.',
   ].join('\n');
 }
 
@@ -118,6 +119,77 @@ export function buildOpenAiReviewRequestPayload({
     max_output_tokens: maxOutputTokens,
     reasoning: {
       effort: reasoningEffort,
+    },
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'codex_pr_review',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'summary',
+            'findings',
+            'testsVerification',
+            'risksFollowups',
+          ],
+          properties: {
+            summary: {
+              type: 'string',
+            },
+            findings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: [
+                  'severity',
+                  'title',
+                  'evidence',
+                  'impact',
+                  'fix',
+                ],
+                properties: {
+                  severity: {
+                    type: 'string',
+                    enum: [
+                      'Critical',
+                      'High',
+                      'Medium',
+                      'Low',
+                    ],
+                  },
+                  title: {
+                    type: 'string',
+                  },
+                  evidence: {
+                    type: 'string',
+                  },
+                  impact: {
+                    type: 'string',
+                  },
+                  fix: {
+                    type: 'string',
+                  },
+                },
+              },
+            },
+            testsVerification: {
+              type: 'array',
+              items: {
+                type: 'string',
+              },
+            },
+            risksFollowups: {
+              type: 'array',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        },
+      },
     },
   };
 }
@@ -198,7 +270,7 @@ export function extractReviewBodyFromOpenAiPayload(payload) {
   for (const candidate of candidates) {
     const extracted = extractTextFromContentNode(candidate);
     if (extracted) {
-      return extracted;
+      return renderStructuredReviewFromText(extracted) || extracted;
     }
   }
 
@@ -263,6 +335,92 @@ function parseJsonBody(bodyText) {
   } catch {
     return null;
   }
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function asStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => asTrimmedString(item))
+    .filter(Boolean);
+}
+
+function isStructuredReview(value) {
+  if (!isPlainObject(value) || !asTrimmedString(value.summary) || !Array.isArray(value.findings)) {
+    return false;
+  }
+
+  const findingsAreValid = value.findings.every((finding) => {
+    if (!isPlainObject(finding)) {
+      return false;
+    }
+
+    return [
+      'severity',
+      'title',
+      'evidence',
+      'impact',
+      'fix',
+    ].every((field) => asTrimmedString(finding[field]));
+  });
+
+  return findingsAreValid
+    && asStringList(value.testsVerification).length > 0
+    && asStringList(value.risksFollowups).length > 0;
+}
+
+export function renderStructuredReviewBody(review) {
+  if (!isStructuredReview(review)) {
+    return '';
+  }
+
+  const lines = [];
+  const findings = review.findings;
+
+  if (findings.length === 0) {
+    lines.push('No blocking issues found');
+  } else {
+    lines.push('Findings');
+    findings.forEach((finding, index) => {
+      lines.push('');
+      lines.push(`${index + 1}. Severity: ${asTrimmedString(finding.severity)}`);
+      lines.push(`   Title: ${asTrimmedString(finding.title)}`);
+      lines.push(`   Evidence: ${asTrimmedString(finding.evidence)}`);
+      lines.push(`   Impact: ${asTrimmedString(finding.impact)}`);
+      lines.push(`   Fix: ${asTrimmedString(finding.fix)}`);
+    });
+  }
+
+  lines.push('');
+  lines.push('Summary');
+  lines.push(asTrimmedString(review.summary));
+  lines.push('');
+  lines.push('Tests/Verification');
+  asStringList(review.testsVerification).forEach((item) => {
+    lines.push(`- ${item}`);
+  });
+  lines.push('');
+  lines.push('Risks/Follow-ups');
+  asStringList(review.risksFollowups).forEach((item) => {
+    lines.push(`- ${item}`);
+  });
+
+  return lines.join('\n').trim();
+}
+
+function renderStructuredReviewFromText(text) {
+  const jsonText = asTrimmedString(text);
+  if (!jsonText) {
+    return '';
+  }
+
+  return renderStructuredReviewBody(parseJsonBody(jsonText));
 }
 
 function contentLength(value) {

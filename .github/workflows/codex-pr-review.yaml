@@ -23,11 +23,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect OpenAI review key
+        id: detect-openai
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "OPENAI_API_KEY is not configured; skipping Codex review."
+          fi
+
       - name: Run Codex review
+        if: steps.detect-openai.outputs.exists == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
-          CODEX_REVIEW_MODEL: gpt-5.4
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_REVIEW_MODEL: gpt-5.5
           CODEX_REVIEW_DIFF_MAX: 120000
           CODEX_REVIEW_MAX_OUTPUT_TOKENS: 6000
           CODEX_REVIEW_REASONING_EFFORT: low

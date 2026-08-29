@@ -15,6 +15,7 @@ struct AppleMusicLibraryAddButton: View {
     let libraryAdder: AppleMusicLibraryAdding
 
     @State private var isAdding = false
+    @State private var hasAdded = false
     @State private var message: String?
 
     init(
@@ -32,11 +33,13 @@ struct AppleMusicLibraryAddButton: View {
             } label: {
                 if isAdding {
                     Label("Adding To Library", systemImage: "music.note.list")
+                } else if hasAdded {
+                    Label("Added To Apple Music Library", systemImage: "checkmark.circle")
                 } else {
                     Label("Add To Apple Music Library", systemImage: "text.badge.plus")
                 }
             }
-            .disabled(isAdding)
+            .disabled(isAdding || hasAdded)
 
             if let message {
                 Text(message)
@@ -52,7 +55,8 @@ struct AppleMusicLibraryAddButton: View {
         message = nil
         do {
             try await libraryAdder.addAlbumToLibrary(album)
-            message = "Added to Apple Music Library."
+            hasAdded = true
+            message = "Already added to Apple Music Library."
         } catch let error as AppleMusicLibraryAddError {
             message = Self.message(for: error)
         } catch {
