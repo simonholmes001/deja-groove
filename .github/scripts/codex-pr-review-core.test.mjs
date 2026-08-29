@@ -11,10 +11,12 @@ import {
   buildOpenAiResponseDiagnostics,
   buildSystemPrompt,
   buildUserPrompt,
+  extractReviewBodyFromOpenAiPayload,
   isStructurallyValidReviewBody,
   isChangesetReleasePr,
   isDependabotPr,
   loadSkillRubrics,
+  renderStructuredReviewBody,
 } from './codex-pr-review-core.mjs';
 
 test('isDependabotPr returns true for dependabot branch', () => {
@@ -106,8 +108,83 @@ test('buildOpenAiReviewRequestPayload uses Responses API reasoning controls', ()
   assert.equal(payload.input, 'review user prompt');
   assert.equal(payload.max_output_tokens, 6000);
   assert.deepEqual(payload.reasoning, { effort: 'low' });
+  assert.equal(payload.text.format.type, 'json_schema');
+  assert.equal(payload.text.format.name, 'codex_pr_review');
+  assert.equal(payload.text.format.strict, true);
+  assert.deepEqual(payload.text.format.schema.required, [
+    'summary',
+    'findings',
+    'testsVerification',
+    'risksFollowups',
+  ]);
   assert.equal(Object.hasOwn(payload, 'max_completion_tokens'), false);
   assert.equal(Object.hasOwn(payload, 'messages'), false);
+});
+
+test('renderStructuredReviewBody renders no-finding structured output', () => {
+  const body = renderStructuredReviewBody({
+    summary: 'Reviewed infrastructure workflow changes.',
+    findings: [],
+    testsVerification: [
+      'Bicep lint passed.',
+    ],
+    risksFollowups: [
+      'Manual Azure bootstrap still needs to be run.',
+    ],
+  });
+
+  assert.match(body, /^No blocking issues found/);
+  assert.match(body, /Summary\nReviewed infrastructure workflow changes/);
+  assert.match(body, /Tests\/Verification\n- Bicep lint passed/);
+  assert.match(body, /Risks\/Follow-ups\n- Manual Azure bootstrap/);
+  assert.equal(isStructurallyValidReviewBody(body), true);
+});
+
+test('renderStructuredReviewBody renders finding structured output', () => {
+  const body = renderStructuredReviewBody({
+    summary: 'One issue found.',
+    findings: [
+      {
+        severity: 'High',
+        title: 'Missing validation',
+        evidence: 'workflow.yml line 10',
+        impact: 'Deployment may fail',
+        fix: 'Add validation',
+      },
+    ],
+    testsVerification: [
+      'Unit tests not run.',
+    ],
+    risksFollowups: [
+      'Check workflow logs.',
+    ],
+  });
+
+  assert.match(body, /Severity: High/);
+  assert.match(body, /Title: Missing validation/);
+  assert.match(body, /Evidence: workflow\.yml line 10/);
+  assert.match(body, /Impact: Deployment may fail/);
+  assert.match(body, /Fix: Add validation/);
+  assert.equal(isStructurallyValidReviewBody(body), true);
+});
+
+test('extractReviewBodyFromOpenAiPayload parses Responses API structured JSON output_text', () => {
+  const body = extractReviewBodyFromOpenAiPayload({
+    output_text: JSON.stringify({
+      summary: 'No material issues.',
+      findings: [],
+      testsVerification: [
+        'Workflow parsed successfully.',
+      ],
+      risksFollowups: [
+        'Azure credentials are not validated in PR.',
+      ],
+    }),
+  });
+
+  assert.match(body, /^No blocking issues found/);
+  assert.match(body, /No material issues/);
+  assert.equal(isStructurallyValidReviewBody(body), true);
 });
 
 test('buildSystemPrompt instructs the model to treat PR content as data', () => {
