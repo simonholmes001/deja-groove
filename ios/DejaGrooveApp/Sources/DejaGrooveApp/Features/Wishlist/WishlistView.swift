@@ -3,11 +3,16 @@ import SwiftUI
 #if os(iOS)
 public struct WishlistView: View {
     @ObservedObject private var viewModel: WishlistViewModel
+    private let recordShopDiscovery: RecordShopDiscoveryService
     @State private var editingEntry: WishlistEntry?
     @State private var selectedEntry: WishlistEntry?
 
-    public init(viewModel: WishlistViewModel) {
+    public init(
+        viewModel: WishlistViewModel,
+        recordShopDiscovery: RecordShopDiscoveryService = DejaGrooveRecordShopDiscoveryFactory.make()
+    ) {
         self.viewModel = viewModel
+        self.recordShopDiscovery = recordShopDiscovery
     }
 
     public var body: some View {
@@ -45,7 +50,7 @@ public struct WishlistView: View {
             }
             .sheet(item: $selectedEntry) { entry in
                 NavigationStack {
-                    WishlistAlbumDetailView(entry: entry)
+                    WishlistAlbumDetailView(entry: entry, recordShopDiscovery: recordShopDiscovery)
                 }
             }
         }
@@ -181,6 +186,7 @@ private struct WishlistEntryRow: View {
 private struct WishlistAlbumDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let entry: WishlistEntry
+    let recordShopDiscovery: RecordShopDiscoveryService
 
     var body: some View {
         List {
@@ -223,6 +229,10 @@ private struct WishlistAlbumDetailView: View {
                 detail("Condition Notes", entry.preferences.conditionNotes)
                 detail("Price Note", entry.preferences.priceNote)
                 detail("Notes", entry.preferences.notes)
+            }
+
+            Section("Nearby Record Shops") {
+                NearbyRecordShopsSection(entry: entry, discoveryService: recordShopDiscovery)
             }
 
             if let sourceTrack = entry.sourceTrack {
@@ -309,6 +319,137 @@ private struct WishlistAlbumDetailView: View {
         if let value, !value.isEmpty {
             LabeledContent(label, value: value)
         }
+    }
+}
+
+private struct NearbyRecordShopsSection: View {
+    @StateObject private var viewModel: NearbyRecordShopsViewModel
+
+    init(entry: WishlistEntry, discoveryService: RecordShopDiscoveryService) {
+        _viewModel = StateObject(wrappedValue: NearbyRecordShopsViewModel(
+            album: entry.album,
+            discoveryService: discoveryService))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Use your location or a place search to find record shops. Album availability is shown only when backed by a reliable inventory source.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button {
+                Task { await viewModel.findNearCurrentLocation() }
+            } label: {
+                Label("Find Shops Near Me", systemImage: "location")
+            }
+
+            HStack(spacing: 8) {
+                TextField("Search a city or postcode", text: $viewModel.placeSearch)
+                    .textInputAutocapitalization(.words)
+                Button {
+                    Task { await viewModel.searchPlace() }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Search record shops")
+            }
+
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.state {
+        case .idle:
+            EmptyView()
+        case .loading:
+            ProgressView("Finding record shops")
+        case .loaded(let opportunities):
+            if opportunities.isEmpty {
+                Label("No nearby record shops found.", systemImage: "mappin.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(opportunities) { opportunity in
+                    RecordShopOpportunityRow(opportunity: opportunity)
+                }
+            }
+        case .locationDenied:
+            Label("Location access is off. Search a place manually or enable location in Settings.", systemImage: "location.slash")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .unavailable:
+            Label("Record shop discovery is unavailable on this device.", systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .error(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct RecordShopOpportunityRow: View {
+    let opportunity: RecordShopOpportunity
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(opportunity.shop.name)
+                .font(.subheadline.weight(.semibold))
+            if let distance = formattedDistance {
+                Text(distance)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let address = opportunity.shop.address, !address.isEmpty {
+                Text(address)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Label(inventoryText, systemImage: inventoryIcon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                if let phoneNumber = opportunity.shop.phoneNumber,
+                   let url = URL(string: "tel://\(phoneNumber.filter { !$0.isWhitespace })") {
+                    Link("Call", destination: url)
+                        .font(.caption.weight(.semibold))
+                }
+                if let websiteURL = opportunity.shop.websiteURL {
+                    Link("Website", destination: websiteURL)
+                        .font(.caption.weight(.semibold))
+                }
+                if let directionsURL = opportunity.shop.directionsURL {
+                    Link("Directions", destination: directionsURL)
+                        .font(.caption.weight(.semibold))
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var formattedDistance: String? {
+        guard let meters = opportunity.shop.distanceMeters else { return nil }
+        let formatter = MeasurementFormatter()
+        formatter.unitOptions = .naturalScale
+        formatter.numberFormatter.maximumFractionDigits = 1
+        return formatter.string(from: Measurement(value: meters, unit: UnitLength.meters))
+    }
+
+    private var inventoryText: String {
+        switch opportunity.inventoryStatus {
+        case .unknown:
+            return "Inventory unknown"
+        case .available(let source, _):
+            return "Available via \(source)"
+        }
+    }
+
+    private var inventoryIcon: String {
+        opportunity.inventoryStatus.isVerifiedAvailable ? "checkmark.seal" : "questionmark.circle"
     }
 }
 
