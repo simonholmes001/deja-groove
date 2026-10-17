@@ -37,14 +37,14 @@ public struct DiscoveryView: View {
             }
             .sheet(item: selectedAlbumBinding) { album in
                 NavigationStack {
-                    DiscoveryAlbumDetailView(album: album.album, viewModel: viewModel) {
+                    DiscoveryAlbumDetailView(album: album.album) {
                         await viewModel.saveAlbumToWishlist(album.album, sourceTrack: selectedAlbumSourceTrack)
                     }
                 }
             }
             .sheet(item: selectedTrackBinding) { track in
                 NavigationStack {
-                    DiscoveryTrackDetailView(track: track.track, viewModel: viewModel) {
+                    DiscoveryTrackDetailView(track: track.track) {
                         await viewModel.saveTrackToWishlist(track.track)
                     }
                 }
@@ -338,16 +338,12 @@ private struct IdentifiedTrack: Identifiable {
 private struct DiscoveryAlbumDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let album: Album
-    @ObservedObject var viewModel: DiscoveryViewModel
     let saveToWishlist: () async -> Bool
 
     var body: some View {
         List {
             Section {
                 DiscoveryWishlistButton(save: saveToWishlist)
-                if let message = viewModel.message {
-                    Text(message).font(.footnote).foregroundStyle(.secondary)
-                }
             }
             if album.coverImageUrl != nil || album.thumbnailUrl != nil {
                 Section {
@@ -457,16 +453,12 @@ private struct DiscoveryAlbumDetailView: View {
 private struct DiscoveryTrackDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let track: AudioDiscoveryTrack
-    @ObservedObject var viewModel: DiscoveryViewModel
     let saveToWishlist: () async -> Bool
 
     var body: some View {
         List {
             Section {
                 DiscoveryWishlistButton(save: saveToWishlist)
-                if let message = viewModel.message {
-                    Text(message).font(.footnote).foregroundStyle(.secondary)
-                }
             }
             if let artworkUrl = track.artworkUrl {
                 Section {
@@ -513,19 +505,30 @@ private struct DiscoveryWishlistButton: View {
     let save: () async -> Bool
     @State private var isSaving = false
     @State private var saved = false
+    @State private var saveFailed = false
 
     var body: some View {
-        Button {
-            isSaving = true
-            Task {
-                saved = await save()
-                isSaving = false
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                isSaving = true
+                saveFailed = false
+                Task {
+                    saved = await save()
+                    saveFailed = !saved
+                    isSaving = false
+                }
+            } label: {
+                Label(isSaving ? "Adding…" : saved ? "Added to Wishlist" : "Add to Wishlist",
+                      systemImage: saved ? "heart.fill" : "heart")
             }
-        } label: {
-            Label(isSaving ? "Adding…" : saved ? "Added to Wishlist" : "Add to Wishlist",
-                  systemImage: saved ? "heart.fill" : "heart")
+            .disabled(isSaving || saved)
+
+            if saveFailed {
+                Text("Failed to add to Wishlist. Please try again.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .disabled(isSaving || saved)
     }
 }
 

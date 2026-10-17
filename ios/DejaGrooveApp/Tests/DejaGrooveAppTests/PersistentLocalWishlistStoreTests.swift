@@ -50,6 +50,22 @@ final class PersistentLocalWishlistStoreTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
+    func testRepeatedListeningSaveReturnsExistingEntryAfterReopeningStore() async throws {
+        let url = temporaryStoreURL()
+        let store = PersistentLocalWishlistStore(fileURL: url)
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "2026-10-17T09:18:55Z")
+        let album = Album(mbid: nil, discogsReleaseId: nil, title: track.title, artist: track.artist, year: nil, format: nil)
+        let first = try await store.addToWishlist(album: album, sourceTrack: track)
+        let reopened = PersistentLocalWishlistStore(fileURL: url)
+
+        let repeated = try await reopened.addToWishlist(album: album, sourceTrack: track)
+        let entries = try await reopened.fetchWishlist(search: nil)
+
+        XCTAssertEqual(first.id, repeated.id)
+        XCTAssertEqual([first], entries)
+        XCTAssertEqual(track, entries.first?.sourceTrack)
+    }
+
     func testFetchWishlistSortsByArtistFamilyNameThenTitle() async throws {
         let store = PersistentLocalWishlistStore(
             fileURL: temporaryStoreURL(),
