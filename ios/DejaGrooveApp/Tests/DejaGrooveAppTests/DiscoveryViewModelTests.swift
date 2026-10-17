@@ -354,6 +354,83 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(track, snapshot.sourceTracks.first)
     }
 
+    func testTrackCanBeSavedWithoutAlbumCandidates() async {
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", shazamId: "126759617", appleMusicId: "869691935", artworkUrl: "https://example.com/cover.jpg", genre: "Jazz", matchedAt: "2026-10-17T09:18:55Z")
+        let api = DiscoveryApiClientSpy()
+        let sut = DiscoveryViewModel(api: api, discoveryStore: DiscoveryStoreSpy(), audioDiscovery: AudioDiscoveryServiceStub(track: track), candidateResolver: AlbumCandidateResolverStub())
+        await sut.identifyPlayingAudio()
+        XCTAssertTrue(sut.candidates.isEmpty)
+
+        let saved = await sut.saveTrackToWishlist(track)
+
+        XCTAssertTrue(saved)
+        let snapshot = await api.snapshot()
+        XCTAssertEqual(track, snapshot.sourceTracks.first)
+        XCTAssertEqual(track.title, snapshot.wishlistAlbums.first?.title)
+        XCTAssertEqual(track.artworkUrl, snapshot.wishlistAlbums.first?.coverImageUrl)
+        XCTAssertEqual(["Jazz"], snapshot.wishlistAlbums.first?.genres)
+        XCTAssertEqual(track.appleMusicSearchURL.absoluteString, snapshot.wishlistAlbums.first?.listeningLinks.first?.url)
+    }
+
+    func testFailedTrackSaveReportsFailureAndCanBeRetried() async {
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "today")
+        let api = DiscoveryApiClientSpy(wishlistFailuresRemaining: 1)
+        let sut = DiscoveryViewModel(api: api, discoveryStore: DiscoveryStoreSpy())
+
+        let failed = await sut.saveTrackToWishlist(track)
+        XCTAssertFalse(failed)
+        XCTAssertEqual("Discovery failed.", sut.message)
+        let failedSnapshot = await api.snapshot()
+        XCTAssertTrue(failedSnapshot.wishlistAlbums.isEmpty)
+
+        let saved = await sut.saveTrackToWishlist(track)
+        XCTAssertTrue(saved)
+        XCTAssertEqual("Added to Wishlist.", sut.message)
+        let savedSnapshot = await api.snapshot()
+        XCTAssertEqual([track], savedSnapshot.sourceTracks)
+    }
+
+    func testTrackSaveUsesResolvedAlbum() async {
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "today")
+        let album = Album(mbid: nil, discogsReleaseId: "123", title: "Trios Live", artist: track.artist, year: 2014, format: nil)
+        let api = DiscoveryApiClientSpy()
+        let sut = DiscoveryViewModel(api: api, discoveryStore: DiscoveryStoreSpy(), audioDiscovery: AudioDiscoveryServiceStub(track: track), candidateResolver: AlbumCandidateResolverStub(candidates: [album]))
+        await sut.identifyPlayingAudio()
+        await sut.saveTrackToWishlist(track)
+        let snapshot = await api.snapshot()
+        XCTAssertEqual(album, snapshot.wishlistAlbums.first)
+        XCTAssertEqual(track, snapshot.sourceTracks.first)
+    }
+
+    func testHistoricalTrackSaveDoesNotUseCurrentMatch() async {
+        let oldTrack = AudioDiscoveryTrack(title: "Old Song", artist: "Old Artist", matchedAt: "yesterday")
+        let currentTrack = AudioDiscoveryTrack(title: "New Song", artist: "New Artist", matchedAt: "today")
+        let oldAlbum = Album(mbid: nil, discogsReleaseId: "old", title: "Old Album", artist: oldTrack.artist, year: nil, format: nil)
+        let currentAlbum = Album(mbid: nil, discogsReleaseId: "new", title: "New Album", artist: currentTrack.artist, year: nil, format: nil)
+        let store = DiscoveryStoreSpy()
+        _ = try! await store.addDiscovery(source: "audio", album: oldAlbum, track: oldTrack)
+        let api = DiscoveryApiClientSpy()
+        let sut = DiscoveryViewModel(api: api, discoveryStore: store, audioDiscovery: AudioDiscoveryServiceStub(track: currentTrack), candidateResolver: AlbumCandidateResolverStub(candidates: [currentAlbum]))
+        await sut.identifyPlayingAudio()
+        await sut.saveTrackToWishlist(oldTrack)
+        await sut.saveAlbumToWishlist(oldAlbum, sourceTrack: oldTrack)
+        let snapshot = await api.snapshot()
+        XCTAssertEqual([oldAlbum, oldAlbum], snapshot.wishlistAlbums)
+        XCTAssertEqual([oldTrack, oldTrack], snapshot.sourceTracks)
+    }
+
+    func testTrackSaveSurvivesEnrichmentFailureOrWrongAlbum() async {
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "today")
+        let wrongAlbum = Album(mbid: nil, discogsReleaseId: "wrong", title: "Wrong Album", artist: "Someone Else", year: nil, format: nil)
+        let api = DiscoveryApiClientSpy()
+        let sut = DiscoveryViewModel(api: api, discoveryStore: DiscoveryStoreSpy(), albumEnricher: SequencedAlbumMetadataEnricherStub(results: [.failure(ApiClientError.invalidResponse), .success(wrongAlbum)]))
+        await sut.saveTrackToWishlist(track)
+        await sut.saveTrackToWishlist(track)
+        let snapshot = await api.snapshot()
+        XCTAssertEqual([track.title, track.title], snapshot.wishlistAlbums.map(\.title))
+        XCTAssertEqual([track, track], snapshot.sourceTracks)
+    }
+
     func testClearAllHistoryRemovesVisibleAndPersistedDiscoveries() async {
         let discoveryStore = DiscoveryStoreSpy()
         let sut = DiscoveryViewModel(
@@ -602,6 +679,12 @@ private struct DiscoveryStoreSnapshot {
 }
 
 private actor DiscoveryApiClientSpy: ApiClient {
+    private var wishlistFailuresRemaining: Int
+
+    init(wishlistFailuresRemaining: Int = 0) {
+        self.wishlistFailuresRemaining = wishlistFailuresRemaining
+    }
+
     private(set) var wishlistAlbums: [Album] = []
     private(set) var sourceTracks: [AudioDiscoveryTrack?] = []
 
@@ -632,6 +715,10 @@ private actor DiscoveryApiClientSpy: ApiClient {
     func deleteCollectionRecord(id: UUID) async throws {}
 
     func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        if wishlistFailuresRemaining > 0 {
+            wishlistFailuresRemaining -= 1
+            throw ApiClientError.invalidResponse
+        }
         wishlistAlbums.append(album)
         sourceTracks.append(sourceTrack)
         return WishlistEntry(id: UUID(), album: album, preferences: preferences, sourceTrack: sourceTrack, createdAt: "", updatedAt: "")

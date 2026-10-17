@@ -98,16 +98,44 @@ public final class DiscoveryViewModel: ObservableObject {
         isLoading = false
     }
 
-    public func saveCandidateToWishlist(_ album: Album) async {
+    @discardableResult
+    public func saveCandidateToWishlist(_ album: Album) async -> Bool {
+        await saveAlbumToWishlist(album, sourceTrack: track)
+    }
+
+    @discardableResult
+    public func saveTrackToWishlist(_ selectedTrack: AudioDiscoveryTrack) async -> Bool {
+        let album = (selectedTrack == track ? candidates.first : nil)
+            ?? history.first(where: { $0.track == selectedTrack })?.album
+            ?? Album(
+                mbid: nil,
+                discogsReleaseId: nil,
+                title: selectedTrack.title,
+                artist: selectedTrack.artist,
+                year: nil,
+                format: nil,
+                coverImageUrl: selectedTrack.artworkUrl,
+                thumbnailUrl: selectedTrack.artworkUrl,
+                genres: selectedTrack.genre.map { [$0] } ?? [],
+                listeningLinks: [AlbumListeningLink(provider: "Apple Music", url: selectedTrack.appleMusicSearchURL.absoluteString)])
+        return await saveAlbumToWishlist(album, sourceTrack: selectedTrack)
+    }
+
+    @discardableResult
+    public func saveAlbumToWishlist(_ album: Album, sourceTrack: AudioDiscoveryTrack?) async -> Bool {
         do {
-            let albumToSave = await albumForWishlistSave(album)
-            _ = try await api.addToWishlist(album: albumToSave, preferences: WishlistPreferences(), sourceTrack: track)
+            let enriched = await albumForWishlistSave(album)
+            // An enrichment response must not replace the identified song with an unrelated album.
+            let albumToSave = sourceTrack.map { isPlausibleAlbumCandidate(enriched, for: $0) } == false ? album : enriched
+            _ = try await api.addToWishlist(album: albumToSave, preferences: WishlistPreferences(), sourceTrack: sourceTrack)
             message = "Added to Wishlist."
+            return true
         } catch let error as ApiClientError {
             message = Self.message(for: error)
         } catch {
             message = "Failed to add to Wishlist."
         }
+        return false
     }
 
     public func deleteDiscovery(id: UUID) async {
