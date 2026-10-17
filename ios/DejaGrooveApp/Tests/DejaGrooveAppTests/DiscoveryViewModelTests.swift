@@ -372,6 +372,24 @@ final class DiscoveryViewModelTests: XCTestCase {
         XCTAssertEqual(track.appleMusicSearchURL.absoluteString, snapshot.wishlistAlbums.first?.listeningLinks.first?.url)
     }
 
+    func testFailedTrackSaveReportsFailureAndCanBeRetried() async {
+        let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "today")
+        let api = DiscoveryApiClientSpy(wishlistFailuresRemaining: 1)
+        let sut = DiscoveryViewModel(api: api, discoveryStore: DiscoveryStoreSpy())
+
+        let failed = await sut.saveTrackToWishlist(track)
+        XCTAssertFalse(failed)
+        XCTAssertEqual("Discovery failed.", sut.message)
+        let failedSnapshot = await api.snapshot()
+        XCTAssertTrue(failedSnapshot.wishlistAlbums.isEmpty)
+
+        let saved = await sut.saveTrackToWishlist(track)
+        XCTAssertTrue(saved)
+        XCTAssertEqual("Added to Wishlist.", sut.message)
+        let savedSnapshot = await api.snapshot()
+        XCTAssertEqual([track], savedSnapshot.sourceTracks)
+    }
+
     func testTrackSaveUsesResolvedAlbum() async {
         let track = AudioDiscoveryTrack(title: "Mack the Knife", artist: "Joshua Redman", matchedAt: "today")
         let album = Album(mbid: nil, discogsReleaseId: "123", title: "Trios Live", artist: track.artist, year: 2014, format: nil)
@@ -661,6 +679,12 @@ private struct DiscoveryStoreSnapshot {
 }
 
 private actor DiscoveryApiClientSpy: ApiClient {
+    private var wishlistFailuresRemaining: Int
+
+    init(wishlistFailuresRemaining: Int = 0) {
+        self.wishlistFailuresRemaining = wishlistFailuresRemaining
+    }
+
     private(set) var wishlistAlbums: [Album] = []
     private(set) var sourceTracks: [AudioDiscoveryTrack?] = []
 
@@ -691,6 +715,10 @@ private actor DiscoveryApiClientSpy: ApiClient {
     func deleteCollectionRecord(id: UUID) async throws {}
 
     func addToWishlist(album: Album, preferences: WishlistPreferences, sourceTrack: AudioDiscoveryTrack?) async throws -> WishlistEntry {
+        if wishlistFailuresRemaining > 0 {
+            wishlistFailuresRemaining -= 1
+            throw ApiClientError.invalidResponse
+        }
         wishlistAlbums.append(album)
         sourceTracks.append(sourceTrack)
         return WishlistEntry(id: UUID(), album: album, preferences: preferences, sourceTrack: sourceTrack, createdAt: "", updatedAt: "")
