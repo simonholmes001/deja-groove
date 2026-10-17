@@ -4,6 +4,7 @@ import SwiftUI
 public struct DiscoveryView: View {
     @ObservedObject private var viewModel: DiscoveryViewModel
     @State private var selectedAlbum: Album?
+    @State private var selectedAlbumSourceTrack: AudioDiscoveryTrack?
     @State private var selectedTrack: AudioDiscoveryTrack?
     @State private var isConfirmingClearHistory = false
 
@@ -36,12 +37,16 @@ public struct DiscoveryView: View {
             }
             .sheet(item: selectedAlbumBinding) { album in
                 NavigationStack {
-                    DiscoveryAlbumDetailView(album: album.album)
+                    DiscoveryAlbumDetailView(album: album.album, viewModel: viewModel) {
+                        await viewModel.saveAlbumToWishlist(album.album, sourceTrack: selectedAlbumSourceTrack)
+                    }
                 }
             }
             .sheet(item: selectedTrackBinding) { track in
                 NavigationStack {
-                    DiscoveryTrackDetailView(track: track.track)
+                    DiscoveryTrackDetailView(track: track.track, viewModel: viewModel) {
+                        await viewModel.saveTrackToWishlist(track.track)
+                    }
                 }
             }
             .confirmationDialog("Clear Discovery History?", isPresented: $isConfirmingClearHistory, titleVisibility: .visible) {
@@ -128,6 +133,11 @@ public struct DiscoveryView: View {
                     }
                     .buttonStyle(.plain)
 
+                    DiscoveryWishlistButton {
+                        await viewModel.saveTrackToWishlist(track)
+                    }
+                    .id(track.matchedAt)
+
                     if viewModel.candidates.isEmpty {
                         Text("No album candidates.")
                             .font(.footnote)
@@ -136,6 +146,7 @@ public struct DiscoveryView: View {
                         ForEach(Array(viewModel.candidateResults.enumerated()), id: \.offset) { _, result in
                             HStack {
                                 Button {
+                                    selectedAlbumSourceTrack = track
                                     selectedAlbum = result.album
                                 } label: {
                                     VStack(alignment: .leading, spacing: 3) {
@@ -234,6 +245,7 @@ public struct DiscoveryView: View {
                         HStack(alignment: .top, spacing: 12) {
                             Button {
                                 if let album = entry.album {
+                                    selectedAlbumSourceTrack = entry.track
                                     selectedAlbum = album
                                 } else if let track = entry.track {
                                     selectedTrack = track
@@ -326,9 +338,17 @@ private struct IdentifiedTrack: Identifiable {
 private struct DiscoveryAlbumDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let album: Album
+    @ObservedObject var viewModel: DiscoveryViewModel
+    let saveToWishlist: () async -> Bool
 
     var body: some View {
         List {
+            Section {
+                DiscoveryWishlistButton(save: saveToWishlist)
+                if let message = viewModel.message {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
             if album.coverImageUrl != nil || album.thumbnailUrl != nil {
                 Section {
                     HStack {
@@ -437,9 +457,17 @@ private struct DiscoveryAlbumDetailView: View {
 private struct DiscoveryTrackDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let track: AudioDiscoveryTrack
+    @ObservedObject var viewModel: DiscoveryViewModel
+    let saveToWishlist: () async -> Bool
 
     var body: some View {
         List {
+            Section {
+                DiscoveryWishlistButton(save: saveToWishlist)
+                if let message = viewModel.message {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
             if let artworkUrl = track.artworkUrl {
                 Section {
                     HStack {
@@ -478,6 +506,26 @@ private struct DiscoveryTrackDetailView: View {
         if let value, !value.isEmpty {
             LabeledContent(label, value: value)
         }
+    }
+}
+
+private struct DiscoveryWishlistButton: View {
+    let save: () async -> Bool
+    @State private var isSaving = false
+    @State private var saved = false
+
+    var body: some View {
+        Button {
+            isSaving = true
+            Task {
+                saved = await save()
+                isSaving = false
+            }
+        } label: {
+            Label(isSaving ? "Adding…" : saved ? "Added to Wishlist" : "Add to Wishlist",
+                  systemImage: saved ? "heart.fill" : "heart")
+        }
+        .disabled(isSaving || saved)
     }
 }
 
