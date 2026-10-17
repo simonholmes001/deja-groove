@@ -136,7 +136,7 @@ public struct DiscoveryView: View {
                     DiscoveryWishlistButton {
                         await viewModel.saveTrackToWishlist(track)
                     }
-                    .id(track.matchedAt)
+                    .id(IdentifiedTrack(track: track).id)
 
                     if viewModel.candidates.isEmpty {
                         Text("No album candidates.")
